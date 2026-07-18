@@ -1,0 +1,430 @@
+/**
+ * Home (no app-bar) — Flipkart-style layout:
+ *  - The product pills on top: 🛍️ Explore (this side) ⇄ 🏷️ Stalls ⇄ 🏢 My Business.
+ *  - Location row (saved-place dropdown + Map), then the search bar.
+ *  - A CATEGORY STRIP (For You + every intent from domain/intents.ts) that
+ *    filters this same screen inline — no navigation. The active category is
+ *    underlined, Flipkart-style.
+ *  - Picking a category swaps the "ad" (deals carousel, filtered to that
+ *    category), reveals its SUBCATEGORY TILES (the category's tags as emoji
+ *    tiles → tap opens /browse/[intent]?sub=Tag), and filters the nearby
+ *    business list below.
+ */
+import { useMemo, useRef, useState } from 'react';
+import {
+  FlatList,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import type { ListingType, PlaceKind, SavedPlace } from '@/domain/types';
+import { formatDistance, getType } from '@/domain/catalog';
+import { INTENT_CATEGORIES, intentMatches, tagEmoji, type IntentCategory } from '@/domain/intents';
+import { useAuth, useRepositories } from '@/data/DataProvider';
+import { useAsync } from '@/lib/useAsync';
+import { Card, EmptyView, ErrorView, LoadingView, Text } from '@/components/ui';
+import { BusinessCard } from '@/features/businesses/BusinessCard';
+import { SearchScanBar } from '@/features/search/SearchScanBar';
+import { DealsCarousel, type DealCardItem } from '@/features/businesses/DealsCarousel';
+import { ModePills } from '@/features/shell/ModePills';
+import { radius, spacing, useColors } from '@/theme/theme';
+
+const placeIcon = (kind: PlaceKind) =>
+  kind === 'current' ? '📍' : kind === 'home' ? '🏠' : kind === 'work' ? '💼' : '⭐';
+
+/** Deal-card gradients, keyed by the listing type of the business behind the deal. */
+const DEAL_GRADIENTS: Record<ListingType, [string, string]> = {
+  service: ['#3B82F6', '#1E40AF'],
+  shop: ['#14B8A6', '#0F766E'],
+  item: ['#F59E0B', '#B45309'],
+  rental: ['#0EA5E9', '#0369A1'],
+};
+
+export default function BrowseScreen() {
+  const repos = useRepositories();
+  const colors = useColors();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { isGuest } = useAuth();
+
+  const [activePlaceId, setActivePlaceId] = useState<string | undefined>();
+  const [placesOpen, setPlacesOpen] = useState(false);
+  // Once the header's search bar scrolls under the status bar, a copy of it
+  // pins to the top so search is always one tap away.
+  const searchY = useRef(0);
+  const [searchStuck, setSearchStuck] = useState(false);
+  // null = "For You" (everything). Otherwise the strip filters Home inline.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected: IntentCategory | undefined = INTENT_CATEGORIES.find((c) => c.id === selectedId);
+
+  const { data: places } = useAsync(() => repos.places.listPlaces(), []);
+  const activePlace = places?.find((p) => p.id === activePlaceId) ?? places?.[0];
+  const near = activePlace?.point;
+
+  const { data, loading, error, reload } = useAsync(
+    () => repos.businesses.list({ near, sortByDistance: true }),
+    [near?.latitude, near?.longitude],
+  );
+
+  const selectPlace = (place: SavedPlace) => {
+    setPlacesOpen(false);
+    if (place.kind !== 'current' && isGuest) {
+      router.push('/sign-in');
+      return;
+    }
+    setActivePlaceId(place.id);
+  };
+
+  // The nearby list, narrowed to the selected category.
+  const businesses = useMemo(() => {
+    const all = data ?? [];
+    return selected ? all.filter((b) => intentMatches(b, selected)) : all;
+  }, [data, selected]);
+
+  // The "ad" — live deals from the (filtered) businesses, nearest first.
+  const deals: DealCardItem[] = useMemo(
+    () =>
+      businesses.flatMap((b) =>
+        (b.deals ?? []).map((d) => ({
+          key: d.id,
+          tag: d.tag,
+          title: d.title,
+          description: d.description,
+          price: d.price,
+          wasPrice: d.wasPrice,
+          emoji: d.emoji ?? getType(b.type)?.icon ?? '🏷️',
+          businessName: b.name,
+          distanceLabel: formatDistance(b.distanceKm),
+          colors: DEAL_GRADIENTS[b.type],
+          onPress: () => router.push(`/business/${b.id}`),
+        })),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [businesses],
+  );
+
+  // Subcategory tiles for the selected category — its tags found on nearby
+  // listings (stalls: the item categories instead), Flipkart-grid style.
+  const subTiles = useMemo(() => {
+    if (!selected) return [];
+    if (selected.id === 'stalls') {
+      return (getType('item')?.subcategories ?? []).map((s) => ({
+        id: s.id,
+        label: s.name,
+        emoji: s.icon ?? selected.icon,
+      }));
+    }
+    const present = new Set(
+      businesses.flatMap((b) => b.tags ?? []).map((t) => t.trim().toLowerCase()),
+    );
+    return selected.tags
+      .filter((t) => present.has(t.toLowerCase()))
+      .slice(0, 12)
+      .map((t) => ({ id: t, label: t, emoji: tagEmoji(t, selected.icon) }));
+  }, [selected, businesses]);
+
+  // Sticky-search trigger: the header bar's own offset, minus the safe area the
+  // pinned copy occupies (a few px of hysteresis so it can't flicker).
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const threshold = Math.max(searchY.current - insets.top, 1);
+    setSearchStuck((stuck) => (stuck ? y > threshold - 8 : y > threshold + 8));
+  };
+
+  const openSubcategory = (sub: string) => {
+    router.push({
+      pathname: '/browse/[type]',
+      params: { type: selected!.id, sub, ...(activePlace ? { place: activePlace.id } : {}) },
+    });
+  };
+
+  const header = useMemo(
+    () => (
+      <View>
+        <LinearGradient
+          colors={[colors.accent, colors.accentSoft, colors.background]}
+          locations={[0, 0.62, 1]}
+          style={[styles.sheet, { paddingTop: insets.top + spacing.lg }]}
+        >
+          {/* Three products, one app — Flipkart-style top pills. */}
+          <ModePills active="explore" />
+
+          {/* Location row — like the delivery-address bar. */}
+          <View style={styles.locationRow}>
+            <Pressable
+              onPress={() => setPlacesOpen((v) => !v)}
+              style={[styles.locationPill, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            >
+              <Text variant="label" weight="medium" numberOfLines={1} style={styles.locationText}>
+                {activePlace ? `${placeIcon(activePlace.kind)}  Near ${activePlace.label}` : '📍  Near you'}
+              </Text>
+              <Text tone="muted" style={styles.chev}>
+                {placesOpen ? '▲' : '▼'}
+              </Text>
+            </Pressable>
+            <Pressable onPress={() => router.push('/map')} style={[styles.mapBtn, { backgroundColor: colors.brand }]}>
+              <Text variant="label" weight="semibold" tone="inverse">
+                🗺️ Map
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* Dropdown panel */}
+          {placesOpen ? (
+            <Card style={styles.dropdown} padded={false}>
+              {(places ?? []).map((p, i) => {
+                const active = activePlace?.id === p.id;
+                const locked = p.kind !== 'current' && isGuest;
+                return (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => selectPlace(p)}
+                    style={[
+                      styles.placeRow,
+                      i > 0 && { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
+                    ]}
+                  >
+                    <Text weight={active ? 'semibold' : 'regular'}>
+                      {placeIcon(p.kind)}  {p.label}
+                      {locked ? '  🔒' : ''}
+                    </Text>
+                    {active ? <Text tone="brand" weight="semibold">✓</Text> : null}
+                  </Pressable>
+                );
+              })}
+            </Card>
+          ) : null}
+
+          {/* Search pill (→ /search) + QR scan button */}
+          <View
+            style={styles.searchRow}
+            onLayout={(e) => {
+              searchY.current = e.nativeEvent.layout.y;
+            }}
+          >
+            <SearchScanBar />
+          </View>
+
+          {/* Category strip — filters THIS screen inline, Flipkart-style. */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.stripScroll}
+            contentContainerStyle={styles.stripRow}
+          >
+            {[{ id: null as string | null, label: 'For You', icon: '✨' }, ...INTENT_CATEGORIES].map(
+              (c) => {
+                const active = selectedId === c.id;
+                return (
+                  <Pressable key={c.id ?? 'foryou'} onPress={() => setSelectedId(c.id)} style={styles.stripItem}>
+                    <View
+                      style={[
+                        styles.stripIconBox,
+                        { backgroundColor: active ? colors.brandSoft : colors.surface + 'B0' },
+                      ]}
+                    >
+                      <Text style={styles.stripEmoji}>{c.icon}</Text>
+                    </View>
+                    <Text
+                      variant="caption"
+                      weight={active ? 'semibold' : 'regular'}
+                      tone={active ? 'brand' : 'default'}
+                      numberOfLines={1}
+                      style={styles.stripLabel}
+                    >
+                      {c.label}
+                    </Text>
+                    <View
+                      style={[
+                        styles.stripUnderline,
+                        { backgroundColor: colors.brand, opacity: active ? 1 : 0 },
+                      ]}
+                    />
+                  </Pressable>
+                );
+              },
+            )}
+          </ScrollView>
+        </LinearGradient>
+
+        {/* Subcategory tiles — one row, right under the strip, above the ad */}
+        {selected && subTiles.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.tilesScroll}
+            contentContainerStyle={styles.tilesRow}
+          >
+            {subTiles.map((t) => (
+              <Pressable key={t.id} onPress={() => openSubcategory(t.id)} style={styles.tile}>
+                <View style={[styles.tileBox, { backgroundColor: selected.color + '1C' }]}>
+                  <Text style={styles.tileEmoji}>{t.emoji}</Text>
+                </View>
+                <Text variant="caption" weight="medium" numberOfLines={1} style={styles.tileLabel}>
+                  {t.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+
+        {/* The "ad" — deals near you, scoped to the picked category */}
+        {deals.length > 0 ? (
+          <View style={styles.dealsSection}>
+            <Text variant="subheading" weight="bold" style={styles.dealsHeading}>
+              🔥 {selected ? `${selected.label} deals` : 'Deals near you'}
+            </Text>
+            {/* Bleeds to the screen edges so neighbouring cards peek in. */}
+            <View style={styles.dealsBleed}>
+              <DealsCarousel items={deals} />
+            </View>
+          </View>
+        ) : null}
+
+        {selected ? (
+          <Text variant="subheading" weight="bold" style={styles.listHeading}>
+            {selected.icon} {selected.label} near you
+          </Text>
+        ) : null}
+      </View>
+    ),
+    [places, activePlace, placesOpen, colors, isGuest, insets.top, router, deals, selectedId, subTiles],
+  );
+
+  if (error) return <ErrorView message={error.message} onRetry={reload} />;
+
+  return (
+    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+      <FlatList
+        data={businesses}
+        keyExtractor={(b) => b.id}
+        renderItem={({ item }) => <BusinessCard business={item} />}
+        ListHeaderComponent={header}
+        style={styles.screen}
+        contentContainerStyle={styles.list}
+        keyboardShouldPersistTaps="handled"
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        ListEmptyComponent={
+          loading ? (
+            <LoadingView label="Finding businesses…" />
+          ) : (
+            <EmptyView
+              title="No results"
+              subtitle={
+                selected
+                  ? `Nothing under ${selected.label} near this location yet.`
+                  : 'Try a different search, category, or location.'
+              }
+            />
+          )
+        }
+      />
+
+      {/* Pinned search — appears once the header's bar scrolls away. */}
+      {searchStuck ? (
+        <View
+          style={[
+            styles.stickySearch,
+            {
+              paddingTop: insets.top + spacing.sm,
+              backgroundColor: colors.background,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
+          <SearchScanBar />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  // The gradient sheet bleeds to the screen edges and adds its own padding.
+  sheet: {
+    marginHorizontal: -spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  locationRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  locationPill: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    height: 40,
+  },
+  locationText: { flex: 1 },
+  chev: { fontSize: 10, marginLeft: spacing.sm },
+  mapBtn: {
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dropdown: { marginTop: spacing.sm },
+  placeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  searchRow: { marginTop: spacing.md },
+  stickySearch: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  // Category strip
+  stripScroll: { marginTop: spacing.lg, marginHorizontal: -spacing.lg },
+  stripRow: { paddingHorizontal: spacing.lg, gap: spacing.md },
+  stripItem: { alignItems: 'center', width: 68 },
+  stripIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stripEmoji: { fontSize: 22 },
+  stripLabel: { marginTop: spacing.xs, maxWidth: 68 },
+  stripUnderline: { height: 3, width: 28, borderRadius: 2, marginTop: 3 },
+  // Deals
+  dealsSection: { marginBottom: spacing.md },
+  dealsHeading: { marginBottom: spacing.md },
+  // Escape the list's horizontal padding so peeking cards reach the edges.
+  dealsBleed: { marginHorizontal: -spacing.lg },
+  // Subcategory tiles
+  tilesScroll: { marginHorizontal: -spacing.lg, marginBottom: spacing.md },
+  tilesRow: { paddingHorizontal: spacing.lg, gap: spacing.md },
+  tile: { alignItems: 'center', width: 76 },
+  tileBox: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tileEmoji: { fontSize: 30 },
+  tileLabel: { marginTop: spacing.xs, maxWidth: 76 },
+  listHeading: { marginBottom: spacing.md },
+});

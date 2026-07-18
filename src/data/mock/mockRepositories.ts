@@ -1,0 +1,2195 @@
+/**
+ * In-memory implementations of the repository interfaces.
+ *
+ * State lives in module-level arrays for the lifetime of the app session.
+ * Every method is async and returns cloned data so callers can't mutate the
+ * store directly — this mirrors how a networked backend would behave and keeps
+ * the swap to a real API friction-free.
+ */
+import type {
+  AppNotification,
+  Bill,
+  BillLine,
+  BizChatMessage,
+  Booking,
+  BookingStatus,
+  Business,
+  Call,
+  CallParticipant,
+  ChatMessage,
+  Employee,
+  GeoPoint,
+  LocationShare,
+  LogEntry,
+  Membership,
+  MonthlySpend,
+  Order,
+  PaymentStatus,
+  ProductItem,
+  ProductMessage,
+  Review,
+  SavedPlace,
+  TrackedItem,
+  User,
+  Vehicle,
+} from '@/domain/types';
+import { getVehicleKind } from '@/domain/catalog';
+import { normalizeRole } from '@/domain/roles';
+import type {
+  AuthRepository,
+  BillRepository,
+  BizChatRepository,
+  BizThreadSummary,
+  BookingRepository,
+  BusinessQuery,
+  BusinessRepository,
+  CallRepository,
+  ChatAuthor,
+  ChatRepository,
+  ChatThreadSummary,
+  CustomerRepository,
+  CustomerSummary,
+  CustomerThreadSummary,
+  EmployeeRepository,
+  LiveVehicle,
+  LogbookRepository,
+  MembershipRepository,
+  NewBillInput,
+  NewLogEntryInput,
+  NewBizMessageInput,
+  NewBookingInput,
+  NewBusinessInput,
+  NewEmployeeInput,
+  NewMembershipInput,
+  NewOrderInput,
+  NewOrderLineInput,
+  NewProductMessageInput,
+  NewReviewInput,
+  NewTrackedItemInput,
+  NewUserInput,
+  NewVehicleInput,
+  NotificationRepository,
+  OrderRepository,
+  PlacesRepository,
+  ProductThreadRepository,
+  Repositories,
+  ReviewEligibility,
+  ReviewRepository,
+  SignUpInput,
+  TableSeat,
+  TrackingRepository,
+  UserRepository,
+} from '@/data/repositories';
+import { haversineKm } from '@/lib/geo';
+import { formatMoney, parsePrice } from '@/lib/money';
+import {
+  CURRENT_POINT,
+  seedBizChat,
+  seedBusinesses,
+  seedEmployees,
+  seedLocationShares,
+  seedLogEntries,
+  seedMemberships,
+  seedPlaces,
+  seedProductMessages,
+  seedReviews,
+  seedTrackedItems,
+  seedUsers,
+  seedVehicles,
+} from './seed';
+
+// Mutable session state, seeded from the demo data.
+const users: User[] = seedUsers.map((u) => ({ ...u }));
+const memberships: Membership[] = seedMemberships.map((m) => ({ ...m }));
+const bizMessages: BizChatMessage[] = seedBizChat.map((m) => ({ ...m }));
+const employees: Employee[] = seedEmployees.map((e) => ({ ...e }));
+const businesses: Business[] = seedBusinesses.map((b) => ({ ...b }));
+const places: SavedPlace[] = seedPlaces.map((p) => ({ ...p }));
+const messages: ChatMessage[] = [];
+const notifications: AppNotification[] = [];
+const bookings: Booking[] = [];
+const orders: Order[] = [];
+const bills: Bill[] = [];
+const calls: Call[] = [];
+const reviews: Review[] = seedReviews.map((r) => ({ ...r }));
+const productMessages: ProductMessage[] = seedProductMessages.map((m) => ({ ...m }));
+const vehicles: Vehicle[] = seedVehicles.map((v) => ({ ...v }));
+const trackedItems: TrackedItem[] = seedTrackedItems.map((t) => ({ ...t }));
+const locationShares: LocationShare[] = seedLocationShares.map((s) => ({ ...s }));
+// The logbook stores only MANUAL records; order entries are derived live on
+// read (see MockLogbookRepository), so every order is always in the book.
+const logEntries: LogEntry[] = seedLogEntries.map((l) => ({ ...l }));
+
+/** Push a notification (used by chat + bookings). */
+function notify(n: Omit<AppNotification, 'id' | 'read' | 'createdAt'>): void {
+  notifications.push({
+    ...n,
+    id: nextId('n'),
+    read: false,
+    createdAt: new Date().toISOString(),
+  });
+}
+
+const clone = <T>(value: T): T =>
+  typeof structuredClone === 'function'
+    ? structuredClone(value)
+    : JSON.parse(JSON.stringify(value));
+
+const delay = (ms = 120) => new Promise<void>((r) => setTimeout(r, ms));
+
+let idCounter = 1;
+const nextId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${idCounter++}`;
+
+/**
+ * Every stall product needs a stable id (the product page and its public
+ * thread hang off one), but nothing that WRITES products — the register
+ * wizard, the Manage editor — should have to invent one. Stamp the missing
+ * ones on the way in; already-saved products keep theirs.
+ */
+const withProductIds = (products?: ProductItem[]): ProductItem[] | undefined =>
+  products?.map((p) => (p.id ? p : { ...p, id: nextId('p') }));
+
+class MockBusinessRepository implements BusinessRepository {
+  async list(query: BusinessQuery = {}): Promise<Business[]> {
+    await delay();
+    const term = query.search?.trim().toLowerCase();
+    const { near, maxDistanceKm, sortByDistance } = query;
+
+    const results = businesses
+      .filter((b) => (query.type ? b.type === query.type : true))
+      // A personal stall matches a subcategory when any of its items does —
+      // one stall can hold a phone (electronics) AND a car (vehicles).
+      .filter((b) =>
+        query.subcategoryId
+          ? b.subcategoryId === query.subcategoryId ||
+            (b.products ?? []).some((p) => p.subcategoryId === query.subcategoryId)
+          : true,
+      )
+      .filter((b) => {
+        if (!term) return true;
+        // Search everything a customer could reasonably type: the listing
+        // itself plus its products, menu, and services (suggestion sources).
+        return [
+          b.name,
+          b.tagline,
+          b.description,
+          b.providerType,
+          ...(b.tags ?? []),
+          ...(b.products ?? []).map((p) => p.name),
+          ...(b.menu ?? []).map((m) => m.name),
+          ...(b.services ?? []).map((s) => s.name),
+          ...(b.rentals ?? []).map((r) => r.name),
+        ]
+          .filter(Boolean)
+          .some((field) => field!.toLowerCase().includes(term));
+      })
+      .map((b): Business => {
+        // Attach a distance from `near` when we can compute one.
+        const point = b.location.point;
+        const distanceKm = near && point ? haversineKm(near, point) : undefined;
+        return { ...clone(b), distanceKm };
+      })
+      // Only a hard `maxDistanceKm` drops businesses (too far, or no coords).
+      // Plain distance sorting keeps everyone, placing no-coord ones last.
+      .filter((b) => {
+        if (typeof maxDistanceKm !== 'number' || !near) return true;
+        return typeof b.distanceKm === 'number' && b.distanceKm <= maxDistanceKm;
+      });
+
+    results.sort((a, b) =>
+      sortByDistance
+        ? (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)
+        : b.createdAt.localeCompare(a.createdAt),
+    );
+
+    return results;
+  }
+
+  async getById(id: string): Promise<Business | null> {
+    await delay(80);
+    const found = businesses.find((b) => b.id === id);
+    return found ? clone(found) : null;
+  }
+
+  async create(input: NewBusinessInput, ownerId: string): Promise<Business> {
+    await delay();
+
+    // Personal stalls: a user has ONE 'item' listing. Listing another item
+    // adds it to the existing stall's products instead of creating a listing.
+    if (input.type === 'item') {
+      const stall = businesses.find((b) => b.type === 'item' && b.ownerId === ownerId);
+      if (stall) {
+        stall.products = [...(stall.products ?? []), ...(withProductIds(input.products) ?? [])];
+        return clone(stall);
+      }
+    }
+
+    const businessId = nextId('b');
+
+    const newEmployees: Employee[] = input.employees.map((emp) => ({
+      id: nextId('e'),
+      businessId,
+      displayName: emp.displayName,
+      // Every employee carries a role — default to "Staff" when none was typed.
+      role: normalizeRole(emp.role),
+      level: emp.level ?? 'staff',
+      userId: emp.userId,
+    }));
+    employees.push(...newEmployees);
+    const employeeIds = newEmployees.map((e) => e.id);
+
+    const business: Business = {
+      id: businessId,
+      ownerId,
+      name: input.name,
+      tagline: input.tagline,
+      description: input.description,
+      type: input.type,
+      subcategoryId: input.subcategoryId,
+      tags: input.tags,
+      location: input.location,
+      phone: input.phone,
+      email: input.email,
+      website: input.website,
+      priceLabel: input.priceLabel,
+      menu: input.menu,
+      services: input.services,
+      products: withProductIds(input.products),
+      modules: input.modules,
+      employeeIds,
+      // By default everyone on the team handles calls and receives chats;
+      // the owner can narrow this on the Manage screen.
+      callHandlerIds: employeeIds,
+      ownerHandlesCalls: true,
+      chatRecipientIds: employeeIds,
+      openNow: true,
+      // Rentals start available; the owner flips the status in Manage when a
+      // tenant moves in, instead of deleting and re-listing. Not gated on the
+      // listing type — a shop can rent things out on the side.
+      rentalBasis: input.rentalBasis,
+      rentals: input.rentals,
+      rentalStatus: input.rentalBasis ? 'available' : undefined,
+      createdAt: new Date().toISOString(),
+    };
+    businesses.push(business);
+    return clone(business);
+  }
+
+  async getStallForOwner(ownerId: string): Promise<Business | null> {
+    await delay(60);
+    const stall = businesses.find((b) => b.type === 'item' && b.ownerId === ownerId);
+    return stall ? clone(stall) : null;
+  }
+
+  async getProduct(businessId: string, productId: string): Promise<ProductItem | null> {
+    await delay(80);
+    const product = businesses
+      .find((b) => b.id === businessId)
+      ?.products?.find((p) => p.id === productId);
+    return product ? clone(product) : null;
+  }
+
+  async setProductSold(
+    businessId: string,
+    productId: string,
+    sold: boolean,
+    actorId: string,
+  ): Promise<ProductItem> {
+    await delay(90);
+    const business = businesses.find((b) => b.id === businessId);
+    if (!business) throw new Error(`Business ${businessId} not found`);
+    if (business.ownerId !== actorId) throw new Error('Only the seller can mark an item sold.');
+    const product = business.products?.find((p) => p.id === productId);
+    if (!product) throw new Error(`Product ${productId} not found`);
+    product.sold = sold;
+    return clone(product);
+  }
+
+  async removeProduct(businessId: string, productId: string, actorId: string): Promise<void> {
+    await delay(90);
+    const business = businesses.find((b) => b.id === businessId);
+    if (!business) throw new Error(`Business ${businessId} not found`);
+    if (business.ownerId !== actorId) throw new Error('Only the seller can remove an item.');
+    business.products = (business.products ?? []).filter((p) => p.id !== productId);
+    // The item's public thread goes with it — nothing left to read.
+    for (let i = productMessages.length - 1; i >= 0; i--) {
+      if (productMessages[i].businessId === businessId && productMessages[i].productId === productId) {
+        productMessages.splice(i, 1);
+      }
+    }
+  }
+
+  async update(id: string, patch: Partial<Business>): Promise<Business> {
+    await delay(90);
+    const business = businesses.find((b) => b.id === id);
+    if (!business) throw new Error(`Business ${id} not found`);
+    Object.assign(business, patch);
+    // Products edited in Manage come back without ids for the new rows.
+    if (patch.products) business.products = withProductIds(patch.products);
+    return clone(business);
+  }
+}
+
+class MockProductThreadRepository implements ProductThreadRepository {
+  async listForProduct(businessId: string, productId: string): Promise<ProductMessage[]> {
+    await delay(90);
+    return productMessages
+      .filter((m) => m.businessId === businessId && m.productId === productId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map(clone);
+  }
+
+  async listForBusiness(businessId: string): Promise<ProductMessage[]> {
+    await delay(90);
+    return productMessages
+      .filter((m) => m.businessId === businessId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map(clone);
+  }
+
+  async setPinned(
+    businessId: string,
+    productId: string,
+    messageId: string,
+    pinned: boolean,
+    actorId: string,
+  ): Promise<ProductMessage> {
+    await delay(80);
+    const business = businesses.find((b) => b.id === businessId);
+    if (!business) throw new Error(`Business ${businessId} not found`);
+    if (business.ownerId !== actorId) throw new Error('Only the seller can pin messages.');
+    const message = productMessages.find(
+      (m) => m.id === messageId && m.businessId === businessId && m.productId === productId,
+    );
+    if (!message) throw new Error(`Message ${messageId} not found`);
+    message.pinned = pinned;
+    return clone(message);
+  }
+
+  async post(input: NewProductMessageInput): Promise<ProductMessage> {
+    await delay(120);
+    const business = businesses.find((b) => b.id === input.businessId);
+    if (!business) throw new Error(`Business ${input.businessId} not found`);
+    const product = business.products?.find((p) => p.id === input.productId);
+    if (!product) throw new Error(`Product ${input.productId} not found`);
+    if (!input.text.trim() && !input.offerPrice) {
+      throw new Error('Write a question, or propose a price.');
+    }
+
+    const fromSeller = business.ownerId === input.authorId;
+    const message: ProductMessage = {
+      id: nextId('pm'),
+      businessId: input.businessId,
+      productId: input.productId,
+      authorId: input.authorId,
+      authorName: input.authorName,
+      fromSeller,
+      text: input.text.trim(),
+      offerPrice: input.offerPrice,
+      replyToId: input.replyToId,
+      createdAt: new Date().toISOString(),
+    };
+    productMessages.push(message);
+
+    // The seller hears about every question and offer; when the seller answers,
+    // the person who asked hears back. Nobody else gets pinged — the thread is
+    // public to READ, not a group everyone is subscribed to.
+    if (!fromSeller) {
+      notify({
+        recipientId: business.ownerId,
+        kind: 'product_question',
+        title: `${input.authorName} on ${product.name}`,
+        body: input.offerPrice
+          ? `Offered ${input.offerPrice}${message.text ? ` — ${message.text}` : ''}`
+          : message.text,
+        businessId: business.id,
+        productId: product.id,
+      });
+    } else if (input.replyToId) {
+      const answered = productMessages.find((m) => m.id === input.replyToId);
+      if (answered && answered.authorId !== input.authorId) {
+        notify({
+          recipientId: answered.authorId,
+          kind: 'product_reply',
+          title: `${business.name} replied`,
+          body: message.text || `About ${product.name}`,
+          businessId: business.id,
+          productId: product.id,
+        });
+      }
+    }
+
+    return clone(message);
+  }
+}
+
+class MockEmployeeRepository implements EmployeeRepository {
+  async listByBusiness(businessId: string): Promise<Employee[]> {
+    await delay(80);
+    return employees.filter((e) => e.businessId === businessId).map(clone);
+  }
+
+  async getById(id: string): Promise<Employee | null> {
+    await delay(60);
+    const found = employees.find((e) => e.id === id);
+    return found ? clone(found) : null;
+  }
+
+  async listBusinessesForUser(userId: string): Promise<Business[]> {
+    await delay(80);
+    const businessIds = new Set(
+      employees.filter((e) => e.userId === userId).map((e) => e.businessId),
+    );
+    return businesses.filter((b) => businessIds.has(b.id)).map(clone);
+  }
+
+  async update(id: string, patch: Partial<Employee>): Promise<Employee> {
+    await delay(70);
+    const employee = employees.find((e) => e.id === id);
+    if (!employee) throw new Error(`Employee ${id} not found`);
+    Object.assign(employee, patch);
+    return clone(employee);
+  }
+
+  async add(businessId: string, input: NewEmployeeInput): Promise<Employee> {
+    await delay();
+    const business = businesses.find((b) => b.id === businessId);
+    if (!business) throw new Error(`Business ${businessId} not found`);
+    const employee: Employee = {
+      id: nextId('e'),
+      businessId,
+      displayName: input.displayName,
+      // Every employee carries a role — default to "Staff" when none was typed.
+      role: normalizeRole(input.role),
+      level: input.level ?? 'staff',
+      userId: input.userId,
+    };
+    employees.push(employee);
+    // Mirror registration: a new member joins the team and, by default, rings on
+    // calls and receives chats. The owner narrows this on the Manage screen.
+    business.employeeIds = [...(business.employeeIds ?? []), employee.id];
+    business.callHandlerIds = [...(business.callHandlerIds ?? []), employee.id];
+    business.chatRecipientIds = [...(business.chatRecipientIds ?? []), employee.id];
+    return clone(employee);
+  }
+
+  async remove(id: string): Promise<void> {
+    await delay();
+    const index = employees.findIndex((e) => e.id === id);
+    if (index === -1) return;
+    const [removed] = employees.splice(index, 1);
+    const business = businesses.find((b) => b.id === removed.businessId);
+    if (business) {
+      business.employeeIds = (business.employeeIds ?? []).filter((eid) => eid !== id);
+      business.callHandlerIds = (business.callHandlerIds ?? []).filter((eid) => eid !== id);
+      business.chatRecipientIds = (business.chatRecipientIds ?? []).filter((eid) => eid !== id);
+    }
+  }
+}
+
+class MockUserRepository implements UserRepository {
+  async getById(id: string): Promise<User | null> {
+    await delay(60);
+    const found = users.find((u) => u.id === id);
+    return found ? clone(found) : null;
+  }
+
+  async list(): Promise<User[]> {
+    await delay(50);
+    return users.map(clone);
+  }
+
+  async create(input: NewUserInput): Promise<User> {
+    await delay(90);
+    const user: User = {
+      id: nextId('u'),
+      name: input.name.trim() || 'Test user',
+      email: input.email?.trim() || undefined,
+      isProfilePublic: input.isProfilePublic ?? true,
+    };
+    users.push(user);
+    return clone(user);
+  }
+
+  async search(term: string): Promise<User[]> {
+    await delay(100);
+    const q = term.trim().toLowerCase();
+    if (!q) return [];
+    return users.filter((u) => u.name.toLowerCase().includes(q)).map(clone);
+  }
+
+  async update(id: string, patch: Partial<User>): Promise<User> {
+    await delay(80);
+    const user = users.find((u) => u.id === id);
+    if (!user) throw new Error(`User ${id} not found`);
+    Object.assign(user, patch);
+    return clone(user);
+  }
+}
+
+// Session auth state. Starts null — the app opens as a guest.
+let currentUserId: string | null = null;
+
+class MockAuthRepository implements AuthRepository {
+  async getCurrentUser(): Promise<User | null> {
+    await delay(50);
+    const user = users.find((u) => u.id === currentUserId);
+    return user ? clone(user) : null;
+  }
+
+  async signIn(_email: string, _password?: string): Promise<User> {
+    await delay(150);
+    // Mock: any credentials sign you in as the demo user (who owns the seed data).
+    const demo = users.find((u) => u.id === 'u_demo')!;
+    currentUserId = demo.id;
+    return clone(demo);
+  }
+
+  async signUp(input: SignUpInput): Promise<User> {
+    await delay(180);
+    const user: User = {
+      id: nextId('u'),
+      name: input.name.trim() || 'New user',
+      email: input.email.trim() || undefined,
+      isProfilePublic: false,
+    };
+    users.push(user);
+    currentUserId = user.id;
+    return clone(user);
+  }
+
+  async signOut(): Promise<void> {
+    await delay(50);
+    currentUserId = null;
+  }
+
+  async signInAs(userId: string): Promise<User> {
+    await delay(60);
+    const user = users.find((u) => u.id === userId);
+    if (!user) throw new Error(`User ${userId} not found`);
+    currentUserId = user.id;
+    return clone(user);
+  }
+}
+
+class MockPlacesRepository implements PlacesRepository {
+  async getCurrentPlace(): Promise<SavedPlace> {
+    await delay(40);
+    // Mocked device location until GPS/maps is wired up.
+    const current = places.find((p) => p.kind === 'current') ?? places[0];
+    return clone(current);
+  }
+
+  async listPlaces(): Promise<SavedPlace[]> {
+    await delay(40);
+    // Current location first, then saved places.
+    const ordered = [...places].sort((a, b) =>
+      a.kind === 'current' ? -1 : b.kind === 'current' ? 1 : 0,
+    );
+    return ordered.map(clone);
+  }
+}
+
+// One thread per customer per business.
+const threadKeyFor = (businessId: string, participantId: string) =>
+  `${businessId}:${participantId}`;
+
+const participantName = (participantId: string): string =>
+  participantId === 'guest'
+    ? 'Guest'
+    : users.find((u) => u.id === participantId)?.name ?? participantId;
+
+class MockChatRepository implements ChatRepository {
+  async listThread(businessId: string, participantId: string): Promise<ChatMessage[]> {
+    await delay(80);
+    const key = threadKeyFor(businessId, participantId);
+    return messages.filter((m) => m.threadKey === key).map(clone);
+  }
+
+  async send(
+    businessId: string,
+    participantId: string,
+    body: string,
+    author: ChatAuthor,
+    extra?: { billId?: string },
+  ): Promise<ChatMessage[]> {
+    await delay(90);
+    const key = threadKeyFor(businessId, participantId);
+    // Real two-sided chat — no auto-reply. A member with chat access replies
+    // from the business inbox, attributed to whoever they are.
+    messages.push({
+      id: nextId('m'),
+      threadKey: key,
+      authorType: author.type,
+      authorName: author.name,
+      body: body.trim(),
+      billId: extra?.billId,
+      createdAt: new Date().toISOString(),
+    });
+
+    // Notify the customer when the business replies, so they don't have to
+    // reopen the chat to notice.
+    if (author.type === 'business') {
+      const businessName = businesses.find((b) => b.id === businessId)?.name ?? 'A business';
+      notifications.push({
+        id: nextId('n'),
+        recipientId: participantId,
+        kind: 'chat_reply',
+        title: `${author.name} from ${businessName}`,
+        body: body.trim(),
+        businessId,
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+    }
+
+    return messages.filter((m) => m.threadKey === key).map(clone);
+  }
+
+  async listBusinessThreads(businessId: string): Promise<ChatThreadSummary[]> {
+    await delay(90);
+    const prefix = `${businessId}:`;
+    const keys = Array.from(
+      new Set(messages.filter((m) => m.threadKey.startsWith(prefix)).map((m) => m.threadKey)),
+    );
+    return keys
+      .map((key): ChatThreadSummary => {
+        const pid = key.slice(prefix.length);
+        const msgs = messages.filter((m) => m.threadKey === key);
+        const last = msgs[msgs.length - 1];
+        return {
+          businessId,
+          participantId: pid,
+          participantName: participantName(pid),
+          lastBody: last?.body ?? '',
+          lastAt: last?.createdAt ?? '',
+          lastAuthorType: last?.authorType ?? 'customer',
+          count: msgs.length,
+        };
+      })
+      .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  }
+
+  async listCustomerThreads(participantId: string): Promise<CustomerThreadSummary[]> {
+    await delay(90);
+    const suffix = `:${participantId}`;
+    const keys = Array.from(
+      new Set(messages.filter((m) => m.threadKey.endsWith(suffix)).map((m) => m.threadKey)),
+    );
+    return keys
+      .map((key): CustomerThreadSummary => {
+        const businessId = key.slice(0, key.length - suffix.length);
+        const msgs = messages.filter((m) => m.threadKey === key);
+        const last = msgs[msgs.length - 1];
+        return {
+          businessId,
+          businessName: businesses.find((b) => b.id === businessId)?.name ?? 'A business',
+          lastBody: last?.body ?? '',
+          lastAt: last?.createdAt ?? '',
+          lastAuthorType: last?.authorType ?? 'customer',
+          count: msgs.length,
+        };
+      })
+      .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+  }
+}
+
+class MockNotificationRepository implements NotificationRepository {
+  async listForUser(recipientId: string): Promise<AppNotification[]> {
+    await delay(60);
+    return notifications
+      .filter((n) => n.recipientId === recipientId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(clone);
+  }
+
+  async unreadCount(recipientId: string): Promise<number> {
+    await delay(30);
+    return notifications.filter((n) => n.recipientId === recipientId && !n.read).length;
+  }
+
+  async markRead(id: string): Promise<void> {
+    await delay(30);
+    const n = notifications.find((x) => x.id === id);
+    if (n) n.read = true;
+  }
+
+  async markAllRead(recipientId: string): Promise<void> {
+    await delay(40);
+    notifications.forEach((n) => {
+      if (n.recipientId === recipientId) n.read = true;
+    });
+  }
+}
+
+class MockBookingRepository implements BookingRepository {
+  async create(input: NewBookingInput): Promise<Booking> {
+    await delay(120);
+    const booking: Booking = {
+      id: nextId('bk'),
+      businessId: input.businessId,
+      customerId: input.customerId,
+      customerName: input.customerName,
+      serviceName: input.serviceName,
+      price: input.price,
+      when: input.when,
+      note: input.note,
+      status: 'requested',
+      createdAt: new Date().toISOString(),
+    };
+    bookings.push(booking);
+
+    // Notify the business owner of the new request.
+    const business = businesses.find((b) => b.id === input.businessId);
+    if (business) {
+      notify({
+        recipientId: business.ownerId,
+        kind: 'booking_requested',
+        title: `New booking · ${business.name}`,
+        body: `${input.customerName} requested "${input.serviceName}" for ${input.when}`,
+        businessId: business.id,
+      });
+    }
+    return clone(booking);
+  }
+
+  async listForBusiness(businessId: string): Promise<Booking[]> {
+    await delay(80);
+    return bookings
+      .filter((b) => b.businessId === businessId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(clone);
+  }
+
+  async listForCustomer(customerId: string): Promise<Booking[]> {
+    await delay(80);
+    return bookings
+      .filter((b) => b.customerId === customerId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(clone);
+  }
+
+  async updateStatus(id: string, status: BookingStatus): Promise<Booking> {
+    await delay(90);
+    const booking = bookings.find((b) => b.id === id);
+    if (!booking) throw new Error(`Booking ${id} not found`);
+    booking.status = status;
+
+    // Notify the customer of the decision.
+    if (status === 'accepted' || status === 'declined') {
+      const business = businesses.find((b) => b.id === booking.businessId);
+      notify({
+        recipientId: booking.customerId,
+        kind: 'booking_update',
+        title: `Booking ${status} · ${business?.name ?? 'Business'}`,
+        body: `Your "${booking.serviceName}" for ${booking.when} was ${status}.`,
+        businessId: booking.businessId,
+      });
+    }
+    return clone(booking);
+  }
+}
+
+// ── Orders & bills ──────────────────────────────────────────────────────────
+
+/** Compute line amounts + total and store the bill. Shared by both flows. */
+function issueBill(input: NewBillInput): Bill {
+  const lines: BillLine[] = input.lines.map((l) => {
+    const unit = parsePrice(l.price);
+    return { ...l, amount: unit === undefined ? undefined : unit * l.quantity };
+  });
+  const total = lines.reduce((sum, l) => sum + (l.amount ?? 0), 0);
+  const business = businesses.find((b) => b.id === input.businessId);
+  const bill: Bill = {
+    id: nextId('bill'),
+    businessId: input.businessId,
+    businessName: business?.name ?? 'Business',
+    customerId: input.customerId,
+    customerName: input.customerName,
+    lines,
+    total,
+    note: input.note,
+    issuedByName: input.issuedByName,
+    orderId: input.orderId,
+    // Money hasn't moved yet — the business marks it paid when it arrives.
+    paymentStatus: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+  bills.push(bill);
+  return bill;
+}
+
+/** Finalise an order: bill the included lines and link the bill back. */
+function acceptOrder(order: Order): Bill {
+  const kept = order.lines.filter((l) => l.included);
+  const bill = issueBill({
+    businessId: order.businessId,
+    customerId: order.customerId,
+    customerName: order.customerName,
+    // Bill at the agreed price: the seller's counter, else the customer's
+    // accepted offer, else the listed price.
+    lines: kept.map((l) => ({
+      name: l.name,
+      quantity: l.quantity,
+      price: l.counterPrice ?? l.offerPrice ?? l.price,
+    })),
+    issuedByName: order.respondedByName ?? 'Owner',
+    orderId: order.id,
+  });
+  order.status = 'accepted';
+  order.billId = bill.id;
+  return bill;
+}
+
+const orderSummary = (order: Order): string => {
+  const kept = order.lines.filter((l) => l.included);
+  const count = kept.reduce((n, l) => n + l.quantity, 0);
+  return `${count} item${count === 1 ? '' : 's'}`;
+};
+
+/** Total of an order's included lines at the agreed price, when it parses. */
+const orderAmount = (order: Order): number | undefined => {
+  let total = 0;
+  let sawPrice = false;
+  for (const l of order.lines) {
+    if (!l.included) continue;
+    const unit = parsePrice(l.counterPrice ?? l.offerPrice ?? l.price);
+    if (unit !== undefined) {
+      total += unit * l.quantity;
+      sawPrice = true;
+    }
+  }
+  return sawPrice ? total : undefined;
+};
+
+/**
+ * A logbook entry derived from an order — how every in-app order lands in the
+ * record book without a write step, so nothing is ever missed (seeded orders
+ * included). The id is stable so an order never doubles up.
+ */
+const orderLogEntry = (order: Order): LogEntry => {
+  const label =
+    order.party ? 'Party order' : order.fulfillment === 'dine_in' ? 'Dine-in order' : order.fulfillment === 'takeaway' ? 'Takeaway order' : 'Order';
+  return {
+    id: `log_order_${order.id}`,
+    businessId: order.businessId,
+    source: 'order',
+    orderId: order.id,
+    title: `${label} · ${order.customerName}`,
+    details: `${orderSummary(order)} · ${order.status}`,
+    amount: orderAmount(order),
+    customerName: order.customerName,
+    recordedByName: 'App',
+    createdAt: order.createdAt,
+  };
+};
+
+/**
+ * An order still holding a table: awaiting a response, awaiting the customer's
+ * decision, or a confirmed-but-unbilled tab. Billing/rejection frees the seat.
+ * (Mirrors `isOrderOpen` in orderUtils — kept local to avoid a UI import here.)
+ */
+const isOrderStillOpen = (order: Order): boolean =>
+  !order.billId &&
+  (order.status === 'requested' || order.status === 'proposed' || order.status === 'accepted');
+
+/** Table numbers currently taken by open dine-in orders at a business. */
+function occupiedTables(businessId: string): Set<number> {
+  const taken = new Set<number>();
+  for (const o of orders) {
+    if (o.businessId !== businessId) continue;
+    if (o.fulfillment !== 'dine_in' || o.tableNumber == null) continue;
+    if (isOrderStillOpen(o)) taken.add(o.tableNumber);
+  }
+  return taken;
+}
+
+/**
+ * Decide which table a new dine-in order sits at:
+ *  - an explicit pick (a member seating the customer) wins;
+ *  - else, a known customer already at a table keeps it (their tab continues);
+ *  - else, the lowest free table (1..tableCount);
+ *  - undefined when the business runs no tables or every table is full.
+ */
+function assignTable(
+  business: Business | undefined,
+  explicit: number | undefined,
+  customerId: string,
+): number | undefined {
+  if (!business?.tableCount) return undefined;
+  if (explicit != null) return explicit;
+  const taken = occupiedTables(business.id);
+  // A returning customer (with an account) keeps whatever table they're on.
+  if (customerId && customerId !== 'guest') {
+    const existing = orders.find(
+      (o) =>
+        o.businessId === business.id &&
+        o.customerId === customerId &&
+        o.fulfillment === 'dine_in' &&
+        o.tableNumber != null &&
+        isOrderStillOpen(o),
+    );
+    if (existing?.tableNumber != null) return existing.tableNumber;
+  }
+  for (let n = 1; n <= business.tableCount; n++) {
+    if (!taken.has(n)) return n;
+  }
+  return undefined; // every table full — seated once one frees up / member picks.
+}
+
+class MockOrderRepository implements OrderRepository {
+  async create(input: NewOrderInput): Promise<Order> {
+    await delay(120);
+    const businessForTable = businesses.find((b) => b.id === input.businessId);
+    // Dine-in seating: a member may seat the order at a specific table;
+    // otherwise reuse the customer's existing table (open tab) or hand them the
+    // lowest free one. Takeaway and no-tables businesses stay unseated.
+    const tableNumber =
+      input.fulfillment === 'dine_in'
+        ? assignTable(businessForTable, input.tableNumber, input.customerId)
+        : undefined;
+    const order: Order = {
+      id: nextId('o'),
+      businessId: input.businessId,
+      customerId: input.customerId,
+      customerName: input.customerName,
+      lines: input.lines.map((l) => ({
+        id: nextId('ol'),
+        kind: l.kind,
+        name: l.name,
+        price: l.price,
+        offerPrice: l.offerPrice?.trim() || undefined,
+        quantity: Math.max(1, Math.round(l.quantity)),
+        included: true,
+      })),
+      fulfillment: input.fulfillment,
+      tableNumber,
+      party: input.party,
+      enrollees: input.enrollees?.map((n) => n.trim()).filter(Boolean),
+      note: input.note,
+      status: 'requested',
+      createdAt: new Date().toISOString(),
+    };
+    orders.push(order);
+
+    const business = businesses.find((b) => b.id === input.businessId);
+    if (business) {
+      if (order.party) {
+        notify({
+          recipientId: business.ownerId,
+          kind: 'order_requested',
+          title: `🎉 Party request · ${business.name}`,
+          body: `${input.customerName} wants to host ${order.party.occasion ? `a ${order.party.occasion.toLowerCase()}` : 'a party'} for ${order.party.guests} guests — ${order.party.when}.`,
+          businessId: business.id,
+          orderId: order.id,
+        });
+        return clone(order);
+      }
+      const fulfillment =
+        order.fulfillment === 'dine_in' ? ' · Dine-in' : order.fulfillment === 'takeaway' ? ' · Takeaway' : '';
+      const bargained = order.lines.some((l) => l.offerPrice) ? ' with a price offer' : '';
+      const enrolling =
+        order.enrollees && order.enrollees.length > 0 ? ` for ${order.enrollees.join(', ')}` : '';
+      notify({
+        recipientId: business.ownerId,
+        kind: 'order_requested',
+        title: `New order · ${business.name}`,
+        body: `${input.customerName} ordered ${orderSummary(order)}${enrolling}${bargained}${fulfillment}.`,
+        businessId: business.id,
+        orderId: order.id,
+      });
+    }
+    return clone(order);
+  }
+
+  async getById(id: string): Promise<Order | null> {
+    await delay(60);
+    const found = orders.find((o) => o.id === id);
+    return found ? clone(found) : null;
+  }
+
+  async listForBusiness(businessId: string): Promise<Order[]> {
+    await delay(80);
+    return orders
+      .filter((o) => o.businessId === businessId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(clone);
+  }
+
+  async listForCustomer(customerId: string, businessId?: string): Promise<Order[]> {
+    await delay(80);
+    return orders
+      .filter((o) => o.customerId === customerId)
+      .filter((o) => (businessId ? o.businessId === businessId : true))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(clone);
+  }
+
+  async respond(
+    id: string,
+    keptLineIds: string[],
+    respondedByName: string,
+    message?: string,
+    counterPrices?: Record<string, string>,
+  ): Promise<Order> {
+    await delay(120);
+    const order = this.mustFind(id);
+    if (order.status !== 'requested') throw new Error('This order was already responded to.');
+    const kept = new Set(keptLineIds);
+    if (kept.size === 0) {
+      throw new Error('Keep at least one item — to turn the whole order down, reject it instead.');
+    }
+    order.lines.forEach((l) => {
+      l.included = kept.has(l.id);
+      l.counterPrice = (l.included && counterPrices?.[l.id]?.trim()) || undefined;
+    });
+    order.respondedByName = respondedByName;
+    order.respondedAt = new Date().toISOString();
+    order.responseMessage = message?.trim() || undefined;
+
+    const businessName = businesses.find((b) => b.id === order.businessId)?.name ?? 'Business';
+    const countered = order.lines.some((l) => l.counterPrice);
+    if (order.lines.every((l) => l.included) && !countered) {
+      if (order.fulfillment === 'dine_in' || order.party) {
+        // Dine-in tabs and confirmed parties STAY OPEN — the bill comes when
+        // the business moves them to billing (after the meal / the event).
+        order.status = 'accepted';
+        notify({
+          recipientId: order.customerId,
+          kind: 'order_update',
+          title: order.party ? `Party confirmed · ${businessName}` : `Order confirmed · ${businessName}`,
+          body: order.party
+            ? `Your party for ${order.party.guests} guests (${order.party.when}) is confirmed — the bill comes after the event.`
+            : `${orderSummary(order)} confirmed — add more anytime; the bill comes at the end.`,
+          businessId: order.businessId,
+          orderId: order.id,
+        });
+        return clone(order);
+      }
+      // Nothing was removed or re-priced → the complete order is accepted
+      // (at the customer's offer prices, where they made offers); bill it.
+      const bill = acceptOrder(order);
+      notify({
+        recipientId: order.customerId,
+        kind: 'order_update',
+        title: `Order accepted · ${businessName}`,
+        body: `${orderSummary(order)} confirmed — your bill is ${formatMoney(bill.total)}.`,
+        businessId: order.businessId,
+        orderId: order.id,
+      });
+    } else {
+      // Some lines can't be provided, or the seller countered the customer's
+      // offer → send it back as a live proposal to accept or decline.
+      order.status = 'proposed';
+      notify({
+        recipientId: order.customerId,
+        kind: 'order_update',
+        title: countered ? `Counter-offer from ${businessName}` : `Proposal from ${businessName}`,
+        body: countered
+          ? 'The seller countered your offer — review the price and confirm.'
+          : `They can provide ${orderSummary(order)} of your order — review and confirm.`,
+        businessId: order.businessId,
+        orderId: order.id,
+      });
+    }
+    return clone(order);
+  }
+
+  async reject(id: string, respondedByName: string, message?: string): Promise<Order> {
+    await delay(100);
+    const order = this.mustFind(id);
+    if (order.status !== 'requested') throw new Error('This order was already responded to.');
+    order.status = 'rejected';
+    order.respondedByName = respondedByName;
+    order.respondedAt = new Date().toISOString();
+    order.responseMessage = message?.trim() || undefined;
+
+    const businessName = businesses.find((b) => b.id === order.businessId)?.name ?? 'Business';
+    notify({
+      recipientId: order.customerId,
+      kind: 'order_update',
+      title: `Order rejected · ${businessName}`,
+      body: order.responseMessage ?? 'The business couldn’t take this order.',
+      businessId: order.businessId,
+      orderId: order.id,
+    });
+    return clone(order);
+  }
+
+  async decideProposal(id: string, accept: boolean): Promise<Order> {
+    await delay(120);
+    const order = this.mustFind(id);
+    if (order.status !== 'proposed') throw new Error('There is no open proposal on this order.');
+
+    const business = businesses.find((b) => b.id === order.businessId);
+    if (accept) {
+      if (order.fulfillment === 'dine_in' || order.party) {
+        // Dine-in / party proposal accepted → stays open, billed at the end.
+        order.status = 'accepted';
+        if (business) {
+          notify({
+            recipientId: business.ownerId,
+            kind: 'order_update',
+            title: `Proposal accepted · ${business.name}`,
+            body: order.party
+              ? `${order.customerName} agreed — party for ${order.party.guests} guests, ${order.party.when}. Bill it after the event.`
+              : `${order.customerName} confirmed ${orderSummary(order)} — move the tab to billing when they're done.`,
+            businessId: order.businessId,
+            orderId: order.id,
+          });
+        }
+        return clone(order);
+      }
+      const bill = acceptOrder(order);
+      if (business) {
+        notify({
+          recipientId: business.ownerId,
+          kind: 'order_update',
+          title: `Proposal accepted · ${business.name}`,
+          body: `${order.customerName} confirmed ${orderSummary(order)} — bill ${formatMoney(bill.total)} issued.`,
+          businessId: order.businessId,
+          orderId: order.id,
+        });
+      }
+    } else {
+      order.status = 'declined';
+      if (business) {
+        notify({
+          recipientId: business.ownerId,
+          kind: 'order_update',
+          title: `Proposal declined · ${business.name}`,
+          body: `${order.customerName} declined your proposal.`,
+          businessId: order.businessId,
+          orderId: order.id,
+        });
+      }
+    }
+    return clone(order);
+  }
+
+  async appendLines(id: string, lines: NewOrderLineInput[]): Promise<Order> {
+    await delay(120);
+    const order = this.mustFind(id);
+    if (order.billId) throw new Error('This order was already billed — place a new order instead.');
+    if (order.status !== 'requested' && order.status !== 'accepted') {
+      throw new Error('This order is not open anymore — place a new order instead.');
+    }
+    if (lines.length === 0) throw new Error('Pick at least one item to add.');
+    order.lines.push(
+      ...lines.map((l) => ({
+        id: nextId('ol'),
+        kind: l.kind,
+        name: l.name,
+        price: l.price,
+        offerPrice: l.offerPrice?.trim() || undefined,
+        quantity: Math.max(1, Math.round(l.quantity)),
+        included: true,
+      })),
+    );
+    // The new round needs the business's confirmation again.
+    order.status = 'requested';
+    order.responseMessage = undefined;
+
+    const business = businesses.find((b) => b.id === order.businessId);
+    if (business) {
+      notify({
+        recipientId: business.ownerId,
+        kind: 'order_requested',
+        title: `Order updated · ${business.name}`,
+        body: `${order.customerName} added more items — now ${orderSummary(order)} in total.`,
+        businessId: business.id,
+        orderId: order.id,
+      });
+    }
+    return clone(order);
+  }
+
+  async moveToBilling(id: string, issuedByName: string): Promise<Order> {
+    await delay(120);
+    const order = this.mustFind(id);
+    if (order.billId) throw new Error('This order was already billed.');
+    if (order.status !== 'accepted') {
+      throw new Error('Only a confirmed open order can be moved to billing.');
+    }
+    order.respondedByName = issuedByName;
+    const bill = acceptOrder(order);
+
+    const businessName = businesses.find((b) => b.id === order.businessId)?.name ?? 'Business';
+    notify({
+      recipientId: order.customerId,
+      kind: 'order_update',
+      title: `Bill ready · ${businessName}`,
+      body: `Your tab was closed — the bill is ${formatMoney(bill.total)}.`,
+      businessId: order.businessId,
+      orderId: order.id,
+    });
+    return clone(order);
+  }
+
+  async markDelivered(id: string, byName: string): Promise<Order> {
+    await delay(100);
+    const order = this.mustFind(id);
+    if (order.deliveredAt) throw new Error('This order was already collected.');
+    if (!order.billId) {
+      throw new Error('Accept and bill the order before handing it over.');
+    }
+    order.deliveredAt = new Date().toISOString();
+    order.deliveredByName = byName;
+
+    const businessName = businesses.find((b) => b.id === order.businessId)?.name ?? 'Business';
+    notify({
+      recipientId: order.customerId,
+      kind: 'order_update',
+      title: `Order collected · ${businessName}`,
+      body: `${byName} handed over your order — enjoy!`,
+      businessId: order.businessId,
+      orderId: order.id,
+    });
+    return clone(order);
+  }
+
+  async tableStatus(businessId: string): Promise<TableSeat[]> {
+    await delay(60);
+    const business = businesses.find((b) => b.id === businessId);
+    const count = business?.tableCount ?? 0;
+    const seated = new Map<number, Order>();
+    for (const o of orders) {
+      if (o.businessId !== businessId) continue;
+      if (o.fulfillment !== 'dine_in' || o.tableNumber == null) continue;
+      if (!isOrderStillOpen(o)) continue;
+      seated.set(o.tableNumber, o);
+    }
+    return Array.from({ length: count }, (_, i) => {
+      const number = i + 1;
+      const order = seated.get(number);
+      return { number, order: order ? clone(order) : null };
+    });
+  }
+
+  private mustFind(id: string): Order {
+    const order = orders.find((o) => o.id === id);
+    if (!order) throw new Error(`Order ${id} not found`);
+    return order;
+  }
+}
+
+class MockBillRepository implements BillRepository {
+  async create(input: NewBillInput): Promise<Bill> {
+    await delay(120);
+    const bill = issueBill(input);
+    // Manual bills reach the customer as an alert; order bills already do via
+    // the order_update notification.
+    if (bill.customerId && !bill.orderId) {
+      notify({
+        recipientId: bill.customerId,
+        kind: 'bill_issued',
+        title: `New bill · ${bill.businessName}`,
+        body: `${bill.issuedByName} billed you ${formatMoney(bill.total)}.`,
+        businessId: bill.businessId,
+        billId: bill.id,
+      });
+    }
+    return clone(bill);
+  }
+
+  async getById(id: string): Promise<Bill | null> {
+    await delay(60);
+    const found = bills.find((b) => b.id === id);
+    return found ? clone(found) : null;
+  }
+
+  async listForBusiness(businessId: string): Promise<Bill[]> {
+    await delay(80);
+    return bills
+      .filter((b) => b.businessId === businessId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(clone);
+  }
+
+  async listForCustomer(customerId: string, businessId?: string): Promise<Bill[]> {
+    await delay(80);
+    return bills
+      .filter((b) => b.customerId === customerId)
+      .filter((b) => (businessId ? b.businessId === businessId : true))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .map(clone);
+  }
+
+  async sendToChat(billId: string, sentByName: string): Promise<void> {
+    await delay(100);
+    const bill = bills.find((b) => b.id === billId);
+    if (!bill) throw new Error(`Bill ${billId} not found`);
+    if (!bill.customerId) {
+      throw new Error('This bill has no linked customer account to chat with.');
+    }
+    messages.push({
+      id: nextId('m'),
+      threadKey: threadKeyFor(bill.businessId, bill.customerId),
+      authorType: 'business',
+      authorName: sentByName,
+      body: `Here’s your bill — total ${formatMoney(bill.total)}.`,
+      billId: bill.id,
+      createdAt: new Date().toISOString(),
+    });
+    notify({
+      recipientId: bill.customerId,
+      kind: 'chat_reply',
+      title: `${sentByName} from ${bill.businessName}`,
+      body: `🧾 Sent you a bill — ${formatMoney(bill.total)}.`,
+      businessId: bill.businessId,
+    });
+  }
+
+  async setPaymentStatus(billId: string, status: PaymentStatus, byName: string): Promise<Bill> {
+    await delay(120);
+    const bill = bills.find((b) => b.id === billId);
+    if (!bill) throw new Error(`Bill ${billId} not found`);
+    bill.paymentStatus = status;
+    bill.paidByName = status === 'paid' ? byName : undefined;
+    bill.paidAt = status === 'paid' ? new Date().toISOString() : undefined;
+
+    // Tell the customer their payment landed — it's the receipt they'd
+    // otherwise have to ask for.
+    if (bill.customerId && status === 'paid') {
+      notify({
+        recipientId: bill.customerId,
+        kind: 'bill_issued',
+        title: `Payment received · ${bill.businessName}`,
+        body: `${byName} marked your ${formatMoney(bill.total)} bill as paid.`,
+        businessId: bill.businessId,
+        billId: bill.id,
+      });
+    }
+    return clone(bill);
+  }
+}
+
+// ── Customers ───────────────────────────────────────────────────────────────
+
+/** Favourite key for a bill: the user id when known, else a walk-in name key. */
+const customerKeyForBill = (bill: Bill): string =>
+  bill.customerId ?? `walkin:${bill.customerName.trim().toLowerCase()}`;
+
+class MockCustomerRepository implements CustomerRepository {
+  async listForBusiness(businessId: string): Promise<CustomerSummary[]> {
+    await delay(90);
+    const business = businesses.find((b) => b.id === businessId);
+    if (!business) return [];
+
+    const byKey = new Map<string, CustomerSummary>();
+    const touch = (key: string, name: string, at: string): CustomerSummary => {
+      let c = byKey.get(key);
+      if (!c) {
+        c = {
+          businessId,
+          key,
+          name,
+          hasAccount: users.some((u) => u.id === key),
+          favorite: false,
+          orderCount: 0,
+          bookingCount: 0,
+          billCount: 0,
+          callCount: 0,
+          chatCount: 0,
+          totalBilled: 0,
+          lastActivityAt: at,
+        };
+        byKey.set(key, c);
+      }
+      if (at > c.lastActivityAt) {
+        c.lastActivityAt = at;
+        c.name = name; // Keep the freshest display name.
+      }
+      return c;
+    };
+
+    orders
+      .filter((o) => o.businessId === businessId)
+      .forEach((o) => (touch(o.customerId, o.customerName, o.createdAt).orderCount += 1));
+    bookings
+      .filter((b) => b.businessId === businessId)
+      .forEach((b) => (touch(b.customerId, b.customerName, b.createdAt).bookingCount += 1));
+    calls
+      .filter((c) => c.businessId === businessId)
+      .forEach((c) => (touch(c.customerId, c.customerName, c.startedAt).callCount += 1));
+    bills
+      .filter((b) => b.businessId === businessId)
+      .forEach((b) => {
+        const c = touch(customerKeyForBill(b), b.customerName, b.createdAt);
+        c.billCount += 1;
+        c.totalBilled += b.total;
+      });
+    const prefix = `${businessId}:`;
+    messages
+      .filter((m) => m.threadKey.startsWith(prefix))
+      .forEach((m) => {
+        const pid = m.threadKey.slice(prefix.length);
+        touch(pid, participantName(pid), m.createdAt).chatCount += 1;
+      });
+
+    const favorites = new Set(business.favoriteCustomerIds ?? []);
+    byKey.forEach((c) => (c.favorite = favorites.has(c.key)));
+
+    return Array.from(byKey.values()).sort((a, b) => {
+      if (a.favorite !== b.favorite) return a.favorite ? -1 : 1;
+      return b.lastActivityAt.localeCompare(a.lastActivityAt);
+    });
+  }
+
+  async setFavorite(businessId: string, customerKey: string, favorite: boolean): Promise<void> {
+    await delay(60);
+    const business = businesses.find((b) => b.id === businessId);
+    if (!business) throw new Error(`Business ${businessId} not found`);
+    const current = new Set(business.favoriteCustomerIds ?? []);
+    if (favorite) current.add(customerKey);
+    else current.delete(customerKey);
+    business.favoriteCustomerIds = Array.from(current);
+  }
+}
+
+// ── Reviews ─────────────────────────────────────────────────────────────────
+
+/**
+ * The verified-customer gate: only someone who actually did business with the
+ * listing may rate it — an accepted order, an accepted/completed booking, or a
+ * bill in their name. Chats and calls alone don't count (anyone can message).
+ */
+function reviewEligibilityFor(businessId: string, customerId: string): ReviewEligibility {
+  if (!customerId || customerId === 'guest') {
+    return { eligible: false, reason: 'Sign in to rate businesses.' };
+  }
+  const business = businesses.find((b) => b.id === businessId);
+  if (business?.ownerId === customerId) {
+    return { eligible: false, reason: 'You can’t rate your own business.' };
+  }
+  const hasOrder = orders.some(
+    (o) => o.businessId === businessId && o.customerId === customerId && o.status === 'accepted',
+  );
+  const hasBooking = bookings.some(
+    (b) =>
+      b.businessId === businessId &&
+      b.customerId === customerId &&
+      (b.status === 'accepted' || b.status === 'completed'),
+  );
+  const hasBill = bills.some(
+    (b) => b.businessId === businessId && b.customerId === customerId,
+  );
+  if (hasOrder || hasBooking || hasBill) return { eligible: true };
+  return {
+    eligible: false,
+    reason:
+      'Ratings come only from verified customers. Place an order, book a service, or get billed by this business first — then you can rate your experience.',
+  };
+}
+
+class MockReviewRepository implements ReviewRepository {
+  async listForBusiness(businessId: string): Promise<Review[]> {
+    await delay(70);
+    return reviews
+      .filter((r) => r.businessId === businessId)
+      .sort((a, b) => (b.updatedAt ?? b.createdAt).localeCompare(a.updatedAt ?? a.createdAt))
+      .map(clone);
+  }
+
+  async getMine(businessId: string, customerId: string): Promise<Review | null> {
+    await delay(50);
+    const found = reviews.find(
+      (r) => r.businessId === businessId && r.customerId === customerId,
+    );
+    return found ? clone(found) : null;
+  }
+
+  async checkEligibility(businessId: string, customerId: string): Promise<ReviewEligibility> {
+    await delay(60);
+    return reviewEligibilityFor(businessId, customerId);
+  }
+
+  async submit(input: NewReviewInput): Promise<Review> {
+    await delay(120);
+    const rating = Math.round(input.rating);
+    if (rating < 1 || rating > 5) throw new Error('Pick a rating from 1 to 5 stars.');
+    const comment = input.comment?.trim() || undefined;
+    if (rating <= 2 && !comment) {
+      throw new Error(
+        'Please write what went wrong — a reason is required with 1 and 2 star ratings.',
+      );
+    }
+
+    const business = businesses.find((b) => b.id === input.businessId);
+    if (!business) throw new Error(`Business ${input.businessId} not found`);
+
+    const existing = reviews.find(
+      (r) => r.businessId === input.businessId && r.customerId === input.customerId,
+    );
+    // Editing an existing review stays allowed; only NEW reviews pass the gate.
+    if (!existing) {
+      const gate = reviewEligibilityFor(input.businessId, input.customerId);
+      if (!gate.eligible) throw new Error(gate.reason ?? 'Only customers can rate this business.');
+    }
+
+    // Fold the rating into the business's aggregate. The seeded avg/count act
+    // as the pre-existing history a real backend would hold.
+    const count = business.ratingCount ?? 0;
+    const avg = business.ratingAvg ?? 0;
+    if (existing) {
+      const total = avg * count - existing.rating + rating;
+      business.ratingAvg = count > 0 ? Math.round((total / count) * 10) / 10 : rating;
+      existing.rating = rating;
+      existing.comment = comment;
+      existing.customerName = input.customerName;
+      existing.updatedAt = new Date().toISOString();
+      return clone(existing);
+    }
+
+    business.ratingAvg = Math.round(((avg * count + rating) / (count + 1)) * 10) / 10;
+    business.ratingCount = count + 1;
+
+    const review: Review = {
+      id: nextId('r'),
+      businessId: input.businessId,
+      customerId: input.customerId,
+      customerName: input.customerName,
+      rating,
+      comment,
+      createdAt: new Date().toISOString(),
+    };
+    reviews.push(review);
+
+    notify({
+      recipientId: business.ownerId,
+      kind: 'review_posted',
+      title: `New ${rating}★ rating · ${business.name}`,
+      body: comment ?? `${input.customerName} rated their experience ${rating} out of 5.`,
+      businessId: business.id,
+    });
+    return clone(review);
+  }
+}
+
+// ── Voice calls ─────────────────────────────────────────────────────────────
+
+/** How long a call rings before it counts as missed. */
+const RING_TIMEOUT_MS = 30_000;
+
+/** Expire calls that rang out. Run lazily at the top of every call method. */
+function sweepCalls(): void {
+  const now = Date.now();
+  calls.forEach((call) => {
+    if (call.status === 'ringing' && now - new Date(call.startedAt).getTime() > RING_TIMEOUT_MS) {
+      call.status = 'missed';
+      call.endedAt = new Date().toISOString();
+      notifyMissedCall(call);
+    }
+  });
+}
+
+/** Tell every handler who was rung that they missed the customer. */
+function notifyMissedCall(call: Call): void {
+  call.participants
+    .filter((p) => p.side === 'business')
+    .forEach((p) =>
+      notify({
+        recipientId: p.id,
+        kind: 'missed_call',
+        title: `Missed call · ${call.businessName}`,
+        body: `${call.customerName} tried to call.`,
+        businessId: call.businessId,
+      }),
+    );
+}
+
+class MockCallRepository implements CallRepository {
+  async start(businessId: string, customer: { id: string; name: string }): Promise<Call> {
+    await delay(100);
+    sweepCalls();
+    const business = businesses.find((b) => b.id === businessId);
+    if (!business) throw new Error(`Business ${businessId} not found`);
+
+    // Ring targets: the owner (unless they opted out) plus every call handler
+    // with an app account. Employees without an account can't ring.
+    const targets: CallParticipant[] = [];
+    if (business.ownerHandlesCalls !== false) {
+      const owner = users.find((u) => u.id === business.ownerId);
+      targets.push({
+        id: business.ownerId,
+        name: owner?.name ?? 'Owner',
+        side: 'business',
+        roleLabel: 'Owner',
+        state: 'ringing',
+      });
+    }
+    const handlerIds = new Set(business.callHandlerIds ?? []);
+    employees
+      .filter(
+        (e) =>
+          e.businessId === businessId &&
+          handlerIds.has(e.id) &&
+          e.userId &&
+          e.userId !== business.ownerId,
+      )
+      .forEach((e) =>
+        targets.push({
+          id: e.userId!,
+          name: e.displayName,
+          side: 'business',
+          roleLabel: e.role ?? (e.level === 'manager' ? 'Manager' : 'Staff'),
+          state: 'ringing',
+        }),
+      );
+    if (targets.length === 0) {
+      throw new Error('No one at this business can take voice calls right now.');
+    }
+
+    const call: Call = {
+      id: nextId('c'),
+      businessId,
+      businessName: business.name,
+      customerId: customer.id,
+      customerName: customer.name,
+      status: 'ringing',
+      participants: [
+        {
+          id: customer.id,
+          name: customer.name,
+          side: 'customer',
+          state: 'joined',
+          joinedAt: new Date().toISOString(),
+        },
+        ...targets,
+      ],
+      startedAt: new Date().toISOString(),
+    };
+    calls.push(call);
+    return clone(call);
+  }
+
+  async getById(callId: string): Promise<Call | null> {
+    await delay(40);
+    sweepCalls();
+    const found = calls.find((c) => c.id === callId);
+    return found ? clone(found) : null;
+  }
+
+  async join(callId: string, participantId: string): Promise<Call> {
+    await delay(60);
+    sweepCalls();
+    const call = this.mustFind(callId);
+    if (call.status !== 'ringing' && call.status !== 'active') {
+      throw new Error('This call has already ended.');
+    }
+    const p = call.participants.find((x) => x.id === participantId);
+    if (!p) throw new Error('You are not part of this call.');
+    p.state = 'joined';
+    p.joinedAt = new Date().toISOString();
+    p.leftAt = undefined;
+    if (call.status === 'ringing') {
+      call.status = 'active';
+      call.answeredAt = p.joinedAt;
+    }
+    return clone(call);
+  }
+
+  async decline(callId: string, participantId: string): Promise<Call> {
+    await delay(60);
+    sweepCalls();
+    const call = this.mustFind(callId);
+    const p = call.participants.find((x) => x.id === participantId && x.side === 'business');
+    if (p && p.state === 'ringing') p.state = 'declined';
+    // When the last person who could pick up declines, the call is over.
+    const anyoneLeft = call.participants.some(
+      (x) => x.side === 'business' && (x.state === 'ringing' || x.state === 'joined'),
+    );
+    if (!anyoneLeft && (call.status === 'ringing' || call.status === 'active')) {
+      call.status = call.status === 'ringing' ? 'declined' : 'ended';
+      call.endedAt = new Date().toISOString();
+    }
+    return clone(call);
+  }
+
+  async leave(callId: string, participantId: string): Promise<Call> {
+    await delay(60);
+    sweepCalls();
+    const call = this.mustFind(callId);
+    const p = call.participants.find((x) => x.id === participantId);
+    if (!p) throw new Error('You are not part of this call.');
+    const now = new Date().toISOString();
+    p.state = 'left';
+    p.leftAt = now;
+
+    if (call.status === 'ringing' || call.status === 'active') {
+      if (p.side === 'customer') {
+        // The customer hanging up ends the call for everyone. Cancelling
+        // while it still rings counts as a missed call for the business.
+        const wasRinging = call.status === 'ringing';
+        call.status = wasRinging ? 'missed' : 'ended';
+        call.endedAt = now;
+        if (wasRinging) notifyMissedCall(call);
+      } else {
+        const anyBusinessOn = call.participants.some(
+          (x) => x.side === 'business' && x.state === 'joined',
+        );
+        if (call.status === 'active' && !anyBusinessOn) {
+          call.status = 'ended';
+          call.endedAt = now;
+        }
+      }
+    }
+    return clone(call);
+  }
+
+  async getIncomingForUser(userId: string): Promise<Call | null> {
+    await delay(40);
+    sweepCalls();
+    // A call is "incoming" while this member's own state is still ringing —
+    // full-screen ring when unanswered, a join prompt once a teammate picked up.
+    const found = calls.find(
+      (c) =>
+        (c.status === 'ringing' || c.status === 'active') &&
+        c.customerId !== userId &&
+        c.participants.some((p) => p.side === 'business' && p.id === userId && p.state === 'ringing'),
+    );
+    return found ? clone(found) : null;
+  }
+
+  private mustFind(callId: string): Call {
+    const call = calls.find((c) => c.id === callId);
+    if (!call) throw new Error(`Call ${callId} not found`);
+    return call;
+  }
+}
+
+// ── Live tracking ───────────────────────────────────────────────────────────
+
+/**
+ * Simulated GPS speed. Deliberately faster than a real vehicle so the demo
+ * visibly moves within a few polls; a real backend streams true positions.
+ */
+const SIM_SPEED_KMH = 120;
+/** Largest jump per read, so a long-idle share doesn't teleport off the map. */
+const SIM_MAX_STEP_KM = 0.5;
+/** Vehicles roam within this range of the business before turning back. */
+const SIM_RANGE_KM = 4;
+
+/** Direction from one point to another, in degrees from north. */
+function bearingDeg(from: GeoPoint, to: GeoPoint): number {
+  const dLat = to.latitude - from.latitude;
+  const dLng =
+    (to.longitude - from.longitude) * Math.cos((from.latitude * Math.PI) / 180);
+  return (Math.atan2(dLng, dLat) * 180) / Math.PI;
+}
+
+/**
+ * Advance every active share a little, based on real elapsed time — the mock
+ * stand-in for the driver's phone streaming GPS. Run lazily on every read.
+ */
+function advanceShares(): void {
+  const now = Date.now();
+  locationShares.forEach((share) => {
+    if (!share.active) return;
+    const elapsedH = (now - new Date(share.updatedAt).getTime()) / 3_600_000;
+    if (elapsedH <= 0) return;
+    const stepKm = Math.min(elapsedH * SIM_SPEED_KMH, SIM_MAX_STEP_KM);
+
+    // Wander freely near the business; steer home once out of range.
+    const anchor =
+      businesses.find((b) => b.id === share.businessId)?.location.point ?? CURRENT_POINT;
+    share.heading =
+      haversineKm(anchor, share.point) > SIM_RANGE_KM
+        ? bearingDeg(share.point, anchor)
+        : (share.heading + (Math.random() - 0.5) * 50 + 360) % 360;
+
+    const rad = (share.heading * Math.PI) / 180;
+    const kmPerDegLat = 111;
+    const kmPerDegLng = 111 * Math.cos((share.point.latitude * Math.PI) / 180);
+    share.point = {
+      latitude: share.point.latitude + (Math.cos(rad) * stepKm) / kmPerDegLat,
+      longitude: share.point.longitude + (Math.sin(rad) * stepKm) / kmPerDegLng,
+    };
+    share.updatedAt = new Date(now).toISOString();
+  });
+}
+
+class MockTrackingRepository implements TrackingRepository {
+  async listVehicles(businessId: string): Promise<Vehicle[]> {
+    await delay(70);
+    return vehicles.filter((v) => v.businessId === businessId).map(clone);
+  }
+
+  async addVehicle(input: NewVehicleInput): Promise<Vehicle> {
+    await delay(90);
+    // Pet name is optional — the number plate (or kind) names the vehicle.
+    const name =
+      input.name?.trim() || input.registrationNumber?.trim() || getVehicleKind(input.kind).name;
+    const vehicle: Vehicle = {
+      id: nextId('v'),
+      businessId: input.businessId,
+      name,
+      registrationNumber: input.registrationNumber?.trim() || undefined,
+      kind: input.kind,
+      driverEmployeeId: input.driverEmployeeId,
+      createdAt: new Date().toISOString(),
+    };
+    vehicles.push(vehicle);
+    return clone(vehicle);
+  }
+
+  async updateVehicle(id: string, patch: Partial<Vehicle>): Promise<Vehicle> {
+    await delay(70);
+    const vehicle = vehicles.find((v) => v.id === id);
+    if (!vehicle) throw new Error(`Vehicle ${id} not found`);
+    Object.assign(vehicle, patch);
+    return clone(vehicle);
+  }
+
+  async removeVehicle(id: string): Promise<void> {
+    await delay(70);
+    const index = vehicles.findIndex((v) => v.id === id);
+    if (index >= 0) vehicles.splice(index, 1);
+    // Items that rode on it fall back to "not assigned yet".
+    trackedItems.forEach((t) => {
+      if (t.vehicleId === id) t.vehicleId = undefined;
+    });
+  }
+
+  async listItems(businessId: string): Promise<TrackedItem[]> {
+    await delay(70);
+    return trackedItems.filter((t) => t.businessId === businessId).map(clone);
+  }
+
+  async listItemsForCustomer(customerId: string, businessId?: string): Promise<TrackedItem[]> {
+    await delay(70);
+    return trackedItems
+      .filter((t) => t.customerId === customerId)
+      .filter((t) => (businessId ? t.businessId === businessId : true))
+      .map(clone);
+  }
+
+  async addItem(input: NewTrackedItemInput): Promise<TrackedItem> {
+    await delay(90);
+    const item: TrackedItem = {
+      id: nextId('t'),
+      businessId: input.businessId,
+      kind: input.kind,
+      label: input.label.trim(),
+      customerId: input.customerId,
+      customerName: input.customerName,
+      vehicleId: input.vehicleId,
+      note: input.note,
+      createdAt: new Date().toISOString(),
+    };
+    trackedItems.push(item);
+    return clone(item);
+  }
+
+  async updateItem(id: string, patch: Partial<TrackedItem>): Promise<TrackedItem> {
+    await delay(70);
+    const item = trackedItems.find((t) => t.id === id);
+    if (!item) throw new Error(`Tracked item ${id} not found`);
+    Object.assign(item, patch);
+    return clone(item);
+  }
+
+  async removeItem(id: string): Promise<void> {
+    await delay(70);
+    const index = trackedItems.findIndex((t) => t.id === id);
+    if (index >= 0) trackedItems.splice(index, 1);
+  }
+
+  async setSharing(businessId: string, userId: string, active: boolean): Promise<void> {
+    await delay(80);
+    let share = locationShares.find((s) => s.businessId === businessId && s.userId === userId);
+    if (!share) {
+      // A fresh share starts from the business's own location.
+      const anchor =
+        businesses.find((b) => b.id === businessId)?.location.point ?? CURRENT_POINT;
+      share = {
+        businessId,
+        userId,
+        active: false,
+        point: { ...anchor },
+        heading: Math.random() * 360,
+        updatedAt: new Date().toISOString(),
+      };
+      locationShares.push(share);
+    }
+    share.active = active;
+    share.updatedAt = new Date().toISOString();
+  }
+
+  async isSharing(businessId: string, userId: string): Promise<boolean> {
+    await delay(40);
+    return !!locationShares.find((s) => s.businessId === businessId && s.userId === userId)
+      ?.active;
+  }
+
+  async getLiveVehicles(businessId: string): Promise<LiveVehicle[]> {
+    await delay(60);
+    advanceShares();
+    return vehicles
+      .filter((v) => v.businessId === businessId)
+      .map((v): LiveVehicle => {
+        const driver = v.driverEmployeeId
+          ? employees.find((e) => e.id === v.driverEmployeeId)
+          : undefined;
+        const share = driver?.userId
+          ? locationShares.find(
+              (s) => s.businessId === businessId && s.userId === driver.userId && s.active,
+            )
+          : undefined;
+        return {
+          vehicle: clone(v),
+          driverName: driver?.displayName,
+          sharing: !!share,
+          point: share ? { ...share.point } : undefined,
+          updatedAt: share?.updatedAt,
+        };
+      });
+  }
+}
+
+/** Dev/testing: restore all in-memory state to the original seed data. */
+// ── B2B chat ────────────────────────────────────────────────────────────────
+
+/** One thread per pair of businesses, whichever side starts it. */
+const bizThreadKey = (a: string, b: string) => [a, b].sort().join('|');
+
+class MockBizChatRepository implements BizChatRepository {
+  async listThreadsForUser(userId: string): Promise<BizThreadSummary[]> {
+    await delay(80);
+    // Every business this user owns or works at can appear as "my side".
+    const mine = new Set(businesses.filter((b) => b.ownerId === userId).map((b) => b.id));
+    employees.filter((e) => e.userId === userId).forEach((e) => mine.add(e.businessId));
+
+    const threads = new Map<string, BizThreadSummary>();
+    for (const m of [...bizMessages].sort((a, b) => a.at.localeCompare(b.at))) {
+      const [a, b] = m.threadKey.split('|');
+      const myId = mine.has(a) ? a : mine.has(b) ? b : null;
+      if (!myId) continue;
+      const otherId = myId === a ? b : a;
+      threads.set(`${m.threadKey}:${myId}`, {
+        threadKey: m.threadKey,
+        businessId: myId,
+        businessName: businesses.find((x) => x.id === myId)?.name ?? 'My business',
+        otherBusinessId: otherId,
+        otherBusinessName: businesses.find((x) => x.id === otherId)?.name ?? 'Business',
+        lastBody: m.body,
+        lastAt: m.at,
+        lastFromBusinessId: m.fromBusinessId,
+      });
+    }
+    return [...threads.values()].sort((x, y) => y.lastAt.localeCompare(x.lastAt));
+  }
+
+  async listMessages(businessA: string, businessB: string): Promise<BizChatMessage[]> {
+    await delay(60);
+    const key = bizThreadKey(businessA, businessB);
+    return bizMessages
+      .filter((m) => m.threadKey === key)
+      .sort((a, b) => a.at.localeCompare(b.at))
+      .map((m) => ({
+        ...m,
+        // Live name, in case the business was renamed since.
+        fromBusinessName:
+          businesses.find((x) => x.id === m.fromBusinessId)?.name ?? m.fromBusinessName,
+      }));
+  }
+
+  async send(input: NewBizMessageInput): Promise<BizChatMessage[]> {
+    await delay(80);
+    const from = businesses.find((b) => b.id === input.fromBusinessId);
+    if (!from) throw new Error(`Business ${input.fromBusinessId} not found`);
+    bizMessages.push({
+      id: nextId('bm'),
+      threadKey: bizThreadKey(input.fromBusinessId, input.toBusinessId),
+      fromBusinessId: input.fromBusinessId,
+      fromBusinessName: from.name,
+      authorName: input.authorName,
+      body: input.body,
+      at: new Date().toISOString(),
+    });
+    return this.listMessages(input.fromBusinessId, input.toBusinessId);
+  }
+}
+
+// ── Memberships ─────────────────────────────────────────────────────────────
+
+/** Same day next month(s) — billing cycles and renewal dates. */
+function addMonths(iso: string | Date, n: number): Date {
+  const d = new Date(iso);
+  d.setMonth(d.getMonth() + n);
+  return d;
+}
+
+class MockMembershipRepository implements MembershipRepository {
+  /** Fill in the current billing cycle + live business name on the way out. */
+  private hydrate(m: Membership): Membership {
+    const now = new Date();
+    let renewed = new Date(m.startedAt);
+    while (m.status === 'active' && addMonths(renewed, 1) <= now) {
+      renewed = addMonths(renewed, 1);
+    }
+    return {
+      ...m,
+      businessName: businesses.find((b) => b.id === m.businessId)?.name ?? m.businessName,
+      renewedAt: renewed.toISOString(),
+      expiresAt: addMonths(renewed, 1).toISOString(),
+    };
+  }
+
+  async listForCustomer(customerId: string): Promise<Membership[]> {
+    await delay(80);
+    return memberships
+      .filter((m) => m.customerId === customerId && m.status === 'active')
+      .map((m) => this.hydrate(m))
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
+  async monthlySpend(customerId: string): Promise<MonthlySpend[]> {
+    await delay(80);
+    // Cancelled plans still count for the months they actually ran.
+    const mine = memberships
+      .filter((m) => m.customerId === customerId)
+      .map((m) => this.hydrate(m));
+    if (mine.length === 0) return [];
+    const now = new Date();
+    const earliest = mine.reduce(
+      (min, m) => (m.startedAt < min ? m.startedAt : min),
+      mine[0].startedAt,
+    );
+    const first = new Date(earliest);
+    let cursor = new Date(first.getFullYear(), first.getMonth(), 1);
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const months: MonthlySpend[] = [];
+    while (cursor <= currentMonth) {
+      const monthEnd = addMonths(cursor, 1);
+      const lines = mine
+        .filter(
+          (m) =>
+            new Date(m.startedAt) < monthEnd && (!m.endedAt || new Date(m.endedAt) >= cursor),
+        )
+        .map((m) => ({
+          businessName: m.businessName,
+          planName: m.planName,
+          amount: m.pricePerMonth,
+        }));
+      months.push({
+        month: cursor.toISOString(),
+        total: lines.reduce((sum, l) => sum + l.amount, 0),
+        lines,
+      });
+      cursor = monthEnd;
+    }
+    // Newest first — the breakdown popup pages backwards through these.
+    return months.reverse();
+  }
+
+  async listForBusiness(businessId: string): Promise<Membership[]> {
+    await delay(80);
+    return memberships
+      .filter((m) => m.businessId === businessId && m.status === 'active')
+      .map((m) => this.hydrate(m))
+      .sort((a, b) => a.customerName.localeCompare(b.customerName));
+  }
+
+  async add(input: NewMembershipInput): Promise<Membership> {
+    await delay();
+    const business = businesses.find((b) => b.id === input.businessId);
+    if (!business) throw new Error(`Business ${input.businessId} not found`);
+    const started = new Date();
+    const membership: Membership = {
+      id: nextId('m'),
+      businessId: input.businessId,
+      businessName: business.name,
+      customerId: input.customerId,
+      customerName: input.customerName,
+      planName: input.planName,
+      pricePerMonth: input.pricePerMonth,
+      startedAt: started.toISOString(),
+      renewedAt: started.toISOString(),
+      expiresAt: addMonths(started, 1).toISOString(),
+      status: 'active',
+    };
+    memberships.push(membership);
+    return { ...membership };
+  }
+
+  async cancel(id: string): Promise<Membership> {
+    await delay();
+    const membership = memberships.find((m) => m.id === id);
+    if (!membership) throw new Error(`Membership ${id} not found`);
+    membership.status = 'cancelled';
+    membership.endedAt = new Date().toISOString();
+    return this.hydrate(membership);
+  }
+}
+
+export function resetMockData(): void {
+  users.splice(0, users.length, ...seedUsers.map((u) => ({ ...u })));
+  employees.splice(0, employees.length, ...seedEmployees.map((e) => ({ ...e })));
+  businesses.splice(0, businesses.length, ...seedBusinesses.map((b) => ({ ...b })));
+  places.splice(0, places.length, ...seedPlaces.map((p) => ({ ...p })));
+  messages.splice(0, messages.length);
+  notifications.splice(0, notifications.length);
+  bookings.splice(0, bookings.length);
+  orders.splice(0, orders.length);
+  bills.splice(0, bills.length);
+  calls.splice(0, calls.length);
+  reviews.splice(0, reviews.length, ...seedReviews.map((r) => ({ ...r })));
+  memberships.splice(0, memberships.length, ...seedMemberships.map((m) => ({ ...m })));
+  bizMessages.splice(0, bizMessages.length, ...seedBizChat.map((m) => ({ ...m })));
+  vehicles.splice(0, vehicles.length, ...seedVehicles.map((v) => ({ ...v })));
+  trackedItems.splice(0, trackedItems.length, ...seedTrackedItems.map((t) => ({ ...t })));
+  locationShares.splice(0, locationShares.length, ...seedLocationShares.map((s) => ({ ...s })));
+  logEntries.splice(0, logEntries.length, ...seedLogEntries.map((l) => ({ ...l })));
+  currentUserId = null;
+}
+
+class MockLogbookRepository implements LogbookRepository {
+  async listForBusiness(businessId: string): Promise<LogEntry[]> {
+    await delay(80);
+    const derived = orders.filter((o) => o.businessId === businessId).map(orderLogEntry);
+    const manual = logEntries.filter((l) => l.businessId === businessId).map(clone);
+    return [...derived, ...manual].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async addManual(input: NewLogEntryInput): Promise<LogEntry> {
+    await delay(100);
+    const entry: LogEntry = {
+      id: nextId('log'),
+      businessId: input.businessId,
+      source: 'manual',
+      title: input.title.trim(),
+      details: input.details?.trim() || undefined,
+      amount: input.amount,
+      customerName: input.customerName?.trim() || undefined,
+      recordedByName: input.recordedByName,
+      createdAt: new Date().toISOString(),
+    };
+    if (!entry.title) throw new Error('Give the record a title.');
+    logEntries.push(entry);
+    return clone(entry);
+  }
+}
+
+export function createMockRepositories(): Repositories {
+  return {
+    businesses: new MockBusinessRepository(),
+    employees: new MockEmployeeRepository(),
+    users: new MockUserRepository(),
+    auth: new MockAuthRepository(),
+    places: new MockPlacesRepository(),
+    chat: new MockChatRepository(),
+    notifications: new MockNotificationRepository(),
+    bookings: new MockBookingRepository(),
+    orders: new MockOrderRepository(),
+    bills: new MockBillRepository(),
+    calls: new MockCallRepository(),
+    customers: new MockCustomerRepository(),
+    tracking: new MockTrackingRepository(),
+    reviews: new MockReviewRepository(),
+    memberships: new MockMembershipRepository(),
+    bizChat: new MockBizChatRepository(),
+    productThreads: new MockProductThreadRepository(),
+    logbook: new MockLogbookRepository(),
+  };
+}

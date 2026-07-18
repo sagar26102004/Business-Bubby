@@ -1,11 +1,31 @@
 {
   "expo": {
-    "name": "expo-temp-scaffold",
-    "slug": "expo-temp-scaffold",
+    "name": "Localo",
+    "slug": "localo",
+    "scheme": "localo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Localo uses the camera to scan business QR codes."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Localo uses the camera so you can photograph what you're selling.",
+          "photosPermission": "Localo uses your photos so you can add pictures of what you're selling."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
     "ios": {
       "supportsTablet": true
     },

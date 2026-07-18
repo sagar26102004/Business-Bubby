@@ -1,0 +1,13 @@
+/** Barrel export for UI primitives. Import from '@/components/ui'. */
+export { Text } from './Text';
+export { Screen } from './Screen';
+export { Card } from './Card';
+export { Button } from './Button';
+export { Input } from './Input';
+export { AutocompleteInput } from './AutocompleteInput';
+export { Tag } from './Tag';
+export { Avatar } from './Avatar';
+export { Stars } from './Stars';
+export { SearchIcon } from './SearchIcon';
+export { ScanIcon } from './ScanIcon';
+export { LoadingView, ErrorView, EmptyView } from './StateView';
