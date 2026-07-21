@@ -30,13 +30,6 @@ export default function BusinessInboxScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: 'Inbox' }} />
 
-      <Text variant="title" weight="bold">
-        {data.business.name}
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        Customer conversations. Anyone with chat access can reply.
-      </Text>
-
       {data.threads.length === 0 ? (
         <EmptyView
           title="No messages yet"
@@ -74,7 +67,6 @@ export default function BusinessInboxScreen() {
 }
 
 const styles = StyleSheet.create({
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   card: { marginBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   info: { flex: 1 },

@@ -179,12 +179,7 @@ export default function WorkspaceLogbookScreen() {
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
       <View style={styles.headerRow}>
-        <View style={styles.headerText}>
-          <Text tone="muted" style={styles.subtitle}>
-            A dated report of every order — placed in the app or logged by hand. Pick a day, month
-            or year to see what came in.
-          </Text>
-        </View>
+        <View style={styles.headerText} />
         {!open ? (
           <Button title="➕ Add" onPress={() => setOpen(true)} style={styles.headerAddBtn} />
         ) : null}

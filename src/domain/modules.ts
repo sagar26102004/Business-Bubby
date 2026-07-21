@@ -9,6 +9,7 @@
  * get their repository interface + workspace section.
  */
 import type { Business, ListingType } from './types';
+import { commerceVocab } from './catalog';
 
 export type ModuleId =
   | 'orders'
@@ -168,13 +169,16 @@ export function suggestModules(input: {
     'bus service', 'packers & movers', 'courier', 'logistics',
   ];
   if (fleetTags.some((t) => tagSet.has(t))) picked.add('tracking');
-  const membershipTags = [
-    'gym', 'fitness', 'yoga', 'zumba', 'personal trainer', 'tutor',
-    'coaching', 'home tuition', 'library', 'swimming classes',
-    'karate & self defence', 'sports coaching', 'cricket academy',
-    'school bus service', 'tiffin service',
-  ];
-  if (membershipTags.some((t) => tagSet.has(t))) picked.add('memberships');
+  // A gym/class "Enroll" and a recurring "Subscribe" both ride on the order
+  // flow (see commerceVocab). Derive the mode from the SAME classifier that
+  // draws the button label, so the two never diverge: any tag that makes the
+  // page say "Enroll"/"Subscribe" must also pre-tick Orders, otherwise that
+  // button is gated out (needs the orders module) and vanishes.
+  const mode = commerceVocab({ type: input.type, tags: input.tags }).mode;
+  if (mode === 'enroll' || mode === 'subscribe') {
+    picked.add('memberships');
+    picked.add('orders');
+  }
 
   return AVAILABLE_MODULES.filter((m) => picked.has(m.id)).map((m) => m.id);
 }

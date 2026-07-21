@@ -100,6 +100,19 @@ export default function BusinessDetailScreen() {
   const isMember = isOwner || employees.some((e) => e.userId && e.userId === currentUser?.id);
 
   const hasMenu = (business.menu?.length ?? 0) > 0;
+  // Enrol/Subscribe and Order are now two distinct buttons on two distinct
+  // modules. The commerce vocab tells us which mode this business is by its
+  // tags: enrol (gym/classes) or subscribe (tiffin/bus/milk) get the
+  // membership button; its label is the vocab's action. The Order button then
+  // always reads plainly "Order"/"Buy" — never relabelled to Enrol.
+  const vocab = commerceVocab(business);
+  const isMembershipMode = vocab.mode === 'enroll' || vocab.mode === 'subscribe';
+  const membershipAction = vocab.customerAction; // "🎟️ Enroll" / "🔁 Subscribe"
+  const orderAction = hasMenu
+    ? '📖 Menu'
+    : isMembershipMode
+      ? '🛒 Order'
+      : vocab.customerAction;
   // A confirmed-but-unbilled dine-in order — the customer can still add rounds.
   const openTab = myOrders.find(
     (o) => o.fulfillment === 'dine_in' && !o.billId && (o.status === 'requested' || o.status === 'accepted'),
@@ -257,10 +270,10 @@ export default function BusinessDetailScreen() {
             <Text style={styles.menuIcon}>📦</Text>
             <View style={styles.menuInfo}>
               <Text weight="semibold">
-                My {commerceVocab(business).requestNoun}s
+                My {vocab.requestNoun}s
               </Text>
               <Text variant="caption" tone="muted">
-                {myOrders.length} past {commerceVocab(business).requestNoun}
+                {myOrders.length} past {vocab.requestNoun}
                 {myOrders.length === 1 ? '' : 's'}
                 {openTab ? ' · 1 open now' : ''}
               </Text>
@@ -465,13 +478,28 @@ export default function BusinessDetailScreen() {
             style={styles.bookBtn}
           />
         ) : null}
+        {/* Enrol/Subscribe — its OWN button and flow, separate from ordering.
+            A membership-type business (gym, classes, tiffin, bus) running the
+            memberships module lets customers request to join; the request lands
+            in the workspace Members section to accept and set the plan + price. */}
+        {isMembershipMode && hasModule(business, 'memberships') ? (
+          <Button
+            title={membershipAction}
+            onPress={() =>
+              currentUser ? router.push(`/enroll/${business.id}`) : router.push('/sign-in')
+            }
+            style={styles.bookBtn}
+          />
+        ) : null}
         {/* Ordering, parties and appointments only show when the business
             runs that workspace module — otherwise requests would land nowhere.
             With a menu, ordering starts on the menu screen; everything else
-            keeps the pick-from-a-list order form. */}
+            keeps the pick-from-a-list order form. A membership business's order
+            button stays a plain "Order" (for one-off goods) — enrolling is the
+            separate button above. */}
         {hasCatalog(business) && hasModule(business, 'orders') ? (
           <Button
-            title={hasMenu ? '📖 Menu' : commerceVocab(business).customerAction}
+            title={orderAction}
             onPress={() =>
               router.push(hasMenu ? `/menu/${business.id}` : `/order/new/${business.id}`)
             }

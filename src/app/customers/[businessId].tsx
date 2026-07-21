@@ -141,14 +141,6 @@ export default function CustomersScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: 'Customers' }} />
 
-      <Text variant="title" weight="bold">
-        Customers
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        Everyone who has ordered, booked, chatted, called or been billed by {business.name}.
-        {isOwner ? ' Star your favourites to keep them on top.' : ''}
-      </Text>
-
       {customers.length === 0 ? (
         <EmptyView
           title="No customers yet"
@@ -185,7 +177,6 @@ export default function CustomersScreen() {
 }
 
 const styles = StyleSheet.create({
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   sectionTitle: { marginTop: spacing.md, marginBottom: spacing.md },
   customerCard: { marginBottom: spacing.sm },
   customerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

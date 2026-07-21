@@ -715,6 +715,8 @@ export default function RegisterScreen() {
                 onChange={setServices}
                 namePlaceholder="Service (e.g. Wheel alignment)"
                 addLabel="Add service"
+                withDescription
+                descriptionPlaceholder="What's included (optional)"
               />
             ) : null}
           </>
@@ -1140,6 +1142,9 @@ export default function RegisterScreen() {
  * Stage fleet vehicles on the modules step: number plate + what kind it is,
  * with an optional pet name. They're created right after the business is.
  */
+/** Number plates, normalised for comparison: only letters/digits, upper-cased. */
+const canonicalReg = (reg: string): string => reg.replace(/[^a-z0-9]/gi, '').toUpperCase();
+
 function VehicleDraftEditor({
   value,
   onChange,
@@ -1150,30 +1155,73 @@ function VehicleDraftEditor({
   const [registrationNumber, setRegistrationNumber] = useState('');
   const [kind, setKind] = useState<VehicleKind>('car');
   const [petName, setPetName] = useState('');
+  // Null = the fields add a new vehicle; a number = we're editing that row.
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   // Why: a silently disabled Add button reads as broken — keep it tappable
   // and explain what's missing instead.
   const [error, setError] = useState<string | null>(null);
 
-  const add = () => {
+  const resetFields = () => {
+    setRegistrationNumber('');
+    setKind('car');
+    setPetName('');
+    setEditingIndex(null);
+    setError(null);
+  };
+
+  const submit = () => {
     const plate = registrationNumber.trim();
     if (plate.length < 4) {
       setError('Type the vehicle number first — e.g. MP09 AB 1234. Only the pet name is optional.');
       return;
     }
-    onChange([...value, { registrationNumber: plate, kind, petName: petName.trim() || undefined }]);
-    setRegistrationNumber('');
-    setPetName('');
+    // Catch a duplicate number plate HERE, not at publish. Compare a canonical
+    // form (strip spaces/dashes, upper-case) so "MP09 AB 1234" and
+    // "mp09-ab-1234" count as the same plate. When editing, skip the row itself.
+    const canonical = canonicalReg(plate);
+    const clash = value.some(
+      (v, i) => i !== editingIndex && canonicalReg(v.registrationNumber) === canonical,
+    );
+    if (clash) {
+      setError(`You've already added a vehicle with number ${plate}.`);
+      return;
+    }
+    const draft: VehicleDraft = { registrationNumber: plate, kind, petName: petName.trim() || undefined };
+    onChange(
+      editingIndex === null
+        ? [...value, draft]
+        : value.map((v, i) => (i === editingIndex ? draft : v)),
+    );
+    resetFields();
+  };
+
+  const startEdit = (index: number) => {
+    const v = value[index];
+    setRegistrationNumber(v.registrationNumber);
+    setKind(v.kind);
+    setPetName(v.petName ?? '');
+    setEditingIndex(index);
     setError(null);
   };
 
-  const remove = (index: number) => onChange(value.filter((_, i) => i !== index));
+  const remove = (index: number) => {
+    onChange(value.filter((_, i) => i !== index));
+    // If the row being edited is removed (or shifts), drop back to add mode.
+    if (editingIndex !== null) resetFields();
+  };
+
+  const editing = editingIndex !== null;
 
   return (
     <View>
       {value.length > 0 ? (
         <Card style={styles.vehicleList}>
           {value.map((v, i) => (
-            <View key={`${v.registrationNumber}-${i}`} style={styles.vehicleRow}>
+            <Pressable
+              key={`${v.registrationNumber}-${i}`}
+              onPress={() => startEdit(i)}
+              style={[styles.vehicleRow, editingIndex === i ? styles.vehicleRowEditing : null]}
+            >
               <Text style={styles.vehicleIcon}>{getVehicleKind(v.kind).icon}</Text>
               <View style={styles.vehicleInfo}>
                 <Text weight="medium">{v.petName || v.registrationNumber}</Text>
@@ -1183,12 +1231,21 @@ function VehicleDraftEditor({
                   </Text>
                 ) : null}
               </View>
+              <Text tone="brand" weight="semibold" style={styles.vehicleEdit}>
+                ✎
+              </Text>
               <Text tone="danger" weight="semibold" onPress={() => remove(i)}>
                 ✕
               </Text>
-            </View>
+            </Pressable>
           ))}
         </Card>
+      ) : null}
+
+      {editing ? (
+        <Text variant="caption" tone="brand" weight="semibold" style={styles.vehicleEditingHint}>
+          Editing {value[editingIndex]?.petName || value[editingIndex]?.registrationNumber}
+        </Text>
       ) : null}
 
       <Input
@@ -1222,14 +1279,21 @@ function VehicleDraftEditor({
         placeholder="e.g. Bus 1 — morning route"
         value={petName}
         onChangeText={setPetName}
-        onSubmitEditing={add}
+        onSubmitEditing={submit}
       />
       {error ? (
         <Text variant="caption" tone="danger" style={styles.hint}>
           {error}
         </Text>
       ) : null}
-      <Button title="Add vehicle" variant="secondary" onPress={add} />
+      <Button
+        title={editing ? 'Save changes' : 'Add vehicle'}
+        variant="secondary"
+        onPress={submit}
+      />
+      {editing ? (
+        <Button title="Cancel" variant="ghost" onPress={resetFields} style={styles.vehicleCancel} />
+      ) : null}
     </View>
   );
 }
@@ -1332,8 +1396,19 @@ const styles = StyleSheet.create({
   summaryValue: { flex: 1 },
   moduleTick: { fontSize: 18 },
   vehicleList: { marginBottom: spacing.md },
-  vehicleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
+  vehicleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
+  },
+  vehicleRowEditing: { backgroundColor: 'rgba(37,99,235,0.08)' },
   vehicleIcon: { fontSize: 20 },
   vehicleInfo: { flex: 1 },
+  vehicleEdit: { marginRight: spacing.xs },
+  vehicleEditingHint: { marginBottom: spacing.sm },
+  vehicleCancel: { marginTop: spacing.sm },
   vehicleKindLabel: { marginBottom: spacing.sm },
 });

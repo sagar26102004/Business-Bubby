@@ -50,13 +50,6 @@ export default function BillsScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: 'Bills' }} />
 
-      <Text variant="title" weight="bold">
-        Bills · {business.name}
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        Every bill your team issued — from accepted orders and by hand.
-      </Text>
-
       {bills.length === 0 ? (
         <EmptyView
           title="No bills yet"
@@ -88,7 +81,6 @@ export default function BillsScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   card: { marginBottom: spacing.sm },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   newBtn: { marginTop: spacing.md },

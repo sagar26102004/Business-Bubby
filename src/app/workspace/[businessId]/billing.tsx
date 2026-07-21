@@ -57,10 +57,6 @@ export default function WorkspaceBillingScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: 'Billing' }} />
 
-      <Text tone="muted" style={styles.subtitle}>
-        Bill a customer and share it in their chat or through any other app. Accepted orders issue
-        their bill automatically.
-      </Text>
 
       {canScan ? (
         <Button

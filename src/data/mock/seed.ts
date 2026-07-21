@@ -345,6 +345,9 @@ export const seedTrackedItems: TrackedItem[] = [
     customerId: 'u_demo',
     customerName: 'Sagar',
     vehicleId: 'v_asb_bus',
+    // Filed under Sagar's bus membership so the owner's Members screen shows
+    // Aarav as already on the bus (and editing it moves, not duplicates).
+    membershipId: 'm_demo_bus',
     createdAt: '2026-06-16T07:30:00.000Z',
   },
   {
@@ -355,6 +358,7 @@ export const seedTrackedItems: TrackedItem[] = [
     customerId: 'u_pooja',
     customerName: 'Pooja Singh',
     vehicleId: 'v_asb_van1',
+    membershipId: 'm_pooja_bus',
     createdAt: '2026-06-16T07:31:00.000Z',
   },
   {

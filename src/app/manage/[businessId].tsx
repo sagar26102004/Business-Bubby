@@ -414,6 +414,11 @@ export default function ManageScreen() {
             onChange={setServices}
             namePlaceholder="Service (e.g. Wheel alignment)"
             addLabel="Add service"
+            withGroups
+            categoryPlaceholder="e.g. Repairs, Installation"
+            subcategoryPlaceholder="e.g. AC, Fridge"
+            withDescription
+            descriptionPlaceholder="What's included (optional)"
           />
         </>
       ) : null}

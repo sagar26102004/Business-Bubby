@@ -15,6 +15,7 @@ import { getSubcategory } from '@/domain/catalog';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
+import { useResponsive } from '@/lib/useResponsive';
 import { EmptyView, LoadingView, SearchIcon, Text } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { radius, spacing, useColors } from '@/theme/theme';
@@ -26,6 +27,7 @@ export default function SearchScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { cardColumns, gridMaxWidth, readableMaxWidth, centered } = useResponsive();
 
   const [query, setQuery] = useState('');
   /** The committed search term — set on enter or when a suggestion is tapped. */
@@ -146,7 +148,7 @@ export default function SearchScreen() {
 
       {isTyping ? (
         /* Suggestions while typing (debounced), like Amazon's dropdown. */
-        <View>
+        <View style={centered(readableMaxWidth)}>
           <SuggestionRow
             label={`Search for “${query.trim()}”`}
             bold
@@ -169,10 +171,18 @@ export default function SearchScreen() {
         <EmptyView title="No results" subtitle={`Nothing matched “${submitted}”. Try another word.`} />
       ) : (
         <FlatList
+          // Keyed to remount when the responsive column count changes.
+          key={`cols-${cardColumns}`}
           data={results ?? []}
           keyExtractor={(b) => b.id}
-          renderItem={({ item }) => <BusinessCard business={item} />}
-          contentContainerStyle={styles.list}
+          numColumns={cardColumns}
+          columnWrapperStyle={cardColumns > 1 ? styles.column : undefined}
+          renderItem={({ item }) => (
+            <View style={cardColumns > 1 ? styles.gridItem : undefined}>
+              <BusinessCard business={item} />
+            </View>
+          )}
+          contentContainerStyle={[styles.list, centered(gridMaxWidth)]}
           keyboardShouldPersistTaps="handled"
           ListHeaderComponent={
             <Text variant="caption" tone="muted" style={styles.count}>
@@ -257,4 +267,7 @@ const styles = StyleSheet.create({
   suggestionArrow: { fontSize: 14 },
   list: { padding: spacing.lg },
   count: { marginBottom: spacing.md },
+  // Multi-column results grid on wide screens.
+  column: { gap: spacing.md },
+  gridItem: { flex: 1 },
 });

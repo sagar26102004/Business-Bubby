@@ -15,6 +15,7 @@ import { Tabs, useRouter } from 'expo-router';
 import { formatDistance, getSubcategory } from '@/domain/catalog';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
+import { useResponsive } from '@/lib/useResponsive';
 import { EmptyView, ErrorView, LoadingView, Text } from '@/components/ui';
 import { ProductTile, type StallProduct } from '@/features/businesses/ProductTile';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
@@ -26,6 +27,7 @@ export default function StallsScreen() {
   const router = useRouter();
   const colors = useColors();
   const insets = useSafeAreaInsets();
+  const { productColumns, gridMaxWidth, centered } = useResponsive();
 
   const { data: places } = useAsync(() => repos.places.listPlaces(), []);
   const near = places?.[0]?.point;
@@ -90,13 +92,16 @@ export default function StallsScreen() {
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <Tabs.Screen options={{ headerShown: false }} />
       <FlatList
+        // FlatList can't change numColumns on the fly, so key it to remount
+        // when the responsive column count changes (e.g. window resize).
+        key={`cols-${productColumns}`}
         data={products}
         keyExtractor={(p) => p.key}
         renderItem={({ item }) => <ProductTile item={item} />}
-        numColumns={2}
+        numColumns={productColumns}
         columnWrapperStyle={styles.column}
         ListHeaderComponent={header}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, centered(gridMaxWidth)]}
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           loading ? (

@@ -3,12 +3,13 @@
  * live fleet map, and (owner) the link to manage vehicles & tracked items.
  * Members only.
  */
-import { StyleSheet, Switch, View } from 'react-native';
+import { Alert, StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { getVehicleKind } from '@/domain/catalog';
 import { canAccessService } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
+import { startBackgroundShare, stopBackgroundShare } from '@/lib/backgroundLocation';
 import { Button, Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing } from '@/theme/theme';
 
@@ -64,6 +65,24 @@ export default function WorkspaceFleetScreen() {
 
   const toggleSharing = async (value: boolean) => {
     if (!currentUser) return;
+    if (value) {
+      const res = await startBackgroundShare();
+      if (!res.ok) {
+        Alert.alert(
+          'Location permission needed',
+          'Allow location access to share your live position.',
+        );
+        return;
+      }
+      if (res.background === false && res.reason !== 'web') {
+        Alert.alert(
+          'Sharing while the app is open',
+          'For your vehicle to keep moving when the app is closed, set location access to "Allow all the time" in Settings.',
+        );
+      }
+    } else {
+      await stopBackgroundShare();
+    }
     await repos.tracking.setSharing(business.id, currentUser.id, value);
     reload();
   };
@@ -71,10 +90,6 @@ export default function WorkspaceFleetScreen() {
   return (
     <Screen scroll>
       <Stack.Screen options={{ title: 'Fleet & tracking' }} />
-
-      <Text tone="muted" style={styles.subtitle}>
-        Track your vehicles live — school buses, goods, deliveries.
-      </Text>
 
       {myVehicles.length > 0 ? (
         <Card style={styles.shareCard}>

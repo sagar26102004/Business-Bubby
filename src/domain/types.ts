@@ -85,9 +85,10 @@ export interface Employee {
   /**
    * Which workspace services this employee may open (service ids from
    * `domain/access.ts`: 'orders', 'billing', 'logbook', …). Set by the owner on
-   * the Access & permissions screen. UNSET means full access — a legacy member
-   * keeps every tool until the owner narrows it, at which point this becomes an
-   * explicit list. The owner always has access to everything, regardless.
+   * the Access & permissions screen. When UNSET the default depends on rank: a
+   * MANAGER keeps every tool (trusted until narrowed), a STAFF member gets
+   * NOTHING until the owner grants tools (least privilege — a new driver opens
+   * a blank workspace). The owner always has access to everything, regardless.
    */
   permissions?: string[];
 }
@@ -107,7 +108,11 @@ export interface AppNotification {
     | 'bill_issued'
     | 'review_posted'
     | 'product_question'
-    | 'product_reply';
+    | 'product_reply'
+    | 'enroll_requested'
+    | 'enroll_update'
+    | 'payment_reported'
+    | 'payment_update';
   /** Heading, e.g. "Maria from Sparks Electrical". */
   title: string;
   /** Preview text, e.g. the message body. */
@@ -120,6 +125,8 @@ export interface AppNotification {
   billId?: string;
   /** Stall product this relates to, for deep-linking to its public thread. */
   productId?: string;
+  /** Membership this relates to, for deep-linking to the member's detail. */
+  membershipId?: string;
   read: boolean;
   createdAt: string;
 }
@@ -199,6 +206,13 @@ export interface ServiceItem {
   name: string;
   price?: string;
   description?: string;
+  /**
+   * Section the service groups under on the business page, e.g. "Repairs" or
+   * "Installation". Uncategorised services list first (same model as MenuItem).
+   */
+  category?: string;
+  /** Optional group inside the category, e.g. "AC" / "Fridge". */
+  subcategory?: string;
 }
 
 /**
@@ -740,6 +754,12 @@ export interface TrackedItem {
   customerName: string;
   /** Vehicle it currently rides on. Unset = not assigned yet. */
   vehicleId?: string;
+  /**
+   * The membership (enrolment) this tracked child came from, when it was
+   * assigned to a bus straight from the workspace Members list. Lets an
+   * assignment be found and re-pointed without duplicating the child.
+   */
+  membershipId?: string;
   note?: string;
   createdAt: string;
 }
@@ -778,10 +798,13 @@ export interface BizChatMessage {
 }
 
 /**
- * A recurring plan a business enrolled one of its customers into — a gym
- * membership, a yoga batch, monthly tuition, a school-bus seat. ONLY the
- * business creates these (workspace → Members); the customer then sees it in
- * their Subscriptions tab. Renews monthly from `startedAt`; `renewedAt` /
+ * A recurring plan between a business and one of its customers — a gym
+ * membership, a yoga batch, monthly tuition, a school-bus seat. Two ways one
+ * begins: the business enrolls a customer directly (workspace → Members), or
+ * the customer taps Enroll/Subscribe on the business page, creating a
+ * `pending` request the business accepts (setting the plan + price) or rejects
+ * in the Members section. An `active` plan shows in the customer's
+ * Subscriptions tab and renews monthly from `startedAt`; `renewedAt` /
  * `expiresAt` describe the current billing cycle.
  */
 export interface Membership {
@@ -792,16 +815,84 @@ export interface Membership {
   customerName: string;
   /** What they're enrolled in, e.g. "Gym membership — monthly", "Morning yoga batch". */
   planName: string;
-  /** ₹ per month. */
+  /** ₹ per month. Zero while a customer request is still `pending`. */
   pricePerMonth: number;
+  /** The customer's own words on a self-service request, shown to the business while pending. */
+  requestedPlan?: string;
+  /** The listed plan's price the customer picked, so the business can accept in one tap. */
+  requestedPrice?: number;
+  /** Who the plan is FOR when it isn't the account holder — e.g. a child's name. */
+  enrolleeName?: string;
+  /**
+   * A detached member with no linked account: the business still tracks them by
+   * name, but nobody is billed and the plan shows in no one's Subscriptions.
+   * `customerId` holds a `standalone:…` sentinel (no real user) when set.
+   */
+  standalone?: boolean;
   startedAt: string;
   /** Start of the current billing cycle (monthly anniversary of startedAt). */
   renewedAt: string;
   /** When the current cycle ends and renews again. */
   expiresAt: string;
-  status: 'active' | 'cancelled';
+  /** `pending` = a customer request awaiting the business; `rejected` = the business declined it. */
+  status: 'pending' | 'active' | 'cancelled' | 'rejected';
   /** Set when cancelled — the plan stops counting from this date. */
   endedAt?: string;
+  /**
+   * Current billing-cycle payment state, attached on read (active plans only)
+   * so the members list and Subscriptions tab can show paid / overdue at a
+   * glance without a second fetch.
+   */
+  payment?: MembershipPaymentSummary;
+}
+
+/** A membership's payment standing for its current cycle, computed on read. */
+export interface MembershipPaymentSummary {
+  /**
+   * `paid` = this cycle is confirmed; `pending` = the customer reported paying
+   * and the business hasn't approved yet; `unpaid` = nothing for this cycle.
+   */
+  status: 'paid' | 'pending' | 'unpaid';
+  /** Start of the cycle this status describes (monthly anniversary of start). */
+  periodStart: string;
+  /** Days since the cycle began while still unpaid (0 when paid or pending). */
+  daysOverdue: number;
+  /** How many cycles have been confirmed paid, all-time. */
+  monthsPaid: number;
+  /** Sum of confirmed payments, all-time. */
+  totalPaid: number;
+  /** The pending payment's id when `status === 'pending'`, for one-tap approval. */
+  pendingPaymentId?: string;
+}
+
+/**
+ * One payment logged against a single billing cycle of a membership. The
+ * customer can self-report it (→ `pending`, awaiting the business) or a member
+ * can record it directly at the counter (→ `approved`). A cycle counts as paid
+ * once an approved payment covers it.
+ */
+export interface MembershipPayment {
+  id: string;
+  membershipId: string;
+  businessId: string;
+  /** The account billed for the plan (the parent, for a child's enrolment). */
+  customerId: string;
+  /** The billing cycle this covers — ISO of the cycle's start. */
+  periodStart: string;
+  amount: number;
+  status: 'pending' | 'approved' | 'rejected';
+  /** How they say they paid: 'cash' | 'online' | 'other'. */
+  method?: string;
+  /** Who they handed cash to, when paid in person. */
+  paidToName?: string;
+  /** Free-text note from whoever logged it (e.g. "paid cash on the 5th"). */
+  note?: string;
+  /** `customer` self-report vs `business` recorded it directly. */
+  reportedBy: 'customer' | 'business';
+  reportedByName: string;
+  reportedAt: string;
+  decidedByName?: string;
+  decidedAt?: string;
 }
 
 /** One line of a month's subscription spend. */

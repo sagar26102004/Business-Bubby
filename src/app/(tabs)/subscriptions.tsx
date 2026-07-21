@@ -19,12 +19,19 @@ import {
   Button,
   Card,
   ErrorView,
+  Input,
   LoadingView,
   Screen,
   Tag,
   Text,
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+
+const PAY_METHODS = [
+  { key: 'cash', label: 'Cash' },
+  { key: 'online', label: 'Online' },
+  { key: 'other', label: 'Other' },
+];
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -50,13 +57,22 @@ export default function SubscriptionsScreen() {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [monthIndex, setMonthIndex] = useState(0);
 
+  // "I paid this month" report flow.
+  const [reportSub, setReportSub] = useState<Membership | null>(null);
+  const [method, setMethod] = useState('cash');
+  const [paidTo, setPaidTo] = useState('');
+  const [payNote, setPayNote] = useState('');
+  const [reporting, setReporting] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+
   const { data, loading, error, reload } = useAsync(async () => {
-    if (!currentUser) return { subs: [], months: [] };
-    const [subs, months] = await Promise.all([
+    if (!currentUser) return { subs: [], months: [], tracked: [] };
+    const [subs, months, tracked] = await Promise.all([
       repos.memberships.listForCustomer(currentUser.id),
       repos.memberships.monthlySpend(currentUser.id),
+      repos.tracking.listItemsForCustomer(currentUser.id),
     ]);
-    return { subs, months };
+    return { subs, months, tracked };
   }, [currentUser?.id]);
 
   // Refresh when the tab regains focus (a business may have enrolled you).
@@ -88,7 +104,11 @@ export default function SubscriptionsScreen() {
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <LoadingView label="Loading your subscriptions…" />;
 
-  const { subs, months } = data;
+  const { subs, months, tracked } = data;
+  // Businesses where a child/goods of mine is on a vehicle — I can watch it live.
+  const trackableBusinessIds = new Set(
+    tracked.filter((t) => t.vehicleId).map((t) => t.businessId),
+  );
   const currentMonth = months[0];
   const month = months[Math.min(monthIndex, Math.max(months.length - 1, 0))];
 
@@ -103,6 +123,34 @@ export default function SubscriptionsScreen() {
   const openBreakdown = () => {
     setMonthIndex(0);
     setBreakdownOpen(true);
+  };
+
+  const openReport = (s: Membership) => {
+    setReportSub(s);
+    setMethod('cash');
+    setPaidTo('');
+    setPayNote('');
+    setReportError(null);
+  };
+  const submitReport = async () => {
+    if (!reportSub?.payment) return;
+    setReporting(true);
+    setReportError(null);
+    try {
+      await repos.memberships.reportPayment({
+        membershipId: reportSub.id,
+        periodStart: reportSub.payment.periodStart,
+        method,
+        paidToName: paidTo,
+        note: payNote,
+      });
+      setReportSub(null);
+      reload();
+    } catch (e) {
+      setReportError(e instanceof Error ? e.message : 'Could not report. Try again.');
+    } finally {
+      setReporting(false);
+    }
   };
 
   return (
@@ -136,9 +184,17 @@ export default function SubscriptionsScreen() {
 
           {[...byBusiness.values()].map((list) => (
             <View key={list[0].businessId} style={styles.group}>
-              <Text variant="subheading" weight="bold" style={styles.groupTitle}>
-                {list[0].businessName}
-              </Text>
+              <View style={styles.groupTitleRow}>
+                <Text variant="subheading" weight="bold" style={styles.flex}>
+                  {list[0].businessName}
+                </Text>
+                {trackableBusinessIds.has(list[0].businessId) ? (
+                  <Tag
+                    label="📍 Track"
+                    onPress={() => router.push(`/track/${list[0].businessId}`)}
+                  />
+                ) : null}
+              </View>
               {list.map((s) => (
                 <Card
                   key={s.id}
@@ -148,6 +204,7 @@ export default function SubscriptionsScreen() {
                   <View style={styles.subTop}>
                     <Text weight="semibold" style={styles.planName}>
                       {s.planName}
+                      {s.enrolleeName ? ` · ${s.enrolleeName}` : ''}
                     </Text>
                     <Text weight="semibold" tone="brand">
                       {formatMoney(s.pricePerMonth)}/mo
@@ -162,6 +219,29 @@ export default function SubscriptionsScreen() {
                       Renews {dateLabel(s.expiresAt)}
                     </Text>
                   </View>
+
+                  {s.payment ? (
+                    <View style={[styles.payRow, { borderTopColor: colors.border }]}>
+                      {s.payment.status === 'paid' ? (
+                        <Text variant="caption" weight="semibold" tone="success">
+                          ✓ Paid this month
+                        </Text>
+                      ) : s.payment.status === 'pending' ? (
+                        <Text variant="caption" weight="semibold" tone="accent">
+                          ⏳ Reported — awaiting approval
+                        </Text>
+                      ) : (
+                        <>
+                          <Text variant="caption" tone="danger" weight="semibold">
+                            {s.payment.daysOverdue > 0
+                              ? `Unpaid · ${s.payment.daysOverdue}d overdue`
+                              : 'Payment due'}
+                          </Text>
+                          <Tag label="✅ I've paid this month" onPress={() => openReport(s)} />
+                        </>
+                      )}
+                    </View>
+                  ) : null}
                 </Card>
               ))}
             </View>
@@ -226,6 +306,63 @@ export default function SubscriptionsScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* "I paid this month" — self-report, sent to the business to approve */}
+      <Modal
+        visible={!!reportSub}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setReportSub(null)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setReportSub(null)}>
+          <Pressable style={[styles.sheet, { backgroundColor: colors.surface }]}>
+            <Text variant="subheading" weight="bold">
+              Report payment
+            </Text>
+            {reportSub ? (
+              <Text tone="muted" variant="caption" style={styles.reportSub}>
+                {reportSub.planName}
+                {reportSub.enrolleeName ? ` · ${reportSub.enrolleeName}` : ''} ·{' '}
+                {formatMoney(reportSub.pricePerMonth)}/mo at {reportSub.businessName}. They'll confirm it.
+              </Text>
+            ) : null}
+
+            <Text variant="caption" weight="semibold" tone="muted" style={styles.reportLabel}>
+              How did you pay?
+            </Text>
+            <View style={styles.methods}>
+              {PAY_METHODS.map((mm) => (
+                <Tag key={mm.key} label={mm.label} selected={method === mm.key} onPress={() => setMethod(mm.key)} />
+              ))}
+            </View>
+
+            {method === 'cash' ? (
+              <Input
+                label="Paid to (optional)"
+                placeholder="Which team member you handed cash to"
+                value={paidTo}
+                onChangeText={setPaidTo}
+              />
+            ) : null}
+            <Input
+              label="Message (optional)"
+              placeholder="Anything the business should know"
+              value={payNote}
+              onChangeText={setPayNote}
+            />
+            {reportError ? (
+              <Text variant="caption" tone="danger" style={styles.reportLabel}>
+                {reportError}
+              </Text>
+            ) : null}
+
+            <View style={styles.reportBtns}>
+              <Button title="Cancel" variant="ghost" onPress={() => setReportSub(null)} style={styles.flex} />
+              <Button title="Send to business" onPress={submitReport} loading={reporting} style={styles.flex} />
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Screen>
   );
 }
@@ -240,6 +377,12 @@ const styles = StyleSheet.create({
   totalAmount: { marginVertical: spacing.xs },
   group: { marginBottom: spacing.lg },
   groupTitle: { marginBottom: spacing.md },
+  groupTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
   subCard: { marginBottom: spacing.sm },
   subTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   planName: { flex: 1 },
@@ -250,6 +393,21 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing.md,
   },
+  flex: { flex: 1 },
+  payRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  reportSub: { marginTop: spacing.xs, marginBottom: spacing.md },
+  reportLabel: { marginTop: spacing.sm, marginBottom: spacing.xs },
+  methods: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  reportBtns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',

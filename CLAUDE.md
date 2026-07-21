@@ -119,7 +119,7 @@ Stack: `register`, `b2b`, `b2b-chat`, `browse/[type]`, `business/[id]`, `product
 ## What's mocked / deferred (don't assume these exist)
 
 - **No real backend** — in-memory mock, resets on reload. Auth is mocked (any credentials sign in as the demo user).
-- **Current location is a fixed mock coordinate** (`CURRENT_POINT` in seed.ts) — real GPS (`expo-location`) not wired yet.
+- **Current location uses real GPS** (`expo-location`, behind `PlacesRepository.getCurrentPlace`/`listPlaces` via `lib/location.ts`) — it requests permission and reads the device position, falling back to the seeded `CURRENT_POINT` (Indore, seed.ts) when permission is denied or GPS is unavailable. On web, geolocation only works over `https://` or `localhost`.
 - **Map is schematic** (no street tiles) — real maps need a native dev build.
 - **Call audio is simulated** — the UI polls `CallRepository` as a stand-in for realtime signaling. Real voice (WebRTC, e.g. LiveKit/react-native-webrtc) and ringing while the app is closed (VoIP push + CallKeep) require the real backend and a native dev build; both plug in behind `CallRepository` without UI changes.
 - **Vehicle movement is simulated** — active `LocationShare`s random-walk near the business at an exaggerated speed (`advanceShares` in mockRepositories.ts) so the demo visibly moves; the tracking map polls every 3s. Real driver GPS (`expo-location` background updates on the driver's phone + a realtime channel) plugs in behind `TrackingRepository` without UI changes.

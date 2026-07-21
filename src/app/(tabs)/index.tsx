@@ -10,7 +10,7 @@
  *    tiles → tap opens /browse/[intent]?sub=Tag), and filters the nearby
  *    business list below.
  */
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   NativeScrollEvent,
@@ -22,12 +22,13 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import type { ListingType, PlaceKind, SavedPlace } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
 import { INTENT_CATEGORIES, intentMatches, tagEmoji, type IntentCategory } from '@/domain/intents';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
+import { useResponsive } from '@/lib/useResponsive';
 import { Card, EmptyView, ErrorView, LoadingView, Text } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
@@ -52,6 +53,7 @@ export default function BrowseScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { isGuest } = useAuth();
+  const { cardColumns, gridMaxWidth, centered } = useResponsive();
 
   const [activePlaceId, setActivePlaceId] = useState<string | undefined>();
   const [placesOpen, setPlacesOpen] = useState(false);
@@ -70,6 +72,18 @@ export default function BrowseScreen() {
   const { data, loading, error, reload } = useAsync(
     () => repos.businesses.list({ near, sortByDistance: true }),
     [near?.latitude, near?.longitude],
+  );
+
+  // Home stays mounted across tab switches and account changes, so its initial
+  // fetch goes stale: a business registered afterwards — even by another
+  // account in the same session — wouldn't appear. Refetch on focus (skipping
+  // the first, already covered by useAsync) so the nearby list stays current.
+  const focusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (focusedOnce.current) reload();
+      else focusedOnce.current = true;
+    }, [reload]),
   );
 
   const selectPlace = (place: SavedPlace) => {
@@ -302,12 +316,20 @@ export default function BrowseScreen() {
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
       <FlatList
+        // Keyed to remount when the responsive column count changes.
+        key={`cols-${cardColumns}`}
         data={businesses}
         keyExtractor={(b) => b.id}
-        renderItem={({ item }) => <BusinessCard business={item} />}
+        numColumns={cardColumns}
+        columnWrapperStyle={cardColumns > 1 ? styles.column : undefined}
+        renderItem={({ item }) => (
+          <View style={cardColumns > 1 ? styles.gridItem : undefined}>
+            <BusinessCard business={item} />
+          </View>
+        )}
         ListHeaderComponent={header}
         style={styles.screen}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, centered(gridMaxWidth)]}
         keyboardShouldPersistTaps="handled"
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -349,6 +371,9 @@ export default function BrowseScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  // Multi-column nearby grid on wide screens.
+  column: { gap: spacing.md },
+  gridItem: { flex: 1 },
   // The gradient sheet bleeds to the screen edges and adds its own padding.
   sheet: {
     marginHorizontal: -spacing.lg,

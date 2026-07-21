@@ -66,7 +66,7 @@ export default function FulfillOrderScreen() {
         <Stack.Screen options={{ title: 'Fulfil order' }} />
         <EmptyView
           title="No scan access"
-          subtitle={`Only ${business.name}'s owner and the team members they've allowed can scan orders. Ask the owner to grant you access in Manage.`}
+          subtitle={`Only ${business.name}'s owner and members with Billing or Orders access can scan orders. Ask the owner to grant you access.`}
         />
       </Screen>
     );
@@ -83,11 +83,18 @@ export default function FulfillOrderScreen() {
   const quickBillable = !!handover && !order.billId && order.status === 'requested';
   const showMarkActions = !!handover && !isTerminal && (!!order.billId || quickBillable);
 
-  const run = async (action: () => Promise<unknown>) => {
+  // `scanNext` sends staff straight back to the scanner once an order is fully
+  // done, so a counter can scan → act → scan the next one without tapping back
+  // into Billing each time. (This screen is only ever reached by scanning.)
+  const run = async (action: () => Promise<unknown>, opts?: { scanNext?: boolean }) => {
     if (busy) return;
     setBusy(true);
     try {
       await action();
+      if (opts?.scanNext) {
+        router.replace('/scan');
+        return;
+      }
       await reload();
     } catch (err) {
       Alert.alert('Could not update', err instanceof Error ? err.message : 'Try again.');
@@ -111,17 +118,23 @@ export default function FulfillOrderScreen() {
       await repos.bills.setPaymentStatus(billId, 'paid', myName);
     });
   const markCollected = () =>
-    run(async () => {
-      await ensureBilled();
-      await repos.orders.markDelivered(order.id, myName);
-    });
+    run(
+      async () => {
+        await ensureBilled();
+        await repos.orders.markDelivered(order.id, myName);
+      },
+      { scanNext: true },
+    );
   // One tap for the common counter case: take the money and hand it over.
   const markPaidAndCollected = () =>
-    run(async () => {
-      const billId = await ensureBilled();
-      await repos.bills.setPaymentStatus(billId, 'paid', myName);
-      await repos.orders.markDelivered(order.id, myName);
-    });
+    run(
+      async () => {
+        const billId = await ensureBilled();
+        await repos.bills.setPaymentStatus(billId, 'paid', myName);
+        await repos.orders.markDelivered(order.id, myName);
+      },
+      { scanNext: true },
+    );
 
   return (
     <Screen scroll>
@@ -199,7 +212,10 @@ export default function FulfillOrderScreen() {
             </>
           ) : (
             // Fresh order → pay + hand over in one tap is the headline action,
-            // with the single steps under it for when they happen apart.
+            // with "mark paid" under it for when payment happens first. There's
+            // no standalone "mark collected" here on purpose: an order can't be
+            // handed over before it's paid, so collecting only becomes available
+            // once it's paid (the branch above).
             <>
               <Button
                 title={`💰✅ Mark as paid & collected · ${total}`}
@@ -212,14 +228,6 @@ export default function FulfillOrderScreen() {
                 title={`💰 Mark as paid · ${total}`}
                 variant="secondary"
                 onPress={markPaid}
-                loading={busy}
-                disabled={busy}
-                style={styles.stackBtn}
-              />
-              <Button
-                title="✅ Mark as collected"
-                variant="secondary"
-                onPress={markCollected}
                 loading={busy}
                 disabled={busy}
                 style={styles.stackBtn}

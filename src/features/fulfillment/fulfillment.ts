@@ -13,6 +13,7 @@
  */
 import * as Linking from 'expo-linking';
 import type { Bill, Business, Employee, Order } from '@/domain/types';
+import { canAccessService } from '@/domain/access';
 
 /** Where an order stands in the handover flow. */
 export type HandoverStage = 'unpaid' | 'paid' | 'collected';
@@ -64,18 +65,25 @@ export const handoverStarted = (order: Order): boolean => !!order.billId;
 
 /**
  * May this viewer scan/advance handovers for the business? The owner always
- * can; employees need to be granted it (`Business.scanHandlerIds`), and only
- * those with an app account can actually scan.
+ * can. For an employee (with an app account), scanning follows the tools they
+ * were granted: anyone with **Billing or Orders** access can scan a ticket to
+ * bill/collect, since that's part of those workflows. The owner can also grant
+ * scanning on its own — to someone WITHOUT full billing/orders access — via
+ * `Business.scanHandlerIds` in Manage.
  */
 export function canScanFor(
   business: Pick<Business, 'ownerId' | 'scanHandlerIds'>,
   viewerId: string | undefined,
-  meEmployee: Pick<Employee, 'id'> | undefined,
+  meEmployee: Pick<Employee, 'id' | 'permissions'> | undefined,
 ): boolean {
   if (!viewerId) return false;
   if (viewerId === business.ownerId) return true;
   if (!meEmployee) return false;
-  return (business.scanHandlerIds ?? []).includes(meEmployee.id);
+  if ((business.scanHandlerIds ?? []).includes(meEmployee.id)) return true;
+  return (
+    canAccessService(business, meEmployee, viewerId, 'billing') ||
+    canAccessService(business, meEmployee, viewerId, 'orders')
+  );
 }
 
 /** The link a takeaway order's QR encodes — resolves to the staff scan screen. */

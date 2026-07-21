@@ -1,10 +1,12 @@
 /**
  * Workspace › Team — the hierarchy (owner + employees) with their chat/call
- * access. The owner can add and remove members right here, and jump to Manage
- * for the finer call/chat-access toggles. Members only.
+ * access. Members are grouped into collapsible tiers — Owner, Managers, Staff,
+ * Drivers — so a big team reads at a glance. The owner can add and remove
+ * members right here, and jump to Manage for the finer call/chat-access
+ * toggles. Members only.
  */
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useState, type ReactNode } from 'react';
+import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Employee } from '@/domain/types';
 import type { NewEmployeeInput } from '@/data/repositories';
@@ -12,7 +14,11 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Avatar, Button, Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { EmployeeEditor } from '@/features/businesses/EmployeeEditor';
-import { spacing, useColors } from '@/theme/theme';
+import { radius, spacing, useColors } from '@/theme/theme';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 export default function WorkspaceTeamScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -24,13 +30,16 @@ export default function WorkspaceTeamScreen() {
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
-    const [employees, owner] = await Promise.all([
+    const [employees, owner, vehicles] = await Promise.all([
       repos.employees.listByBusiness(business.id),
       repos.users.getById(business.ownerId),
+      repos.tracking.listVehicles(business.id),
     ]);
     const isOwner = currentUser?.id === business.ownerId;
     const isMember = isOwner || employees.some((e) => e.userId && e.userId === currentUser?.id);
-    return { business, employees, owner, isOwner, isMember };
+    // Anyone pinned as a vehicle's driver is grouped under Drivers.
+    const driverIds = new Set(vehicles.map((v) => v.driverEmployeeId).filter(Boolean) as string[]);
+    return { business, employees, owner, isOwner, isMember, driverIds };
   }, [businessId, currentUser?.id]);
 
   // Owner-only editing state.
@@ -39,12 +48,14 @@ export default function WorkspaceTeamScreen() {
   const [busy, setBusy] = useState(false);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  // Which tier sections are collapsed (default: all open).
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" />;
 
-  const { business, employees, owner, isOwner, isMember } = data;
+  const { business, employees, owner, isOwner, isMember, driverIds } = data;
   if (!isMember) {
     return (
       <Screen>
@@ -60,6 +71,23 @@ export default function WorkspaceTeamScreen() {
     owner?.name ?? 'Owner',
     ...employees.filter((e) => chatAccessIds.has(e.id)).map((e) => e.displayName),
   ];
+
+  // Sort each employee into exactly one tier. Managers stay managers even if
+  // they drive; among the rest, vehicle drivers split out from plain staff.
+  const managers = employees.filter((e) => (e.level ?? 'staff') === 'manager');
+  const nonManagers = employees.filter((e) => (e.level ?? 'staff') !== 'manager');
+  const drivers = nonManagers.filter((e) => driverIds.has(e.id));
+  const staff = nonManagers.filter((e) => !driverIds.has(e.id));
+
+  const employeeSub = (e: Employee) =>
+    `${cap(e.level ?? 'staff')}${e.role ? ` · ${e.role}` : ''}${
+      chatAccessIds.has(e.id) ? ' · chat access' : ''
+    }${callHandlerIdSet.has(e.id) ? ' · takes calls' : ''}`;
+
+  const toggleSection = (key: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCollapsed((c) => ({ ...c, [key]: !c[key] }));
+  };
 
   const commitAdd = async () => {
     if (staged.length === 0) {
@@ -94,28 +122,77 @@ export default function WorkspaceTeamScreen() {
     }
   };
 
+  const employeeRow = (e: Employee) => (
+    <MemberRow
+      key={e.id}
+      name={e.displayName}
+      sub={employeeSub(e)}
+      // Only the owner can take a member off the team.
+      onRemove={isOwner && !busy ? () => setConfirmRemoveId(e.id) : undefined}
+      confirming={confirmRemoveId === e.id}
+      onConfirmRemove={() => removeMember(e.id)}
+      onCancelRemove={() => setConfirmRemoveId(null)}
+      busy={busy}
+    />
+  );
+
+  const section = (key: string, title: string, rows: ReactNode[]) => {
+    if (rows.length === 0) return null;
+    const open = !collapsed[key];
+    return (
+      <View key={key} style={styles.section}>
+        <Pressable
+          onPress={() => toggleSection(key)}
+          style={[styles.sectionHeader, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}
+          accessibilityRole="button"
+          accessibilityLabel={`${title}, ${rows.length}`}
+        >
+          <Text tone="muted" style={styles.sectionChevron}>
+            {open ? '▾' : '▸'}
+          </Text>
+          <Text weight="semibold" style={styles.flex}>
+            {title}
+          </Text>
+          <Text variant="caption" tone="muted">
+            {rows.length}
+          </Text>
+        </Pressable>
+        {open ? <View style={styles.sectionBody}>{rows}</View> : null}
+      </View>
+    );
+  };
+
+  const ownerRow = (
+    <MemberRow
+      key="owner"
+      name={owner?.name ?? 'Owner'}
+      sub={`Owner${business.ownerHandlesCalls !== false ? ' · takes calls' : ''}`}
+    />
+  );
+
   return (
     <Screen scroll>
-      <Stack.Screen options={{ title: 'Team' }} />
-
-      <View style={styles.headerRow}>
-        <View style={styles.headerText}>
-          <Text tone="muted" style={styles.subtitle}>
-            Everyone who runs {business.name}, with who can reply to chats and take calls.
-          </Text>
-        </View>
-        {/* Adding a teammate lives right up here on the header, not buried below. */}
-        {isOwner && !adding ? (
-          <Button
-            title="➕ Add"
-            onPress={() => {
-              setAdding(true);
-              setConfirmRemoveId(null);
-            }}
-            style={styles.headerAddBtn}
-          />
-        ) : null}
-      </View>
+      <Stack.Screen
+        options={{
+          title: 'Team',
+          headerRight:
+            isOwner && !adding
+              ? () => (
+                  <Text
+                    tone="accent"
+                    weight="semibold"
+                    style={styles.headerAdd}
+                    onPress={() => {
+                      setAdding(true);
+                      setConfirmRemoveId(null);
+                    }}
+                  >
+                    ＋ Add
+                  </Text>
+                )
+              : undefined,
+        }}
+      />
 
       {isOwner && adding ? (
         <Card style={styles.addCard}>
@@ -148,25 +225,10 @@ export default function WorkspaceTeamScreen() {
         </Card>
       ) : null}
 
-      <MemberRow
-        name={owner?.name ?? 'Owner'}
-        sub={`Owner${business.ownerHandlesCalls !== false ? ' · takes calls' : ''}`}
-      />
-      {employees.map((e: Employee) => (
-        <MemberRow
-          key={e.id}
-          name={e.displayName}
-          sub={`${cap(e.level ?? 'staff')}${e.role ? ` · ${e.role}` : ''}${
-            chatAccessIds.has(e.id) ? ' · chat access' : ''
-          }${callHandlerIdSet.has(e.id) ? ' · takes calls' : ''}`}
-          // Only the owner can take a member off the team.
-          onRemove={isOwner && !busy ? () => setConfirmRemoveId(e.id) : undefined}
-          confirming={confirmRemoveId === e.id}
-          onConfirmRemove={() => removeMember(e.id)}
-          onCancelRemove={() => setConfirmRemoveId(null)}
-          busy={busy}
-        />
-      ))}
+      {section('owner', 'Owner', [ownerRow])}
+      {section('managers', 'Managers', managers.map(employeeRow))}
+      {section('staff', 'Staff', staff.map(employeeRow))}
+      {section('drivers', 'Drivers', drivers.map(employeeRow))}
 
       {actionError ? (
         <Text variant="caption" tone="danger" style={styles.actionError}>
@@ -249,10 +311,20 @@ function MemberRow({
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const styles = StyleSheet.create({
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  headerText: { flex: 1 },
-  headerAddBtn: { marginTop: spacing.xs },
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
+  flex: { flex: 1 },
+  headerAdd: { paddingHorizontal: spacing.md, fontSize: 16 },
+  section: { marginBottom: spacing.md },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  sectionChevron: { width: 16, textAlign: 'center' },
+  sectionBody: { marginTop: spacing.sm },
   memberCard: { marginBottom: spacing.sm },
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   memberInfo: { flex: 1 },

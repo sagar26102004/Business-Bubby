@@ -10,14 +10,16 @@
  *  - Employee WITHOUT chat access: the chats tile is disabled.
  *  - Non-members are turned away.
  */
-import { StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
-import { commerceVocab } from '@/domain/catalog';
+import { commerceVocab, getVehicleKind } from '@/domain/catalog';
 import { enabledModules } from '@/domain/modules';
-import { canAccessService, type ServiceId } from '@/domain/access';
+import { canAccessService, isManagerOrOwner, type ServiceId } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
+import { startBackgroundShare, stopBackgroundShare } from '@/lib/backgroundLocation';
 import {
   Card,
   EmptyView,
@@ -39,7 +41,7 @@ export default function WorkspaceScreen() {
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
-    const [employees, bookings, orders, bills, vehicles, members, customers] =
+    const [employees, bookings, orders, bills, vehicles, members, memberRequests, customers, sharing] =
       await Promise.all([
         repos.employees.listByBusiness(business.id),
         repos.bookings.listForBusiness(business.id),
@@ -47,20 +49,33 @@ export default function WorkspaceScreen() {
         repos.bills.listForBusiness(business.id),
         repos.tracking.listVehicles(business.id),
         repos.memberships.listForBusiness(business.id),
+        repos.memberships.listRequests(business.id),
         repos.customers.listForBusiness(business.id),
+        currentUser
+          ? repos.tracking.isSharing(business.id, currentUser.id)
+          : Promise.resolve(false),
       ]);
-    return { business, employees, bookings, orders, bills, vehicles, members, customers };
+    return { business, employees, bookings, orders, bills, vehicles, members, memberRequests, customers, sharing };
   }, [businessId, currentUser?.id]);
+
+  // Local mirror of the driver's live-share toggle so it flips instantly.
+  const [sharingOn, setSharingOn] = useState(false);
+  const [sharingBusy, setSharingBusy] = useState(false);
+  useEffect(() => {
+    if (data) setSharingOn(data.sharing);
+  }, [data]);
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" />;
 
-  const { business, employees, bookings, orders, bills, vehicles, members, customers } = data;
+  const { business, employees, bookings, orders, bills, vehicles, members, memberRequests, customers } = data;
   const mods = new Set(enabledModules(business));
   const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
   const isOwner = currentUser?.id === business.ownerId;
   const isMember = isOwner || !!meEmployee;
+  // Owner + managers see every tool; managers may also set who accesses what.
+  const canManageAll = isManagerOrOwner(business, meEmployee ?? undefined, currentUser?.id);
 
   // Not a member → no access.
   if (!isMember) {
@@ -93,6 +108,7 @@ export default function WorkspaceScreen() {
   // desk, different words (derived from tags).
   const vocab = commerceVocab(business);
   const isMembershipBiz = vocab.mode === 'enroll' || vocab.mode === 'subscribe';
+  const requestNoun = vocab.mode === 'subscribe' ? 'subscription' : 'enrolment';
 
   // Per-employee service access: the owner grants each tool on the Access
   // screen. Owner has everything; a member with no explicit grants keeps all.
@@ -100,6 +116,46 @@ export default function WorkspaceScreen() {
     canAccessService(business, meEmployee ?? undefined, currentUser?.id, id);
 
   const base = `/workspace/${business.id}`;
+
+  // Vehicles this member drives — for a driver the live-share toggle is the one
+  // control they open the workspace for, so it's pulled up top as its own card
+  // (independent of the Fleet tool's access grant).
+  const myVehicles = meEmployee
+    ? vehicles.filter((v) => v.driverEmployeeId === meEmployee.id)
+    : [];
+
+  const toggleSharing = async (value: boolean) => {
+    if (!currentUser || sharingBusy) return;
+    setSharingOn(value); // optimistic
+    setSharingBusy(true);
+    try {
+      if (value) {
+        const res = await startBackgroundShare();
+        if (!res.ok) {
+          setSharingOn(false);
+          Alert.alert(
+            'Location permission needed',
+            'Allow location access to share your live position with the owner and customers.',
+          );
+          return;
+        }
+        if (res.background === false && res.reason !== 'web') {
+          Alert.alert(
+            'Sharing while the app is open',
+            'For your vehicle to keep moving on the map when the app is closed, set location access to "Allow all the time" in Settings.',
+          );
+        }
+      } else {
+        await stopBackgroundShare();
+      }
+      await repos.tracking.setSharing(business.id, currentUser.id, value);
+    } catch {
+      setSharingOn(!value);
+      Alert.alert('Could not update', 'Please try again.');
+    } finally {
+      setSharingBusy(false);
+    }
+  };
 
   // Each group is a heading + the tiles the business actually runs. A tile is
   // hidden unless its module is enabled (chats & team are universal).
@@ -164,12 +220,14 @@ export default function WorkspaceScreen() {
     {
       title: 'Customers & chats',
       tiles: [
-        {
+        // Chat is contact ROUTING, not a service grant: shown only to members
+        // who actually answer messages (chat recipients) — plus owner/managers,
+        // who always see every tool. A driver with no chat access won't see it.
+        (hasChatAccess || canManageAll) && {
           icon: '💬',
           label: 'Customer chats',
-          sub: hasChatAccess ? 'Read & reply to messages' : 'No chat access yet',
+          sub: hasChatAccess ? 'Read & reply to messages' : 'You can read as a manager',
           href: `/inbox/${business.id}` as Href,
-          disabled: !hasChatAccess,
         },
         // "Customers" = everyone who ever touched the business (chats, orders,
         // calls, bills). "Members" = the subset on a paid monthly plan. For a
@@ -190,6 +248,7 @@ export default function WorkspaceScreen() {
           sub: members.length
             ? `${members.length} on a monthly plan`
             : 'Paid monthly plans',
+          badge: memberRequests.length || undefined,
           href: `${base}/members` as Href,
         },
       ],
@@ -214,8 +273,8 @@ export default function WorkspaceScreen() {
           sub: `${employees.length + 1} ${employees.length + 1 === 1 ? 'person' : 'people'}${isOwner ? ' · manage' : ''}`,
           href: `${base}/team` as Href,
         },
-        // Only the owner decides who can open which tool.
-        isOwner && {
+        // The owner and managers decide who can open which tool.
+        canManageAll && {
           icon: '🔐',
           label: 'Access & permissions',
           sub: employees.length
@@ -231,6 +290,13 @@ export default function WorkspaceScreen() {
     .map((g) => ({ ...g, tiles: g.tiles.filter(Boolean) as Tile[] }))
     .filter((g) => g.tiles.length > 0);
 
+  // A staff member the owner hasn't granted anything yet: everything but the
+  // Team card is hidden. Explain the blank slate instead of leaving them
+  // guessing.
+  const hasToolTiles = visibleGroups.some((g) => g.title !== 'Team');
+  const showAccessHint =
+    !canManageAll && !!meEmployee && !hasToolTiles && !hasChatAccess && myVehicles.length === 0;
+
   return (
     <Screen scroll>
       <Stack.Screen options={{ title: 'Workspace' }} />
@@ -243,6 +309,78 @@ export default function WorkspaceScreen() {
         {hasChatAccess ? <Tag label="Chat access" /> : null}
         {takesCalls ? <Tag label="📞 Takes calls" /> : null}
       </View>
+
+      {/* A driver's headline control: share live location for the shift. Sits
+          above everything — for a school-bus driver this is the whole job. */}
+      {myVehicles.length > 0 ? (
+        <Card
+          style={StyleSheet.flatten([
+            styles.shareCard,
+            {
+              backgroundColor: sharingOn ? colors.brandSoft : colors.surface,
+              borderColor: sharingOn ? colors.brand : colors.border,
+            },
+          ])}
+        >
+          <View style={styles.shareHead}>
+            <View style={styles.tileText}>
+              <Text weight="bold">📡 Share my live location</Text>
+              <Text variant="caption" tone="muted">
+                You drive {myVehicles.map((v) => `${getVehicleKind(v.kind).icon} ${v.name}`).join(', ')}.
+                {sharingOn
+                  ? ' Live — owner & tracking customers can see you move, even if you close the app.'
+                  : ' Turn on at the start of your shift; off when you’re done.'}
+              </Text>
+            </View>
+            <Switch value={sharingOn} onValueChange={toggleSharing} disabled={sharingBusy} />
+          </View>
+          {sharingOn ? (
+            <Text variant="caption" tone="brand" style={styles.liveRow}>
+              ● LIVE
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {/* The most time-sensitive thing an owner opens the workspace for: people
+          waiting to be let in. Pull it out of the Members tile into its own
+          highlighted banner at the very top. */}
+      {mods.has('memberships') && canUse('members') && memberRequests.length > 0 ? (
+        <Card
+          onPress={() => router.push(`${base}/members` as Href)}
+          style={StyleSheet.flatten([
+            styles.requestBanner,
+            { backgroundColor: colors.brandSoft, borderColor: colors.brand },
+          ])}
+        >
+          <View style={[styles.iconBox, { backgroundColor: colors.brand }]}>
+            <Text style={styles.icon}>🔔</Text>
+          </View>
+          <View style={styles.tileText}>
+            <Text weight="bold" tone="brand">
+              {memberRequests.length} new {requestNoun} request{memberRequests.length === 1 ? '' : 's'}
+            </Text>
+            <Text variant="caption" tone="muted">
+              {memberRequests
+                .slice(0, 3)
+                .map((m) => (m.enrolleeName ? `${m.customerName} (${m.enrolleeName})` : m.customerName))
+                .join(', ')}
+              {memberRequests.length > 3 ? ` +${memberRequests.length - 3} more` : ''} · tap to review
+            </Text>
+          </View>
+          <Text style={[styles.chevron, { color: colors.brand }]}>›</Text>
+        </Card>
+      ) : null}
+
+      {showAccessHint ? (
+        <Card style={styles.hintCard}>
+          <Text weight="semibold">No tools granted yet</Text>
+          <Text variant="caption" tone="muted">
+            Your owner or a manager decides which tools you can open. Ask them to grant you access in
+            Access &amp; permissions.
+          </Text>
+        </Card>
+      ) : null}
 
       {visibleGroups.map((group) => (
         <View key={group.title} style={styles.group}>
@@ -297,6 +435,17 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 const styles = StyleSheet.create({
   roleRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md, marginBottom: spacing.xl },
+  shareCard: { borderWidth: 1.5, marginBottom: spacing.xl },
+  shareHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  liveRow: { marginTop: spacing.sm, fontWeight: '700', letterSpacing: 0.5 },
+  hintCard: { marginBottom: spacing.xl },
+  requestBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderWidth: 1.5,
+    marginBottom: spacing.xl,
+  },
   group: { marginBottom: spacing.xl },
   groupTitle: { marginBottom: spacing.sm, letterSpacing: 0.5 },
   tile: {

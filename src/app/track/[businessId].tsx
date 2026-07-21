@@ -29,13 +29,17 @@ const MARKER = 44;
 const POLL_MS = 3000;
 
 export default function TrackScreen() {
-  const { businessId } = useLocalSearchParams<{ businessId: string }>();
+  // `vehicle` (optional) preselects one vehicle — set when arriving from a
+  // "Track on map" button on a specific vehicle's card.
+  const { businessId, vehicle } = useLocalSearchParams<{ businessId: string; vehicle?: string }>();
   const repos = useRepositories();
   const colors = useColors();
   const { currentUser } = useAuth();
 
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [selectedId, setSelectedId] = useState<string | undefined>(
+    typeof vehicle === 'string' ? vehicle : undefined,
+  );
   const [live, setLive] = useState<LiveVehicle[] | null>(null);
 
   const { data, loading, error, reload } = useAsync(async () => {

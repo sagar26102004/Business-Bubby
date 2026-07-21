@@ -23,6 +23,7 @@ import type {
   ListingType,
   LogEntry,
   Membership,
+  MembershipPayment,
   MenuItem,
   MonthlySpend,
   OfferingKind,
@@ -218,7 +219,7 @@ export interface UserRepository {
 
 export interface SignUpInput {
   name: string;
-  email: string;
+  phone: string;
 }
 
 export interface AuthRepository {
@@ -234,7 +235,8 @@ export interface AuthRepository {
 }
 
 export interface PlacesRepository {
-  /** The device's current location (mocked until GPS/maps is added). */
+  /** The device's current location (real GPS via expo-location, falling back
+   * to a seeded coordinate when permission is denied / unavailable). */
   getCurrentPlace(): Promise<SavedPlace>;
   /**
    * All places the user can browse around: current location plus saved places
@@ -572,6 +574,8 @@ export interface NewTrackedItemInput {
   customerId: string;
   customerName: string;
   vehicleId?: string;
+  /** Set when the child was assigned to a bus from the Members list. */
+  membershipId?: string;
   note?: string;
 }
 
@@ -660,21 +664,97 @@ export interface NewMembershipInput {
   pricePerMonth: number;
 }
 
+/** Customer side: request to enroll/subscribe from the business page. */
+export interface EnrollRequestInput {
+  businessId: string;
+  customerId: string;
+  customerName: string;
+  /** The customer's own words on what they want — optional, shown to the business. */
+  requestedPlan?: string;
+  /** The chosen plan's monthly price, so the business can accept in one tap. */
+  requestedPrice?: number;
+  /** Who the plan is for, when it isn't the account holder (e.g. a child). */
+  enrolleeName?: string;
+}
+
+/** What the business fills in when accepting a pending enroll request. */
+export interface AcceptEnrollInput {
+  planName: string;
+  pricePerMonth: number;
+}
+
+/** Logging a payment against one billing cycle of a membership. */
+export interface ReportPaymentInput {
+  membershipId: string;
+  /** The cycle being paid — pass the membership's current `payment.periodStart`. */
+  periodStart: string;
+  /** 'cash' | 'online' | 'other'. */
+  method?: string;
+  /** Who cash was handed to, when relevant. */
+  paidToName?: string;
+  note?: string;
+}
+
 /**
  * Memberships — recurring customer plans (gym, yoga batch, tuition, school
- * bus seat). Created ONLY by the business; the customer's Subscriptions tab
- * reads them.
+ * bus seat). A plan starts one of two ways: the business enrolls a customer
+ * directly (`add`), or the customer requests it (`request`) and the business
+ * accepts (`accept`) or declines (`reject`). The customer's Subscriptions tab
+ * reads only `active` plans.
  */
 export interface MembershipRepository {
-  /** The customer's memberships across all businesses, newest first. */
+  /** The customer's active memberships across all businesses, newest first. */
   listForCustomer(customerId: string): Promise<Membership[]>;
   /** Month-by-month spend for the breakdown popup, newest month first. */
   monthlySpend(customerId: string): Promise<MonthlySpend[]>;
-  /** One business's members (workspace Members section). */
+  /** One business's active members (workspace Members section). */
   listForBusiness(businessId: string): Promise<Membership[]>;
+  /** One business's cancelled (unsubscribed) plans, for the Unsubscribed list. */
+  listCancelledForBusiness(businessId: string): Promise<Membership[]>;
+  /** Pending enroll/subscribe requests awaiting the business's decision. */
+  listRequests(businessId: string): Promise<Membership[]>;
+  /** A single membership by id (hydrated with its current payment standing). */
+  getById(id: string): Promise<Membership | null>;
   add(input: NewMembershipInput): Promise<Membership>;
+  /** A customer's self-service enroll/subscribe request → a `pending` plan. */
+  request(input: EnrollRequestInput): Promise<Membership>;
+  /** Business accepts a pending request, setting the plan name + price → `active`. */
+  accept(id: string, input: AcceptEnrollInput): Promise<Membership>;
+  /** Business declines a pending request. */
+  reject(id: string): Promise<Membership>;
   /** Stops the plan — it keeps past months' history but stops renewing. */
   cancel(id: string): Promise<Membership>;
+  /** Re-activate a cancelled plan on a fresh billing cycle from today. */
+  reenroll(id: string): Promise<Membership>;
+  /** Change when the plan started (the enrolment date) — resets the cycle to it. */
+  setStartDate(id: string, startedAt: string): Promise<Membership>;
+  /**
+   * Move an enrolment onto a different customer's account. The new account is
+   * billed monthly and sees it in their Subscriptions from now on; it leaves
+   * the old account. Used when an enrollee was filed under the wrong parent.
+   */
+  reassign(id: string, toCustomerId: string, toCustomerName: string): Promise<Membership>;
+  /**
+   * Detach an enrollee into a standalone member with no linked account — the
+   * business keeps tracking them by name, but nobody is billed and it shows in
+   * no one's Subscriptions.
+   */
+  detach(id: string): Promise<Membership>;
+  /** Rename the enrollee (or the standalone member's own name). */
+  renameEnrollee(id: string, name: string): Promise<Membership>;
+  /** Payment history for one membership, newest cycle first. */
+  listPayments(membershipId: string): Promise<MembershipPayment[]>;
+  /**
+   * Customer self-reports a cycle as paid → `pending`, awaiting the business's
+   * approval. The note/paid-to carry how it was paid (e.g. cash to a member).
+   */
+  reportPayment(input: ReportPaymentInput): Promise<MembershipPayment>;
+  /** A member records a payment directly (cash at the counter) → `approved`. */
+  recordPayment(input: ReportPaymentInput & { byName: string }): Promise<MembershipPayment>;
+  /** Business approves a reported payment — the cycle now counts as paid. */
+  approvePayment(id: string, byName: string): Promise<MembershipPayment>;
+  /** Business rejects a reported payment (e.g. it never arrived). */
+  rejectPayment(id: string, byName: string): Promise<MembershipPayment>;
 }
 
 /** A manual logbook record a member jots down (an order not placed in-app). */

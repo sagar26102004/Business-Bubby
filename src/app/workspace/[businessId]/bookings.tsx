@@ -63,10 +63,6 @@ export default function WorkspaceBookingsScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: 'Appointments' }} />
 
-      <Text tone="muted" style={styles.subtitle}>
-        Customers request a date and time for your services — accept or decline, then mark them
-        completed once done.
-      </Text>
 
       <Section title={`Service requests${requests.length ? ` · ${requests.length}` : ''}`}>
         {requests.length === 0 ? (

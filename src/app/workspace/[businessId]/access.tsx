@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Employee } from '@/domain/types';
-import { offeredServices } from '@/domain/access';
+import { isManagerOrOwner, offeredServices } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import {
@@ -56,8 +56,10 @@ export default function WorkspaceAccessScreen() {
     const p: Record<string, string[]> = {};
     data.employees.forEach((e) => {
       if (!e.permissions) {
-        // No explicit list = full access today → every offered tool ticked.
-        g[e.id] = new Set(offered.map((s) => s.id));
+        // No explicit list → the rank-based default: managers keep every tool,
+        // staff start with none (mirrors canAccessService).
+        const all = (e.level ?? 'staff') === 'manager';
+        g[e.id] = all ? new Set(offered.map((s) => s.id)) : new Set();
         p[e.id] = [];
       } else {
         g[e.id] = new Set(e.permissions.filter((id) => offeredIds.has(id)));
@@ -72,11 +74,15 @@ export default function WorkspaceAccessScreen() {
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" />;
 
-  if (currentUser?.id !== data.business.ownerId) {
+  const meEmployee = data.employees.find((e) => e.userId && e.userId === currentUser?.id);
+  if (!isManagerOrOwner(data.business, meEmployee, currentUser?.id)) {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Access' }} />
-        <EmptyView title="Owners only" subtitle="Only the owner can set who accesses what." />
+        <EmptyView
+          title="Owners & managers only"
+          subtitle="Only the owner and managers can set who accesses what."
+        />
       </Screen>
     );
   }
@@ -122,12 +128,6 @@ export default function WorkspaceAccessScreen() {
   return (
     <Screen scroll>
       <Stack.Screen options={{ title: 'Access' }} />
-
-      <Text tone="muted" style={styles.subtitle}>
-        Choose which tools each team member can open. You always have access to everything. Turning
-        a tool off hides it for that member — it doesn’t delete anything. Who takes calls and
-        replies to chats is set separately in Manage.
-      </Text>
 
       {withAccounts.length === 0 ? (
         <Card style={styles.card}>

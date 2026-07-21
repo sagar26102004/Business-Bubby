@@ -6,13 +6,16 @@
  * something that needs an account (browsing a saved place, listing a business).
  */
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useAuth } from '@/data/DataProvider';
 import { Button, Input, Screen, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
 
 type Mode = 'signin' | 'signup';
+
+/** Count the digits in a phone number, ignoring spaces, +, dashes, etc. */
+const phoneDigits = (value: string) => value.replace(/\D/g, '').length;
 
 export default function SignInScreen() {
   const router = useRouter();
@@ -21,9 +24,12 @@ export default function SignInScreen() {
 
   const [mode, setMode] = useState<Mode>('signin');
   const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  // Inline validation message. Alert.alert is a no-op on web (our preview), so
+  // errors are shown on the screen instead of a native popup.
+  const [error, setError] = useState<string | null>(null);
 
   const done = () => {
     if (router.canGoBack()) router.back();
@@ -32,23 +38,28 @@ export default function SignInScreen() {
 
   const submit = async () => {
     if (mode === 'signup' && name.trim().length < 2) {
-      Alert.alert('Name required', 'Please enter your name to sign up.');
+      setError('Please enter your name to sign up.');
       return;
     }
-    if (email.trim().length < 3) {
-      Alert.alert('Email required', 'Please enter your email.');
+    if (phoneDigits(phone) < 10) {
+      setError('Please enter a valid phone number (at least 10 digits).');
       return;
     }
+    if (mode === 'signin' && password.trim().length === 0) {
+      setError('Please enter your password to sign in.');
+      return;
+    }
+    setError(null);
     setBusy(true);
     try {
       if (mode === 'signin') {
-        await signIn(email.trim(), password);
+        await signIn(phone.trim(), password);
       } else {
-        await signUp({ name: name.trim(), email: email.trim() });
+        await signUp({ name: name.trim(), phone: phone.trim() });
       }
       done();
     } catch (err) {
-      Alert.alert('Could not continue', err instanceof Error ? err.message : 'Try again.');
+      setError(err instanceof Error ? err.message : 'Could not continue. Try again.');
     } finally {
       setBusy(false);
     }
@@ -73,24 +84,44 @@ export default function SignInScreen() {
       </View>
 
       {isSignup ? (
-        <Input label="Name" placeholder="Your name" value={name} onChangeText={setName} />
+        <Input
+          label="Name"
+          placeholder="Your name"
+          value={name}
+          onChangeText={(t) => {
+            setName(t);
+            if (error) setError(null);
+          }}
+        />
       ) : null}
       <Input
-        label="Email"
-        placeholder="you@example.com"
-        value={email}
-        onChangeText={setEmail}
+        label="Phone number"
+        placeholder="e.g. 98765 43210"
+        value={phone}
+        onChangeText={(t) => {
+          setPhone(t);
+          if (error) setError(null);
+        }}
         autoCapitalize="none"
-        keyboardType="email-address"
+        keyboardType="phone-pad"
         autoCorrect={false}
       />
       <Input
         label="Password"
         placeholder="••••••••"
         value={password}
-        onChangeText={setPassword}
+        onChangeText={(t) => {
+          setPassword(t);
+          if (error) setError(null);
+        }}
         secureTextEntry
       />
+
+      {error ? (
+        <Text tone="danger" variant="label" style={styles.error}>
+          {error}
+        </Text>
+      ) : null}
 
       <Button
         title={isSignup ? 'Create account' : 'Sign in'}
@@ -107,7 +138,10 @@ export default function SignInScreen() {
           tone="accent"
           weight="semibold"
           variant="label"
-          onPress={() => setMode(isSignup ? 'signin' : 'signup')}
+          onPress={() => {
+            setMode(isSignup ? 'signin' : 'signup');
+            setError(null);
+          }}
         >
           {isSignup ? 'Sign in' : 'Create account'}
         </Text>
@@ -123,6 +157,7 @@ const styles = StyleSheet.create({
   logo: { fontSize: 40 },
   heading: { marginTop: spacing.sm, textAlign: 'center' },
   sub: { marginTop: spacing.sm, textAlign: 'center' },
+  error: { marginTop: spacing.md, textAlign: 'center' },
   submit: { marginTop: spacing.sm },
   switchRow: {
     flexDirection: 'row',

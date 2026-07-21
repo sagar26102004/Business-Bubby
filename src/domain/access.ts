@@ -99,23 +99,37 @@ export function offeredServices(business: Business): ServiceDef[] {
   return SERVICE_CATALOG.filter((s) => !s.module || hasModule(business, s.module));
 }
 
+/** Owner or a manager — the roles that see every tool by default. */
+export function isManagerOrOwner(
+  business: Pick<Business, 'ownerId'>,
+  employee: Pick<Employee, 'level'> | undefined,
+  viewerId: string | undefined,
+): boolean {
+  if (!viewerId) return false;
+  if (viewerId === business.ownerId) return true;
+  return (employee?.level ?? 'staff') === 'manager';
+}
+
 /**
  * May this viewer open a given workspace service?
  *  - The owner always can.
  *  - A non-member never can.
- *  - A member with NO explicit permission list keeps full access (legacy /
- *    freshly-added members work until the owner narrows them).
+ *  - A MANAGER with no explicit permission list keeps full access — managers
+ *    are trusted with every tool until the owner narrows them.
+ *  - A STAFF member with no explicit list gets NOTHING: a freshly-added driver
+ *    or helper opens the workspace to a blank slate until the owner grants them
+ *    the tools they need. (This is the safe default — least privilege.)
  *  - Otherwise the service must be in their granted list.
  */
 export function canAccessService(
   business: Pick<Business, 'ownerId'>,
-  employee: Pick<Employee, 'permissions'> | undefined,
+  employee: Pick<Employee, 'permissions' | 'level'> | undefined,
   viewerId: string | undefined,
   serviceId: ServiceId,
 ): boolean {
   if (!viewerId) return false;
   if (viewerId === business.ownerId) return true;
   if (!employee) return false;
-  if (!employee.permissions) return true;
+  if (!employee.permissions) return (employee.level ?? 'staff') === 'manager';
   return employee.permissions.includes(serviceId);
 }

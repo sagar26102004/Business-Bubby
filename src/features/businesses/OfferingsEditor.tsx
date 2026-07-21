@@ -47,6 +47,14 @@ export interface OfferingsEditorProps<T extends OfferingItem> {
   addLabel?: string;
   /** Show free-text Category / Subcategory boxes for each item (menus). */
   withGroups?: boolean;
+  /** Placeholder inside the Category box (withGroups) — tune per use. */
+  categoryPlaceholder?: string;
+  /** Placeholder inside the Subcategory box (withGroups). */
+  subcategoryPlaceholder?: string;
+  /** Show an optional multi-line Description box for each item (services). */
+  withDescription?: boolean;
+  /** Placeholder inside the Description box (withDescription). */
+  descriptionPlaceholder?: string;
   /** Catalog chips — each added item carries the picked one (rentals). */
   categoryOptions?: OfferingCategoryOption[];
   /** Label above the category chips, e.g. "What kind of thing is it?". */
@@ -61,12 +69,17 @@ export function OfferingsEditor<T extends OfferingItem>({
   namePlaceholder = 'Name',
   addLabel = 'Add',
   withGroups = false,
+  categoryPlaceholder = 'e.g. Starters, Beverages',
+  subcategoryPlaceholder = 'e.g. Veg, Non-veg',
+  withDescription = false,
+  descriptionPlaceholder = 'What it includes (optional)',
   categoryOptions,
   categoryOptionsLabel = 'Category',
   withImage = false,
 }: OfferingsEditorProps<T>) {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
+  const [description, setDescription] = useState('');
   const [images, setImages] = useState<string[]>([]);
   // Groups persist between adds — a menu section goes in without retyping.
   const [category, setCategory] = useState('');
@@ -80,6 +93,7 @@ export function OfferingsEditor<T extends OfferingItem>({
     ({
       name: rawName.trim(),
       price: toPriceLabel(rawPrice),
+      description: withDescription ? description.trim() || undefined : undefined,
       images: withImage && images.length > 0 ? images : undefined,
       category: withGroups ? category.trim() || undefined : undefined,
       subcategory: withGroups ? subcategory.trim() || undefined : undefined,
@@ -94,6 +108,7 @@ export function OfferingsEditor<T extends OfferingItem>({
     onChange([...value, buildItem(name, price)]);
     setName('');
     setPrice('');
+    setDescription('');
     setImages([]);
     setError(null);
   };
@@ -137,8 +152,13 @@ export function OfferingsEditor<T extends OfferingItem>({
               <View style={styles.itemName}>
                 <Text>{item.name}</Text>
                 {groupLabel(item) ? (
-                  <Text variant="caption" tone="muted">
+                  <Text variant="caption" tone="brand">
                     {groupLabel(item)}
+                  </Text>
+                ) : null}
+                {item.description ? (
+                  <Text variant="caption" tone="muted" numberOfLines={2}>
+                    {item.description}
                   </Text>
                 ) : null}
               </View>
@@ -180,7 +200,7 @@ export function OfferingsEditor<T extends OfferingItem>({
           <View style={styles.nameField}>
             <Input
               label="Category (optional)"
-              placeholder="e.g. Starters, Beverages"
+              placeholder={categoryPlaceholder}
               value={category}
               onChangeText={setCategory}
             />
@@ -188,7 +208,7 @@ export function OfferingsEditor<T extends OfferingItem>({
           <View style={styles.nameField}>
             <Input
               label="Subcategory (optional)"
-              placeholder="e.g. Veg, Non-veg"
+              placeholder={subcategoryPlaceholder}
               value={subcategory}
               onChangeText={setSubcategory}
             />
@@ -218,6 +238,16 @@ export function OfferingsEditor<T extends OfferingItem>({
           />
         </View>
       </View>
+      {withDescription ? (
+        <View style={styles.descField}>
+          <Input
+            placeholder={descriptionPlaceholder}
+            value={description}
+            onChangeText={setDescription}
+            multiline
+          />
+        </View>
+      ) : null}
       {withImage ? (
         <PhotosField label="Photos (optional)" value={images} onChange={setImages} />
       ) : null}
@@ -242,6 +272,7 @@ const styles = StyleSheet.create({
   itemName: { flex: 1 },
   thumb: { width: 40, height: 40, borderRadius: radius.sm },
   inputs: { flexDirection: 'row', gap: spacing.md },
+  descField: { marginTop: spacing.sm },
   error: { marginBottom: spacing.sm },
   groupsHint: { marginBottom: spacing.sm },
   nameField: { flex: 1 },

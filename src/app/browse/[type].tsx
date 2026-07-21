@@ -19,6 +19,7 @@ import { getIntent, intentMatches } from '@/domain/intents';
 import { hasTag } from '@/domain/tags';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
+import { useResponsive } from '@/lib/useResponsive';
 import { EmptyView, ErrorView, LoadingView, Tag } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
@@ -35,6 +36,7 @@ export default function BrowseIntentScreen() {
   const repos = useRepositories();
   const colors = useColors();
   const router = useRouter();
+  const { cardColumns, gridMaxWidth, centered } = useResponsive();
 
   const intent = getIntent(params.type);
   const sub = params.sub || undefined;
@@ -96,11 +98,19 @@ export default function BrowseIntentScreen() {
 
   return (
     <FlatList
+      // Keyed to remount when the responsive column count changes.
+      key={`cols-${cardColumns}`}
       data={businesses}
       keyExtractor={(b) => b.id}
-      renderItem={({ item }) => <BusinessCard business={item} />}
+      numColumns={cardColumns}
+      columnWrapperStyle={cardColumns > 1 ? styles.column : undefined}
+      renderItem={({ item }) => (
+        <View style={cardColumns > 1 ? styles.gridItem : undefined}>
+          <BusinessCard business={item} />
+        </View>
+      )}
       style={[styles.screen, { backgroundColor: colors.background }]}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, centered(gridMaxWidth)]}
       keyboardShouldPersistTaps="handled"
       ListHeaderComponent={
         <View>
@@ -139,6 +149,9 @@ export default function BrowseIntentScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  // Multi-column grid on wide screens: gap between columns, each card fills its cell.
+  column: { gap: spacing.md },
+  gridItem: { flex: 1 },
   searchRow: { marginTop: spacing.md },
   chipScroll: { marginBottom: spacing.lg },
   chipRow: { gap: spacing.sm, paddingTop: spacing.md, paddingRight: spacing.lg },

@@ -28,6 +28,12 @@ function kindIcon(kind: AppNotification['kind']): string {
     case 'product_question':
     case 'product_reply':
       return '🏷️';
+    case 'enroll_requested':
+    case 'enroll_update':
+      return '🎫';
+    case 'payment_reported':
+    case 'payment_update':
+      return '💳';
     default:
       return '📅';
   }
@@ -85,6 +91,26 @@ export default function ChatsScreen() {
       n.productId
     ) {
       router.push(`/product/${n.businessId}/${n.productId}`);
+      return;
+    }
+    // An enrol request → the workspace Members section to accept it; the
+    // customer's confirmation/decline → their Subscriptions tab.
+    if (n.kind === 'enroll_requested' && n.businessId) {
+      router.push(`/workspace/${n.businessId}/members`);
+      return;
+    }
+    if (n.kind === 'enroll_update') {
+      router.push('/subscriptions');
+      return;
+    }
+    // A reported payment → the member's detail to approve it; the customer's
+    // approval/decline → their Subscriptions tab.
+    if (n.kind === 'payment_reported' && n.membershipId) {
+      router.push(`/member/${n.membershipId}`);
+      return;
+    }
+    if (n.kind === 'payment_update') {
+      router.push('/subscriptions');
       return;
     }
     if (!n.businessId) return;

@@ -81,14 +81,6 @@ export default function WorkspaceOrdersScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: vocab.requestsTitle }} />
 
-      <Text tone="muted" style={styles.subtitle}>
-        {pendingOrders.length > 0
-          ? `${pendingOrders.length} new ${vocab.requestNoun}${pendingOrders.length === 1 ? '' : 's'} waiting for a response.`
-          : openProposals.length > 0
-            ? `${openProposals.length} proposal${openProposals.length === 1 ? '' : 's'} awaiting the customer.`
-            : `No ${vocab.requestNoun}s waiting for a response.`}
-      </Text>
-
       {/* Members can take an order at the counter, on a customer's behalf. */}
       <Button
         title={`➕ Take a ${vocab.requestNoun}`}

@@ -22,6 +22,7 @@ import type {
   LocationShare,
   LogEntry,
   Membership,
+  MembershipPayment,
   MonthlySpend,
   Order,
   PaymentStatus,
@@ -49,8 +50,10 @@ import type {
   ChatThreadSummary,
   CustomerRepository,
   CustomerSummary,
+  AcceptEnrollInput,
   CustomerThreadSummary,
   EmployeeRepository,
+  EnrollRequestInput,
   LiveVehicle,
   LogbookRepository,
   MembershipRepository,
@@ -61,6 +64,7 @@ import type {
   NewBusinessInput,
   NewEmployeeInput,
   NewMembershipInput,
+  ReportPaymentInput,
   NewOrderInput,
   NewOrderLineInput,
   NewProductMessageInput,
@@ -81,6 +85,7 @@ import type {
   UserRepository,
 } from '@/data/repositories';
 import { haversineKm } from '@/lib/geo';
+import { getDeviceLocation } from '@/lib/location';
 import { formatMoney, parsePrice } from '@/lib/money';
 import {
   CURRENT_POINT,
@@ -98,27 +103,47 @@ import {
   seedVehicles,
 } from './seed';
 
-// Mutable session state, seeded from the demo data.
+/**
+ * TESTING SWITCH — start the app EMPTY.
+ *
+ * `false` (current) loads NO demo content: no businesses, employees, orders,
+ * stalls, reviews, memberships, logbook entries, vehicles, tracking, or B2B
+ * chat. Handy for testing flows from a clean slate. The demo USER accounts and
+ * saved LOCATIONS are always kept — otherwise sign-in and the location picker
+ * would break.
+ *
+ * Nothing is deleted: all the seed data still lives in `./seed.ts`. Flip this
+ * back to `true` (or just ask) to load the full Indore demo set again.
+ */
+const SEED_CONTENT = false;
+
+/** Clone-seed an array only when SEED_CONTENT is on; otherwise start empty. */
+const seed = <T>(rows: T[]): T[] => (SEED_CONTENT ? rows.map((r) => ({ ...r })) : []);
+
+// Mutable session state. Users + places always load (sign-in + location need
+// them); all other content is gated behind SEED_CONTENT above.
 const users: User[] = seedUsers.map((u) => ({ ...u }));
-const memberships: Membership[] = seedMemberships.map((m) => ({ ...m }));
-const bizMessages: BizChatMessage[] = seedBizChat.map((m) => ({ ...m }));
-const employees: Employee[] = seedEmployees.map((e) => ({ ...e }));
-const businesses: Business[] = seedBusinesses.map((b) => ({ ...b }));
 const places: SavedPlace[] = seedPlaces.map((p) => ({ ...p }));
+const memberships: Membership[] = seed(seedMemberships);
+// Payments logged against membership cycles — always starts empty (no seed).
+const membershipPayments: MembershipPayment[] = [];
+const bizMessages: BizChatMessage[] = seed(seedBizChat);
+const employees: Employee[] = seed(seedEmployees);
+const businesses: Business[] = seed(seedBusinesses);
 const messages: ChatMessage[] = [];
 const notifications: AppNotification[] = [];
 const bookings: Booking[] = [];
 const orders: Order[] = [];
 const bills: Bill[] = [];
 const calls: Call[] = [];
-const reviews: Review[] = seedReviews.map((r) => ({ ...r }));
-const productMessages: ProductMessage[] = seedProductMessages.map((m) => ({ ...m }));
-const vehicles: Vehicle[] = seedVehicles.map((v) => ({ ...v }));
-const trackedItems: TrackedItem[] = seedTrackedItems.map((t) => ({ ...t }));
-const locationShares: LocationShare[] = seedLocationShares.map((s) => ({ ...s }));
+const reviews: Review[] = seed(seedReviews);
+const productMessages: ProductMessage[] = seed(seedProductMessages);
+const vehicles: Vehicle[] = seed(seedVehicles);
+const trackedItems: TrackedItem[] = seed(seedTrackedItems);
+const locationShares: LocationShare[] = seed(seedLocationShares);
 // The logbook stores only MANUAL records; order entries are derived live on
 // read (see MockLogbookRepository), so every order is always in the book.
-const logEntries: LogEntry[] = seedLogEntries.map((l) => ({ ...l }));
+const logEntries: LogEntry[] = seed(seedLogEntries);
 
 /** Push a notification (used by chat + bookings). */
 function notify(n: Omit<AppNotification, 'id' | 'read' | 'createdAt'>): void {
@@ -550,7 +575,7 @@ class MockAuthRepository implements AuthRepository {
     const user: User = {
       id: nextId('u'),
       name: input.name.trim() || 'New user',
-      email: input.email.trim() || undefined,
+      phone: input.phone.trim() || undefined,
       isProfilePublic: false,
     };
     users.push(user);
@@ -573,11 +598,18 @@ class MockAuthRepository implements AuthRepository {
 }
 
 class MockPlacesRepository implements PlacesRepository {
+  // Overlay the real device GPS fix onto the seeded "current" place. Falls back
+  // to the seed coordinate when permission is denied / unavailable.
+  private async withDeviceLocation(place: SavedPlace): Promise<SavedPlace> {
+    if (place.kind !== 'current') return clone(place);
+    const point = await getDeviceLocation();
+    return point ? { ...clone(place), point } : clone(place);
+  }
+
   async getCurrentPlace(): Promise<SavedPlace> {
     await delay(40);
-    // Mocked device location until GPS/maps is wired up.
     const current = places.find((p) => p.kind === 'current') ?? places[0];
-    return clone(current);
+    return this.withDeviceLocation(current);
   }
 
   async listPlaces(): Promise<SavedPlace[]> {
@@ -586,7 +618,7 @@ class MockPlacesRepository implements PlacesRepository {
     const ordered = [...places].sort((a, b) =>
       a.kind === 'current' ? -1 : b.kind === 'current' ? 1 : 0,
     );
-    return ordered.map(clone);
+    return Promise.all(ordered.map((p) => this.withDeviceLocation(p)));
   }
 }
 
@@ -1809,6 +1841,9 @@ function advanceShares(): void {
   });
 }
 
+/** Number plates, normalised for comparison: only letters/digits, upper-cased. */
+const canonicalReg = (reg?: string): string => (reg ?? '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+
 class MockTrackingRepository implements TrackingRepository {
   async listVehicles(businessId: string): Promise<Vehicle[]> {
     await delay(70);
@@ -1817,6 +1852,19 @@ class MockTrackingRepository implements TrackingRepository {
 
   async addVehicle(input: NewVehicleInput): Promise<Vehicle> {
     await delay(90);
+    // No two vehicles in the same fleet share a number plate. Compare a
+    // canonical form (strip spaces/dashes, upper-case) so "MP09 AB 1234" and
+    // "mp09-ab-1234" count as the same plate.
+    const reg = input.registrationNumber?.trim();
+    if (reg) {
+      const canonical = canonicalReg(reg);
+      const clash = vehicles.some(
+        (v) => v.businessId === input.businessId && canonicalReg(v.registrationNumber) === canonical,
+      );
+      if (clash) {
+        throw new Error(`A vehicle with number ${reg} is already in this fleet.`);
+      }
+    }
     // Pet name is optional — the number plate (or kind) names the vehicle.
     const name =
       input.name?.trim() || input.registrationNumber?.trim() || getVehicleKind(input.kind).name;
@@ -1874,6 +1922,7 @@ class MockTrackingRepository implements TrackingRepository {
       customerId: input.customerId,
       customerName: input.customerName,
       vehicleId: input.vehicleId,
+      membershipId: input.membershipId,
       note: input.note,
       createdAt: new Date().toISOString(),
     };
@@ -2020,6 +2069,38 @@ function addMonths(iso: string | Date, n: number): Date {
   return d;
 }
 
+/** Two cycle timestamps land in the same billing cycle (same month + year). */
+function sameCycle(a: string, b: string): boolean {
+  const da = new Date(a);
+  const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth();
+}
+
+/** Build a membership's current-cycle payment standing from its logged payments. */
+function paymentSummary(membershipId: string, periodStart: Date): Membership['payment'] {
+  const mine = membershipPayments.filter((p) => p.membershipId === membershipId);
+  const approved = mine.filter((p) => p.status === 'approved');
+  const cyclePays = mine.filter((p) => sameCycle(p.periodStart, periodStart.toISOString()));
+  const pending = cyclePays.find((p) => p.status === 'pending');
+  const status: 'paid' | 'pending' | 'unpaid' = cyclePays.some((p) => p.status === 'approved')
+    ? 'paid'
+    : pending
+      ? 'pending'
+      : 'unpaid';
+  const daysOverdue =
+    status === 'unpaid'
+      ? Math.max(0, Math.floor((Date.now() - periodStart.getTime()) / 86_400_000))
+      : 0;
+  return {
+    status,
+    periodStart: periodStart.toISOString(),
+    daysOverdue,
+    monthsPaid: approved.length,
+    totalPaid: approved.reduce((sum, p) => sum + p.amount, 0),
+    pendingPaymentId: pending?.id,
+  };
+}
+
 class MockMembershipRepository implements MembershipRepository {
   /** Fill in the current billing cycle + live business name on the way out. */
   private hydrate(m: Membership): Membership {
@@ -2028,27 +2109,36 @@ class MockMembershipRepository implements MembershipRepository {
     while (m.status === 'active' && addMonths(renewed, 1) <= now) {
       renewed = addMonths(renewed, 1);
     }
-    return {
+    const base: Membership = {
       ...m,
       businessName: businesses.find((b) => b.id === m.businessId)?.name ?? m.businessName,
       renewedAt: renewed.toISOString(),
       expiresAt: addMonths(renewed, 1).toISOString(),
     };
+    // Only active plans carry a live payment standing.
+    if (m.status !== 'active') return base;
+    return { ...base, payment: paymentSummary(m.id, renewed) };
   }
 
   async listForCustomer(customerId: string): Promise<Membership[]> {
     await delay(80);
     return memberships
-      .filter((m) => m.customerId === customerId && m.status === 'active')
+      .filter((m) => m.customerId === customerId && m.status === 'active' && !m.standalone)
       .map((m) => this.hydrate(m))
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   }
 
   async monthlySpend(customerId: string): Promise<MonthlySpend[]> {
     await delay(80);
-    // Cancelled plans still count for the months they actually ran.
+    // Cancelled plans still count for the months they actually ran; pending
+    // requests and rejected ones never billed, so they're left out.
     const mine = memberships
-      .filter((m) => m.customerId === customerId)
+      .filter(
+        (m) =>
+          m.customerId === customerId &&
+          !m.standalone &&
+          (m.status === 'active' || m.status === 'cancelled'),
+      )
       .map((m) => this.hydrate(m));
     if (mine.length === 0) return [];
     const now = new Date();
@@ -2091,6 +2181,28 @@ class MockMembershipRepository implements MembershipRepository {
       .sort((a, b) => a.customerName.localeCompare(b.customerName));
   }
 
+  async listCancelledForBusiness(businessId: string): Promise<Membership[]> {
+    await delay(80);
+    return memberships
+      .filter((m) => m.businessId === businessId && m.status === 'cancelled')
+      .map((m) => this.hydrate(m))
+      .sort((a, b) => (b.endedAt ?? '').localeCompare(a.endedAt ?? ''));
+  }
+
+  async getById(id: string): Promise<Membership | null> {
+    await delay(60);
+    const m = memberships.find((x) => x.id === id);
+    return m ? this.hydrate(m) : null;
+  }
+
+  async listRequests(businessId: string): Promise<Membership[]> {
+    await delay(80);
+    return memberships
+      .filter((m) => m.businessId === businessId && m.status === 'pending')
+      .map((m) => this.hydrate(m))
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+  }
+
   async add(input: NewMembershipInput): Promise<Membership> {
     await delay();
     const business = businesses.find((b) => b.id === input.businessId);
@@ -2113,6 +2225,89 @@ class MockMembershipRepository implements MembershipRepository {
     return { ...membership };
   }
 
+  async request(input: EnrollRequestInput): Promise<Membership> {
+    await delay();
+    const business = businesses.find((b) => b.id === input.businessId);
+    if (!business) throw new Error(`Business ${input.businessId} not found`);
+    // A pending request carries no billing yet — the business sets the plan
+    // name and price when they accept. Dates are placeholders until then.
+    const now = new Date();
+    const membership: Membership = {
+      id: nextId('m'),
+      businessId: input.businessId,
+      businessName: business.name,
+      customerId: input.customerId,
+      customerName: input.customerName,
+      planName: input.requestedPlan?.trim() || 'Enrolment request',
+      requestedPlan: input.requestedPlan?.trim() || undefined,
+      requestedPrice: input.requestedPrice,
+      enrolleeName: input.enrolleeName?.trim() || undefined,
+      pricePerMonth: 0,
+      startedAt: now.toISOString(),
+      renewedAt: now.toISOString(),
+      expiresAt: addMonths(now, 1).toISOString(),
+      status: 'pending',
+    };
+    memberships.push(membership);
+    // "‹customer›" or "‹customer› (for ‹child›)" when the plan is for someone else.
+    const who = input.enrolleeName?.trim()
+      ? `${input.customerName} (for ${input.enrolleeName.trim()})`
+      : input.customerName;
+    notify({
+      recipientId: business.ownerId,
+      kind: 'enroll_requested',
+      title: `New enrolment request · ${business.name}`,
+      body: input.requestedPlan?.trim()
+        ? `${who} wants to enrol: “${input.requestedPlan.trim()}”.`
+        : `${who} wants to enrol — set their plan to confirm.`,
+      businessId: business.id,
+    });
+    return { ...membership };
+  }
+
+  async accept(id: string, input: AcceptEnrollInput): Promise<Membership> {
+    await delay();
+    const membership = memberships.find((m) => m.id === id);
+    if (!membership) throw new Error(`Membership ${id} not found`);
+    if (membership.status !== 'pending') {
+      throw new Error('This request was already responded to.');
+    }
+    const started = new Date();
+    membership.planName = input.planName;
+    membership.pricePerMonth = input.pricePerMonth;
+    membership.startedAt = started.toISOString();
+    membership.renewedAt = started.toISOString();
+    membership.expiresAt = addMonths(started, 1).toISOString();
+    membership.status = 'active';
+    notify({
+      recipientId: membership.customerId,
+      kind: 'enroll_update',
+      title: `Enrolment confirmed · ${membership.businessName}`,
+      body: `You're enrolled in ${input.planName} — ${formatMoney(input.pricePerMonth)}/mo. See it in your Subscriptions.`,
+      businessId: membership.businessId,
+    });
+    return this.hydrate(membership);
+  }
+
+  async reject(id: string): Promise<Membership> {
+    await delay();
+    const membership = memberships.find((m) => m.id === id);
+    if (!membership) throw new Error(`Membership ${id} not found`);
+    if (membership.status !== 'pending') {
+      throw new Error('This request was already responded to.');
+    }
+    membership.status = 'rejected';
+    membership.endedAt = new Date().toISOString();
+    notify({
+      recipientId: membership.customerId,
+      kind: 'enroll_update',
+      title: `Enrolment declined · ${membership.businessName}`,
+      body: `${membership.businessName} couldn't take your enrolment request right now.`,
+      businessId: membership.businessId,
+    });
+    return this.hydrate(membership);
+  }
+
   async cancel(id: string): Promise<Membership> {
     await delay();
     const membership = memberships.find((m) => m.id === id);
@@ -2121,26 +2316,262 @@ class MockMembershipRepository implements MembershipRepository {
     membership.endedAt = new Date().toISOString();
     return this.hydrate(membership);
   }
+
+  async reenroll(id: string): Promise<Membership> {
+    await delay();
+    const membership = memberships.find((m) => m.id === id);
+    if (!membership) throw new Error(`Membership ${id} not found`);
+    // Fresh billing cycle from today; keep the plan name and price.
+    const started = new Date();
+    membership.status = 'active';
+    membership.startedAt = started.toISOString();
+    membership.renewedAt = started.toISOString();
+    membership.expiresAt = addMonths(started, 1).toISOString();
+    membership.endedAt = undefined;
+    if (!membership.standalone) {
+      notify({
+        recipientId: membership.customerId,
+        kind: 'enroll_update',
+        title: `Re-enrolled · ${membership.businessName}`,
+        body: `You're back on ${membership.planName} — ${formatMoney(membership.pricePerMonth)}/mo. See it in your Subscriptions.`,
+        businessId: membership.businessId,
+      });
+    }
+    return this.hydrate(membership);
+  }
+
+  async setStartDate(id: string, startedAt: string): Promise<Membership> {
+    await delay();
+    const membership = memberships.find((m) => m.id === id);
+    if (!membership) throw new Error(`Membership ${id} not found`);
+    const when = new Date(startedAt);
+    if (isNaN(when.getTime())) throw new Error('Enter a valid date.');
+    if (when.getTime() > Date.now()) throw new Error('The enrolment date can’t be in the future.');
+    membership.startedAt = when.toISOString();
+    // The current cycle is recomputed from startedAt on hydrate.
+    return this.hydrate(membership);
+  }
+
+  async reassign(id: string, toCustomerId: string, toCustomerName: string): Promise<Membership> {
+    await delay();
+    const membership = memberships.find((m) => m.id === id);
+    if (!membership) throw new Error(`Membership ${id} not found`);
+    // Keep the enrollee identifiable under the new parent: a membership with no
+    // "for ‹child›" label carries its old holder's name across as the enrollee.
+    if (!membership.enrolleeName && membership.customerName) {
+      membership.enrolleeName = membership.customerName;
+    }
+    membership.customerId = toCustomerId;
+    membership.customerName = toCustomerName;
+    membership.standalone = false;
+    if (membership.status === 'active') {
+      notify({
+        recipientId: toCustomerId,
+        kind: 'enroll_update',
+        title: `Plan moved to your account · ${membership.businessName}`,
+        body: `“${membership.planName}”${
+          membership.enrolleeName ? ` for ${membership.enrolleeName}` : ''
+        } is now on your account — ${formatMoney(membership.pricePerMonth)}/mo. See it in your Subscriptions.`,
+        businessId: membership.businessId,
+      });
+    }
+    return this.hydrate(membership);
+  }
+
+  async detach(id: string): Promise<Membership> {
+    await delay();
+    const membership = memberships.find((m) => m.id === id);
+    if (!membership) throw new Error(`Membership ${id} not found`);
+    // Becomes its own member: the enrollee's name is now the member's own name,
+    // with a non-user id so it bills no one and leaves every Subscriptions tab.
+    membership.customerName = membership.enrolleeName || membership.customerName;
+    membership.customerId = `standalone:${membership.id}`;
+    membership.enrolleeName = undefined;
+    membership.standalone = true;
+    return this.hydrate(membership);
+  }
+
+  async renameEnrollee(id: string, name: string): Promise<Membership> {
+    await delay();
+    const membership = memberships.find((m) => m.id === id);
+    if (!membership) throw new Error(`Membership ${id} not found`);
+    const clean = name.trim();
+    if (!clean) throw new Error('Enter a name.');
+    // A nested child edits its enrollee label; a standalone member (or a plain
+    // self-enrolment) edits its own name.
+    if (membership.enrolleeName && !membership.standalone) {
+      membership.enrolleeName = clean;
+    } else {
+      membership.customerName = clean;
+    }
+    return this.hydrate(membership);
+  }
+
+  async listPayments(membershipId: string): Promise<MembershipPayment[]> {
+    await delay(80);
+    return membershipPayments
+      .filter((p) => p.membershipId === membershipId)
+      .map(clone)
+      .sort((a, b) => b.periodStart.localeCompare(a.periodStart) || b.reportedAt.localeCompare(a.reportedAt));
+  }
+
+  async reportPayment(input: ReportPaymentInput): Promise<MembershipPayment> {
+    await delay();
+    const m = memberships.find((x) => x.id === input.membershipId);
+    if (!m) throw new Error(`Membership ${input.membershipId} not found`);
+    // One live payment per cycle — block a second report while one stands.
+    const live = membershipPayments.find(
+      (p) =>
+        p.membershipId === m.id &&
+        sameCycle(p.periodStart, input.periodStart) &&
+        p.status !== 'rejected',
+    );
+    if (live) {
+      throw new Error(
+        live.status === 'approved' ? 'This month is already paid.' : 'This month is already reported.',
+      );
+    }
+    const pay: MembershipPayment = {
+      id: nextId('pay'),
+      membershipId: m.id,
+      businessId: m.businessId,
+      customerId: m.customerId,
+      periodStart: input.periodStart,
+      amount: m.pricePerMonth,
+      status: 'pending',
+      method: input.method,
+      paidToName: input.paidToName?.trim() || undefined,
+      note: input.note?.trim() || undefined,
+      reportedBy: 'customer',
+      reportedByName: m.customerName,
+      reportedAt: new Date().toISOString(),
+    };
+    membershipPayments.push(pay);
+    const business = businesses.find((b) => b.id === m.businessId);
+    if (business) {
+      notify({
+        recipientId: business.ownerId,
+        kind: 'payment_reported',
+        title: `Payment reported · ${business.name}`,
+        body: `${m.customerName}${m.enrolleeName ? ` (for ${m.enrolleeName})` : ''} says they paid ${formatMoney(
+          m.pricePerMonth,
+        )} for ${m.planName}. Approve it.`,
+        businessId: business.id,
+        membershipId: m.id,
+      });
+    }
+    return clone(pay);
+  }
+
+  async recordPayment(input: ReportPaymentInput & { byName: string }): Promise<MembershipPayment> {
+    await delay();
+    const m = memberships.find((x) => x.id === input.membershipId);
+    if (!m) throw new Error(`Membership ${input.membershipId} not found`);
+    const live = membershipPayments.find(
+      (p) =>
+        p.membershipId === m.id &&
+        sameCycle(p.periodStart, input.periodStart) &&
+        p.status === 'approved',
+    );
+    if (live) throw new Error('This month is already paid.');
+    const now = new Date().toISOString();
+    const pay: MembershipPayment = {
+      id: nextId('pay'),
+      membershipId: m.id,
+      businessId: m.businessId,
+      customerId: m.customerId,
+      periodStart: input.periodStart,
+      amount: m.pricePerMonth,
+      status: 'approved',
+      method: input.method,
+      paidToName: input.paidToName?.trim() || undefined,
+      note: input.note?.trim() || undefined,
+      reportedBy: 'business',
+      reportedByName: input.byName,
+      reportedAt: now,
+      decidedByName: input.byName,
+      decidedAt: now,
+    };
+    membershipPayments.push(pay);
+    // Let the customer know it's on record (skip standalone — no account).
+    if (!m.standalone) {
+      notify({
+        recipientId: m.customerId,
+        kind: 'payment_update',
+        title: `Payment recorded · ${m.businessName}`,
+        body: `${input.byName} recorded your ${formatMoney(m.pricePerMonth)} payment for ${m.planName}.`,
+        businessId: m.businessId,
+        membershipId: m.id,
+      });
+    }
+    return clone(pay);
+  }
+
+  async approvePayment(id: string, byName: string): Promise<MembershipPayment> {
+    await delay();
+    const pay = membershipPayments.find((p) => p.id === id);
+    if (!pay) throw new Error(`Payment ${id} not found`);
+    if (pay.status !== 'pending') throw new Error('This payment was already decided.');
+    pay.status = 'approved';
+    pay.decidedByName = byName;
+    pay.decidedAt = new Date().toISOString();
+    const m = memberships.find((x) => x.id === pay.membershipId);
+    if (m && !m.standalone) {
+      notify({
+        recipientId: m.customerId,
+        kind: 'payment_update',
+        title: `Payment approved · ${m.businessName}`,
+        body: `Your ${formatMoney(pay.amount)} payment for ${m.planName} was confirmed.`,
+        businessId: m.businessId,
+        membershipId: m.id,
+      });
+    }
+    return clone(pay);
+  }
+
+  async rejectPayment(id: string, byName: string): Promise<MembershipPayment> {
+    await delay();
+    const pay = membershipPayments.find((p) => p.id === id);
+    if (!pay) throw new Error(`Payment ${id} not found`);
+    if (pay.status !== 'pending') throw new Error('This payment was already decided.');
+    pay.status = 'rejected';
+    pay.decidedByName = byName;
+    pay.decidedAt = new Date().toISOString();
+    const m = memberships.find((x) => x.id === pay.membershipId);
+    if (m && !m.standalone) {
+      notify({
+        recipientId: m.customerId,
+        kind: 'payment_update',
+        title: `Payment not confirmed · ${m.businessName}`,
+        body: `${byName} couldn't confirm your ${formatMoney(pay.amount)} payment for ${m.planName}. Please check with them.`,
+        businessId: m.businessId,
+        membershipId: m.id,
+      });
+    }
+    return clone(pay);
+  }
 }
 
 export function resetMockData(): void {
+  // Users + places always come back; the rest follows the SEED_CONTENT flag.
   users.splice(0, users.length, ...seedUsers.map((u) => ({ ...u })));
-  employees.splice(0, employees.length, ...seedEmployees.map((e) => ({ ...e })));
-  businesses.splice(0, businesses.length, ...seedBusinesses.map((b) => ({ ...b })));
   places.splice(0, places.length, ...seedPlaces.map((p) => ({ ...p })));
+  employees.splice(0, employees.length, ...seed(seedEmployees));
+  businesses.splice(0, businesses.length, ...seed(seedBusinesses));
   messages.splice(0, messages.length);
   notifications.splice(0, notifications.length);
   bookings.splice(0, bookings.length);
   orders.splice(0, orders.length);
   bills.splice(0, bills.length);
   calls.splice(0, calls.length);
-  reviews.splice(0, reviews.length, ...seedReviews.map((r) => ({ ...r })));
-  memberships.splice(0, memberships.length, ...seedMemberships.map((m) => ({ ...m })));
-  bizMessages.splice(0, bizMessages.length, ...seedBizChat.map((m) => ({ ...m })));
-  vehicles.splice(0, vehicles.length, ...seedVehicles.map((v) => ({ ...v })));
-  trackedItems.splice(0, trackedItems.length, ...seedTrackedItems.map((t) => ({ ...t })));
-  locationShares.splice(0, locationShares.length, ...seedLocationShares.map((s) => ({ ...s })));
-  logEntries.splice(0, logEntries.length, ...seedLogEntries.map((l) => ({ ...l })));
+  reviews.splice(0, reviews.length, ...seed(seedReviews));
+  memberships.splice(0, memberships.length, ...seed(seedMemberships));
+  membershipPayments.splice(0, membershipPayments.length);
+  bizMessages.splice(0, bizMessages.length, ...seed(seedBizChat));
+  vehicles.splice(0, vehicles.length, ...seed(seedVehicles));
+  trackedItems.splice(0, trackedItems.length, ...seed(seedTrackedItems));
+  locationShares.splice(0, locationShares.length, ...seed(seedLocationShares));
+  logEntries.splice(0, logEntries.length, ...seed(seedLogEntries));
   currentUserId = null;
 }
 

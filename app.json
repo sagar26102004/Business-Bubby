@@ -21,6 +21,15 @@
           "cameraPermission": "Localo uses the camera so you can photograph what you're selling.",
           "photosPermission": "Localo uses your photos so you can add pictures of what you're selling."
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Localo uses your location to show businesses and stalls near you.",
+          "locationAlwaysAndWhenInUsePermission": "Localo shares a driver's live location with the owner and tracking customers while on a shift, even when the app is in the background.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
       ]
     ],
     "experiments": {
