@@ -1,0 +1,236 @@
+// Localo — Prisma schema (document model).
+//
+// This is hand-written to mirror the SQL migrations in ../../supabase/migrations,
+// which remain the schema source of truth (they own RLS + triggers). Prisma only
+// needs a typed view of the tables. To regenerate it from the live DB instead:
+//   npx prisma db pull
+// (the migrations own the DDL; never run `prisma migrate` against this DB).
+//
+// Every table stores the full domain object as `data` (jsonb) plus the scoping
+// columns RLS/queries key on. The backend connects with a privileged/direct
+// connection that BYPASSES RLS — access is enforced in src/authz.ts instead.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// profiles — one row per auth user (data = domain User). id FKs auth.users in
+// the DB; Prisma doesn't model the auth schema, so the relation is omitted here.
+model Profile {
+  id        String   @id @db.Uuid
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("profiles")
+}
+
+model Business {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  type      String
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@index([ownerId])
+  @@index([type])
+  @@map("businesses")
+}
+
+model Employee {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@index([userId])
+  @@map("employees")
+}
+
+model SavedPlace {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("saved_places")
+}
+
+model Booking {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  customerId String?  @map("customer_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@index([customerId])
+  @@map("bookings")
+}
+
+model Order {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  customerId String?  @map("customer_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@index([customerId])
+  @@map("orders")
+}
+
+model Bill {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  customerId String?  @map("customer_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@index([customerId])
+  @@map("bills")
+}
+
+model ChatMessage {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId    String   @map("business_id") @db.Uuid
+  participantId String   @map("participant_id")
+  data          Json
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, participantId])
+  @@map("chat_messages")
+}
+
+model BizChatMessage {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  threadKey      String   @map("thread_key")
+  fromBusinessId String   @map("from_business_id") @db.Uuid
+  toBusinessId   String   @map("to_business_id") @db.Uuid
+  data           Json
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([threadKey])
+  @@map("biz_chat_messages")
+}
+
+model Notification {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipientId String   @map("recipient_id") @db.Uuid
+  data        Json
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([recipientId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+model Call {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  customerId String?  @map("customer_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @map("updated_at")
+
+  @@index([businessId])
+  @@map("calls")
+}
+
+model Review {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  customerId String   @map("customer_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([businessId, customerId])
+  @@index([businessId])
+  @@map("reviews")
+}
+
+model ProductMessage {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  productId  String   @map("product_id")
+  authorId   String?  @map("author_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId, productId])
+  @@map("product_messages")
+}
+
+model Vehicle {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("vehicles")
+}
+
+model TrackedItem {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  customerId String?  @map("customer_id") @db.Uuid
+  vehicleId  String?  @map("vehicle_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@index([customerId])
+  @@map("tracked_items")
+}
+
+model LocationShare {
+  businessId String   @map("business_id") @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  data       Json
+  updatedAt  DateTime @default(now()) @map("updated_at")
+
+  @@id([businessId, userId])
+  @@map("location_shares")
+}
+
+model Membership {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  customerId String?  @map("customer_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@index([customerId])
+  @@map("memberships")
+}
+
+model MembershipPayment {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  membershipId String   @map("membership_id") @db.Uuid
+  data         Json
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([membershipId])
+  @@map("membership_payments")
+}
+
+model LogEntry {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@map("log_entries")
+}

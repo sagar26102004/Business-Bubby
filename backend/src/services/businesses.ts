@@ -1,0 +1,191 @@
+/** Businesses + stall products — ports MockBusinessRepository. */
+import type { Business, Employee, ProductItem } from '@/domain/types';
+import type { BusinessQuery, NewBusinessInput } from '@/domain/contracts';
+import { prisma } from '@/db';
+import { newUuid } from '@/lib/ids';
+import { asData, rowsData, toJson, uuidOrNull } from '@/lib/data';
+import { normalizeRole } from '@/lib/roles';
+import { haversineKm } from '@/lib/geo';
+import { notFound } from '@/http/errors';
+
+/** Stamp stable ids onto products that don't have one yet. */
+const withProductIds = (products?: ProductItem[]): ProductItem[] | undefined =>
+  products?.map((p) => (p.id ? p : { ...p, id: newUuid() }));
+
+async function allBusinesses(): Promise<Business[]> {
+  return rowsData<Business>(await prisma.business.findMany());
+}
+
+async function findBusiness(id: string): Promise<Business | null> {
+  const row = await prisma.business.findUnique({ where: { id } });
+  return row ? asData<Business>(row) : null;
+}
+
+/** Persist a business's `data` (and keep the `type` scoping column in step). */
+async function saveBusiness(business: Business): Promise<Business> {
+  await prisma.business.update({
+    where: { id: business.id },
+    data: { type: business.type, data: toJson(business) },
+  });
+  return business;
+}
+
+export const businessService = {
+  async list(query: BusinessQuery = {}): Promise<Business[]> {
+    const term = query.search?.trim().toLowerCase();
+    const { near, maxDistanceKm, sortByDistance } = query;
+
+    const results = (await allBusinesses())
+      .filter((b) => (query.type ? b.type === query.type : true))
+      .filter((b) =>
+        query.subcategoryId
+          ? b.subcategoryId === query.subcategoryId ||
+            (b.products ?? []).some((p) => p.subcategoryId === query.subcategoryId)
+          : true,
+      )
+      .filter((b) => {
+        if (!term) return true;
+        return [
+          b.name,
+          b.tagline,
+          b.description,
+          b.providerType,
+          ...(b.tags ?? []),
+          ...(b.products ?? []).map((p) => p.name),
+          ...(b.menu ?? []).map((m) => m.name),
+          ...(b.services ?? []).map((s) => s.name),
+          ...(b.rentals ?? []).map((r) => r.name),
+        ]
+          .filter(Boolean)
+          .some((field) => field!.toLowerCase().includes(term));
+      })
+      .map((b): Business => {
+        const point = b.location.point;
+        const distanceKm = near && point ? haversineKm(near, point) : undefined;
+        return { ...b, distanceKm };
+      })
+      .filter((b) => {
+        if (typeof maxDistanceKm !== 'number' || !near) return true;
+        return typeof b.distanceKm === 'number' && b.distanceKm <= maxDistanceKm;
+      });
+
+    results.sort((a, b) =>
+      sortByDistance
+        ? (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)
+        : b.createdAt.localeCompare(a.createdAt),
+    );
+    return results;
+  },
+
+  getById: (id: string) => findBusiness(id),
+
+  async getStallForOwner(ownerId: string): Promise<Business | null> {
+    const rows = await prisma.business.findMany({ where: { ownerId, type: 'item' } });
+    return rows[0] ? asData<Business>(rows[0]) : null;
+  },
+
+  async create(input: NewBusinessInput, ownerId: string): Promise<Business> {
+    // Personal stalls: one 'item' listing per user; fold new products in.
+    if (input.type === 'item') {
+      const stall = await this.getStallForOwner(ownerId);
+      if (stall) {
+        stall.products = [...(stall.products ?? []), ...(withProductIds(input.products) ?? [])];
+        return saveBusiness(stall);
+      }
+    }
+
+    const businessId = newUuid();
+    const newEmployees: Employee[] = input.employees.map((emp) => ({
+      id: newUuid(),
+      businessId,
+      displayName: emp.displayName,
+      role: normalizeRole(emp.role),
+      level: emp.level ?? 'staff',
+      userId: emp.userId,
+    }));
+    const employeeIds = newEmployees.map((e) => e.id);
+
+    const business: Business = {
+      id: businessId,
+      ownerId,
+      name: input.name,
+      tagline: input.tagline,
+      description: input.description,
+      type: input.type,
+      subcategoryId: input.subcategoryId,
+      tags: input.tags,
+      location: input.location,
+      phone: input.phone,
+      email: input.email,
+      website: input.website,
+      priceLabel: input.priceLabel,
+      menu: input.menu,
+      services: input.services,
+      products: withProductIds(input.products),
+      modules: input.modules,
+      employeeIds,
+      callHandlerIds: employeeIds,
+      ownerHandlesCalls: true,
+      chatRecipientIds: employeeIds,
+      openNow: true,
+      rentalBasis: input.rentalBasis,
+      rentals: input.rentals,
+      rentalStatus: input.rentalBasis ? 'available' : undefined,
+      createdAt: new Date().toISOString(),
+    };
+
+    await prisma.business.create({
+      data: { id: businessId, ownerId, type: business.type, data: toJson(business) },
+    });
+    if (newEmployees.length) {
+      await prisma.employee.createMany({
+        data: newEmployees.map((e) => ({
+          id: e.id,
+          businessId,
+          userId: uuidOrNull(e.userId),
+          data: toJson(e),
+        })),
+      });
+    }
+    return business;
+  },
+
+  async getProduct(businessId: string, productId: string): Promise<ProductItem | null> {
+    const business = await findBusiness(businessId);
+    return business?.products?.find((p) => p.id === productId) ?? null;
+  },
+
+  async setProductSold(
+    businessId: string,
+    productId: string,
+    sold: boolean,
+    actorId: string,
+  ): Promise<ProductItem> {
+    const business = await findBusiness(businessId);
+    if (!business) throw notFound(`Business ${businessId} not found`);
+    if (business.ownerId !== actorId) throw new Error('Only the seller can mark an item sold.');
+    const product = business.products?.find((p) => p.id === productId);
+    if (!product) throw notFound(`Product ${productId} not found`);
+    product.sold = sold;
+    await saveBusiness(business);
+    return product;
+  },
+
+  async removeProduct(businessId: string, productId: string, actorId: string): Promise<void> {
+    const business = await findBusiness(businessId);
+    if (!business) throw notFound(`Business ${businessId} not found`);
+    if (business.ownerId !== actorId) throw new Error('Only the seller can remove an item.');
+    business.products = (business.products ?? []).filter((p) => p.id !== productId);
+    await saveBusiness(business);
+    // The item's public thread goes with it.
+    await prisma.productMessage.deleteMany({ where: { businessId, productId } });
+  },
+
+  async update(id: string, patch: Partial<Business>): Promise<Business> {
+    const business = await findBusiness(id);
+    if (!business) throw notFound(`Business ${id} not found`);
+    Object.assign(business, patch);
+    if (patch.products) business.products = withProductIds(patch.products);
+    return saveBusiness(business);
+  },
+};

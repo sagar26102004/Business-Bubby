@@ -220,6 +220,8 @@ export interface UserRepository {
 export interface SignUpInput {
   name: string;
   phone: string;
+  /** Required by the real (Supabase) auth backend; ignored by the mock. */
+  password?: string;
 }
 
 export interface AuthRepository {

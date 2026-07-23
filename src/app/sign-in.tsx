@@ -49,13 +49,17 @@ export default function SignInScreen() {
       setError('Please enter your password to sign in.');
       return;
     }
+    if (mode === 'signup' && password.trim().length < 6) {
+      setError('Please choose a password of at least 6 characters.');
+      return;
+    }
     setError(null);
     setBusy(true);
     try {
       if (mode === 'signin') {
         await signIn(phone.trim(), password);
       } else {
-        await signUp({ name: name.trim(), phone: phone.trim() });
+        await signUp({ name: name.trim(), phone: phone.trim(), password });
       }
       done();
     } catch (err) {

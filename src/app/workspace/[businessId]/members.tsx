@@ -12,7 +12,7 @@
  * or split off into its own standalone member.
  */
 import { useMemo, useState } from 'react';
-import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
+import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import type { Membership, TrackedItem, Vehicle } from '@/domain/types';
@@ -34,10 +34,6 @@ import {
   Text,
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 /** All the enrolments filed under one paying account (or one standalone member). */
 interface MemberGroup {

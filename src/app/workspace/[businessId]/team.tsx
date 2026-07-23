@@ -6,7 +6,7 @@
  * toggles. Members only.
  */
 import { useState, type ReactNode } from 'react';
-import { LayoutAnimation, Platform, Pressable, StyleSheet, UIManager, View } from 'react-native';
+import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Employee } from '@/domain/types';
 import type { NewEmployeeInput } from '@/data/repositories';
@@ -15,10 +15,6 @@ import { useAsync } from '@/lib/useAsync';
 import { Avatar, Button, Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { EmployeeEditor } from '@/features/businesses/EmployeeEditor';
 import { radius, spacing, useColors } from '@/theme/theme';
-
-if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 export default function WorkspaceTeamScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();

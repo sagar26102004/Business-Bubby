@@ -1,0 +1,5 @@
+node_modules/
+dist/
+.env
+*.tsbuildinfo
+# Prisma generates the client into node_modules; nothing else to ignore here.

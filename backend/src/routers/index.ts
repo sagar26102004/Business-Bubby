@@ -1,0 +1,37 @@
+/** Mounts every resource router. One group per repository interface. */
+import { Router } from 'express';
+import { businessesRouter } from './businesses';
+import { employeesRouter } from './employees';
+import { usersRouter } from './users';
+import { notificationsRouter } from './notifications';
+import { chatRouter } from './chat';
+import { bookingsRouter } from './bookings';
+import { ordersRouter } from './orders';
+import { billsRouter } from './bills';
+import { customersRouter } from './customers';
+import { reviewsRouter } from './reviews';
+import { callsRouter } from './calls';
+import { trackingRouter } from './tracking';
+import { bizChatRouter } from './bizChat';
+import { membershipsRouter } from './memberships';
+import { productThreadsRouter } from './productThreads';
+import { logbookRouter } from './logbook';
+
+export const api = Router();
+
+api.use('/businesses', businessesRouter);
+api.use('/employees', employeesRouter);
+api.use('/users', usersRouter);
+api.use('/notifications', notificationsRouter);
+api.use('/chat', chatRouter);
+api.use('/bookings', bookingsRouter);
+api.use('/orders', ordersRouter);
+api.use('/bills', billsRouter);
+api.use('/customers', customersRouter);
+api.use('/reviews', reviewsRouter);
+api.use('/calls', callsRouter);
+api.use('/tracking', trackingRouter);
+api.use('/biz-chat', bizChatRouter);
+api.use('/memberships', membershipsRouter);
+api.use('/product-threads', productThreadsRouter);
+api.use('/logbook', logbookRouter);

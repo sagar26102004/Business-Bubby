@@ -11,6 +11,32 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import type { User } from '@/domain/types';
 import type { Repositories, SignUpInput } from '@/data/repositories';
 import { createMockRepositories, resetMockData } from '@/data/mock/mockRepositories';
+import { createSupabaseRepositories } from '@/data/supabase';
+import { createApiRepositories } from '@/data/api';
+import { isApiConfigured } from '@/data/api/client';
+import { isSupabaseConfigured } from '@/lib/supabase';
+
+/**
+ * Pick the concrete backend, exactly once. `EXPO_PUBLIC_BACKEND` chooses:
+ *   - `api`      → the Node/Express + Prisma server (Path B). Needs
+ *                  EXPO_PUBLIC_API_URL (the server) AND Supabase (for the JWT
+ *                  the app signs in with). Falls back if misconfigured.
+ *   - `supabase` → the app talks straight to Supabase (Path A).
+ *   - `mock`     → the in-memory mock (dev/offline).
+ * Unset keeps the old behaviour: Supabase when configured, otherwise mock.
+ */
+function selectRepositories(): Repositories {
+  const backend = (process.env.EXPO_PUBLIC_BACKEND ?? '').toLowerCase();
+  const supabaseOrMock = () =>
+    isSupabaseConfigured ? createSupabaseRepositories() : createMockRepositories();
+
+  if (backend === 'mock') return createMockRepositories();
+  if (backend === 'api') {
+    return isApiConfigured && isSupabaseConfigured ? createApiRepositories() : supabaseOrMock();
+  }
+  if (backend === 'supabase') return supabaseOrMock();
+  return supabaseOrMock();
+}
 
 interface DataContextValue {
   repositories: Repositories;
@@ -30,8 +56,11 @@ interface DataContextValue {
 const DataContext = createContext<DataContextValue | null>(null);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  // The concrete backend is chosen exactly once, here.
-  const repositories = useMemo(() => createMockRepositories(), []);
+  // The concrete backend is chosen exactly once, here: real Supabase when
+  // credentials are present (see .env / lib/supabase), otherwise the in-memory
+  // mock. Repositories not yet migrated still come from the mock (see
+  // data/supabase/index.ts).
+  const repositories = useMemo(() => selectRepositories(), []);
   const [currentUser, setCurrentUserState] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
 
