@@ -63,8 +63,12 @@ export default function DevToolsScreen() {
     try {
       const user = await repos.users.create({ name });
       setNewName('');
+      // On real backends, creating an account signs you in as them (that's how
+      // the account is provisioned); sync app state so the switch takes effect.
+      // On the mock this is a harmless re-select of the same user.
+      await signInAs(user.id);
       reloadUsers();
-      Alert.alert('Account added', `Created "${user.name}". Tap it below to sign in as them.`);
+      Alert.alert('Account added', `Created "${user.name}" and switched to them.`);
     } finally {
       setWorking(false);
     }

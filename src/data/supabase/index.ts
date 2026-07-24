@@ -1,26 +1,56 @@
 /**
- * The Supabase repository set.
+ * The Supabase repository set — the WHOLE app on the live Supabase Postgres
+ * (Path A). Every repository talks straight to Supabase (Auth + auto REST +
+ * RLS); there is NO mock delegation left.
  *
- * Migration is incremental: repositories that have been moved to Supabase are
- * layered over a full mock set, so the app always has a complete `Repositories`
- * object and keeps working while the rest are ported. As each group lands here,
- * it replaces its mock counterpart.
+ * Two behaviours are adapted to fit RLS (a customer acting directly can't write
+ * business-owned rows):
+ *   - ratingAvg/ratingCount are computed live from the `reviews` table on read
+ *     (businesses.ts), never written onto the business.
+ *   - a customer accepting a price proposal leaves the order as a confirmed open
+ *     tab; the business issues the bill via "Move to billing" (orders.ts).
  *
- * Migrated so far: auth, users (profiles).
- * Still mock: businesses, employees, places, chat, orders, bills, bookings,
- *   notifications, calls, reviews, memberships, tracking, product threads,
- *   B2B chat, customers, logbook.
+ * `places` is real device GPS (a client concern, like the mock).
  */
 import type { Repositories } from '@/data/repositories';
-import { createMockRepositories } from '@/data/mock/mockRepositories';
 import { createSupabaseAuth } from './auth';
 import { createSupabaseUsers } from './users';
+import { createSupabaseBusinesses } from './businesses';
+import { createSupabaseEmployees } from './employees';
+import { createSupabasePlaces } from './places';
+import { createSupabaseChat } from './chat';
+import { createSupabaseNotifications } from './notifications';
+import { createSupabaseBookings } from './bookings';
+import { createSupabaseOrders } from './orders';
+import { createSupabaseBills } from './bills';
+import { createSupabaseCalls } from './calls';
+import { createSupabaseCustomers } from './customers';
+import { createSupabaseTracking } from './tracking';
+import { createSupabaseReviews } from './reviews';
+import { createSupabaseMemberships } from './memberships';
+import { createSupabaseBizChat } from './bizChat';
+import { createSupabaseProductThreads } from './productThreads';
+import { createSupabaseLogbook } from './logbook';
 
 export function createSupabaseRepositories(): Repositories {
-  const mock = createMockRepositories();
   return {
-    ...mock,
     auth: createSupabaseAuth(),
     users: createSupabaseUsers(),
+    businesses: createSupabaseBusinesses(),
+    employees: createSupabaseEmployees(),
+    places: createSupabasePlaces(),
+    chat: createSupabaseChat(),
+    notifications: createSupabaseNotifications(),
+    bookings: createSupabaseBookings(),
+    orders: createSupabaseOrders(),
+    bills: createSupabaseBills(),
+    calls: createSupabaseCalls(),
+    customers: createSupabaseCustomers(),
+    tracking: createSupabaseTracking(),
+    reviews: createSupabaseReviews(),
+    memberships: createSupabaseMemberships(),
+    bizChat: createSupabaseBizChat(),
+    productThreads: createSupabaseProductThreads(),
+    logbook: createSupabaseLogbook(),
   };
 }

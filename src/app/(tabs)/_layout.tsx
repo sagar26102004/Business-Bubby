@@ -14,17 +14,26 @@ function TabIcon({ emoji, color }: { emoji: string; color: ColorValue }) {
   return <Text style={{ fontSize: 20, color }}>{emoji}</Text>;
 }
 
-/** Polls the unread notification count for the current viewer (mock backend). */
+/** Polls the unread notification count for the signed-in viewer. */
 function useUnreadCount(): number {
   const repos = useRepositories();
   const { currentUser } = useAuth();
-  const recipientId = currentUser?.id ?? 'guest';
+  const recipientId = currentUser?.id ?? null;
   const [count, setCount] = useState(0);
 
   useEffect(() => {
+    // Guests have no notifications — don't poll (a placeholder id like 'guest'
+    // is not a valid recipient and errors against a real backend).
+    if (!recipientId) {
+      setCount(0);
+      return;
+    }
     let active = true;
     const load = () =>
-      repos.notifications.unreadCount(recipientId).then((n) => active && setCount(n));
+      repos.notifications
+        .unreadCount(recipientId)
+        .then((n) => active && setCount(n))
+        .catch(() => active && setCount(0));
     load();
     const timer = setInterval(load, 4000);
     return () => {

@@ -69,6 +69,14 @@ import type {
   UserRepository,
 } from '@/data/repositories';
 import type { LogEntry } from '@/domain/types';
+import { getSupabase } from '@/lib/supabase';
+import {
+  TEST_PASSWORD,
+  fallbackUser,
+  niceAuthError,
+  phoneToEmail,
+  syntheticTestPhone,
+} from '@/data/supabase/shared';
 import { http, seg } from './client';
 
 export function createApiBusinesses(): BusinessRepository {
@@ -120,8 +128,23 @@ export function createApiUsers(): UserRepository {
     getById: (id) => http.get<User | null>(`/users/${seg(id)}`),
     list: () => http.get<User[]>('/users'),
     search: (term) => http.get<User[]>('/users/search', { q: term }),
-    create: (_input: NewUserInput): Promise<User> => {
-      throw new Error('Creating accounts directly is only available on the mock backend.');
+    // Dev Tools' "Add a test account". Identity is Supabase in this backend too,
+    // so we sign one up for real with the shared TEST_PASSWORD + a synthetic
+    // phone — a first-class switchable test account. signUp establishes the new
+    // user's session, so dev.tsx switches into it afterwards; the profile row is
+    // created by the DB trigger and read back through the API.
+    create: async (input: NewUserInput): Promise<User> => {
+      const phone = syntheticTestPhone();
+      const { data, error } = await getSupabase().auth.signUp({
+        email: phoneToEmail(phone),
+        password: TEST_PASSWORD,
+        options: { data: { name: input.name, phone } },
+      });
+      if (error) throw new Error(niceAuthError(error.message));
+      const userId = data.user?.id;
+      if (!userId) throw new Error('Account creation did not return a user. Please try again.');
+      const user = await http.get<User | null>(`/users/${seg(userId)}`).catch(() => null);
+      return user ?? fallbackUser(userId, input.name);
     },
     update: (id, patch) => http.patch<User>(`/users/${seg(id)}`, patch),
   };

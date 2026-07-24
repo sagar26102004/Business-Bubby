@@ -7,7 +7,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Business, PlaceKind } from '@/domain/types';
-import { formatDistance, getType, priceLevelLabel, rentalBasisLabel } from '@/domain/catalog';
+import { formatDistance, priceLevelLabel, rentalBasisLabel } from '@/domain/catalog';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { haversineKm } from '@/lib/geo';
@@ -28,8 +28,6 @@ export function BusinessCard({ business }: { business: Business }) {
   const repos = useRepositories();
   const [favorite, setFavorite] = useState(false);
 
-  const type = getType(business.type);
-  const thumbColor = type?.color ?? colors.brand;
   const distance = formatDistance(business.distanceKm);
   const price = priceLevelLabel(business.priceLevel);
 
@@ -65,21 +63,30 @@ export function BusinessCard({ business }: { business: Business }) {
         : business.providerType;
 
   return (
-    <Card onPress={() => router.push(`/business/${business.id}`)} padded={false} style={styles.card}>
-      {/* Thumbnail header */}
-      <View style={[styles.thumb, { backgroundColor: thumbColor }]}>
-        <Text style={styles.thumbEmoji}>{type?.icon ?? '🏬'}</Text>
-
-        <Pressable
-          onPress={() => setFavorite((f) => !f)}
-          hitSlop={8}
-          style={[styles.heart, { backgroundColor: colors.surface }]}
-        >
-          <Text style={{ fontSize: 15, color: favorite ? colors.danger : colors.textMuted }}>
-            {favorite ? '♥' : '♡'}
+    <Card onPress={() => router.push(`/business/${business.id}`)} style={styles.card}>
+      {/* Body */}
+      <View style={styles.body}>
+        <View style={styles.titleRow}>
+          <Text variant="subheading" weight="semibold" style={styles.name} numberOfLines={1}>
+            {business.name}
           </Text>
-        </Pressable>
+          <Pressable
+            onPress={() => setFavorite((f) => !f)}
+            hitSlop={8}
+            style={styles.heart}
+          >
+            <Text style={{ fontSize: 17, color: favorite ? colors.danger : colors.textMuted }}>
+              {favorite ? '♥' : '♡'}
+            </Text>
+          </Pressable>
+          {price ? (
+            <Text variant="label" weight="semibold" tone="muted">
+              {price}
+            </Text>
+          ) : null}
+        </View>
 
+        {/* Status · distance · hours — moved off the removed thumbnail */}
         <View style={styles.badgeRow}>
           {business.rentalStatus ? (
             <View
@@ -108,29 +115,13 @@ export function BusinessCard({ business }: { business: Business }) {
             </View>
           ) : null}
           {business.hours ? (
-            <View style={[styles.hoursPill, { backgroundColor: 'rgba(0,0,0,0.35)' }]}>
-              <Text variant="caption" weight="semibold" tone="inverse">
-                🕒 {business.hours}
-              </Text>
-            </View>
-          ) : null}
-          {distance ? (
-            <Text variant="caption" weight="semibold" tone="inverse" style={styles.distance}>
-              {distance}
+            <Text variant="caption" tone="muted">
+              🕒 {business.hours}
             </Text>
           ) : null}
-        </View>
-      </View>
-
-      {/* Body */}
-      <View style={styles.body}>
-        <View style={styles.titleRow}>
-          <Text variant="subheading" weight="semibold" style={styles.name} numberOfLines={1}>
-            {business.name}
-          </Text>
-          {price ? (
-            <Text variant="label" weight="semibold" tone="muted">
-              {price}
+          {distance ? (
+            <Text variant="caption" weight="semibold" tone="muted">
+              📍 {distance}
             </Text>
           ) : null}
         </View>
@@ -189,42 +180,20 @@ export function BusinessCard({ business }: { business: Business }) {
 
 const styles = StyleSheet.create({
   card: { marginBottom: spacing.md },
-  thumb: {
-    height: 132,
-    justifyContent: 'flex-end',
-    padding: spacing.md,
-  },
-  thumbEmoji: {
-    position: 'absolute',
-    alignSelf: 'center',
-    top: 30,
-    fontSize: 56,
-    opacity: 0.9,
-  },
-  heart: {
-    position: 'absolute',
-    top: spacing.md,
-    right: spacing.md,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+  heart: { alignItems: 'center', justifyContent: 'center' },
+  badgeRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
   },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   statusPill: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radius.sm,
   },
-  hoursPill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
-  distance: { textShadowColor: 'rgba(0,0,0,0.35)', textShadowRadius: 3 },
-  body: { padding: spacing.lg },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  body: {},
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   name: { flex: 1 },
   provider: { marginTop: 2 },
   ratingRow: { marginTop: spacing.sm },

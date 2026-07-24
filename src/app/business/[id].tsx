@@ -138,9 +138,8 @@ export default function BusinessDetailScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: business.name }} />
 
-      {/* Hero */}
-      <View style={[styles.hero, { backgroundColor: type?.color ?? colors.brand }]}>
-        <Text style={styles.heroEmoji}>{type?.icon ?? '🏬'}</Text>
+      {business.rentalStatus || typeof business.openNow === 'boolean' || business.hours ? (
+      <View style={styles.tags}>
         {business.rentalStatus ? (
           <View
             style={[
@@ -168,13 +167,14 @@ export default function BusinessDetailScreen() {
           </View>
         ) : null}
         {business.hours ? (
-          <View style={[styles.hoursPill, { backgroundColor: 'rgba(0,0,0,0.35)' }]}>
-            <Text variant="caption" weight="semibold" tone="inverse">
+          <View style={[styles.statusPill, { backgroundColor: colors.surfaceAlt }]}>
+            <Text variant="caption" weight="semibold" tone="muted">
               🕒 {business.hours}
             </Text>
           </View>
         ) : null}
       </View>
+      ) : null}
 
       <View style={styles.tags}>
         {type ? <Tag label={type.singular} icon={type.icon} tone="brand" /> : null}
@@ -665,26 +665,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  hero: {
-    height: 160,
-    borderRadius: radius.xl,
-    marginBottom: spacing.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroEmoji: { fontSize: 72, opacity: 0.95 },
   statusPill: {
-    position: 'absolute',
-    left: spacing.md,
-    bottom: spacing.md,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
-  hoursPill: {
-    position: 'absolute',
-    right: spacing.md,
-    bottom: spacing.md,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
     borderRadius: radius.sm,

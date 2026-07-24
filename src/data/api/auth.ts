@@ -10,7 +10,7 @@ import type { AuthRepository, SignUpInput } from '@/data/repositories';
 import type { User } from '@/domain/types';
 import { getSupabase } from '@/lib/supabase';
 import { clearCache } from '@/lib/queryCache';
-import { fallbackUser, niceAuthError, phoneToEmail } from '@/data/supabase/shared';
+import { TEST_PASSWORD, fallbackUser, niceAuthError, phoneToEmail } from '@/data/supabase/shared';
 import { http, seg } from './client';
 
 /** Read a profile via the API, falling back when the row isn't ready yet. */
@@ -72,8 +72,27 @@ export function createApiAuth(): AuthRepository {
       await clearCache();
     },
 
-    async signInAs(): Promise<User> {
-      throw new Error('Switching identity is only available on the mock backend.');
+    async signInAs(userId: string): Promise<User> {
+      // Real auth has no service-role impersonation on the client, so we do a
+      // genuine sign-in as the target user with the shared seed password. Only
+      // works for the seeded test accounts (created with TEST_PASSWORD).
+      const profile = await http.get<User | null>(`/users/${seg(userId)}`);
+      if (!profile?.phone) {
+        throw new Error(
+          "Can't switch to this account — it has no phone on file to sign in with.",
+        );
+      }
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: phoneToEmail(profile.phone),
+        password: TEST_PASSWORD,
+      });
+      if (error) {
+        throw new Error(
+          `Can't switch to ${profile.name} — this only works for seeded test accounts (password "${TEST_PASSWORD}"). Sign in manually instead.`,
+        );
+      }
+      await clearCache();
+      return fetchProfileViaApi(data.user.id, data.user.user_metadata?.name);
     },
   };
 }

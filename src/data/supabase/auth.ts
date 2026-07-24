@@ -10,7 +10,13 @@ import type { AuthRepository, SignUpInput } from '@/data/repositories';
 import type { User } from '@/domain/types';
 import { getSupabase } from '@/lib/supabase';
 import { clearCache } from '@/lib/queryCache';
-import { fallbackUser, fetchProfile, niceAuthError, phoneToEmail } from './shared';
+import {
+  TEST_PASSWORD,
+  fallbackUser,
+  fetchProfile,
+  niceAuthError,
+  phoneToEmail,
+} from './shared';
 
 export function createSupabaseAuth(): AuthRepository {
   const sb = getSupabase();
@@ -67,10 +73,28 @@ export function createSupabaseAuth(): AuthRepository {
       await clearCache();
     },
 
-    async signInAs(): Promise<User> {
-      // Real auth has no client-side impersonation (that needs the service-role
-      // key). Dev Tools' "sign in as" is a mock-only feature.
-      throw new Error('Switching identity is only available on the mock backend.');
+    async signInAs(userId: string): Promise<User> {
+      // Real auth has no service-role impersonation on the client, so instead we
+      // do a genuine sign-in as the target user with the shared seed password.
+      // This only works for the seeded test accounts (created with TEST_PASSWORD).
+      const profile = await fetchProfile(userId);
+      if (!profile?.phone) {
+        throw new Error(
+          "Can't switch to this account — it has no phone on file to sign in with.",
+        );
+      }
+      const { data, error } = await sb.auth.signInWithPassword({
+        email: phoneToEmail(profile.phone),
+        password: TEST_PASSWORD,
+      });
+      if (error) {
+        throw new Error(
+          `Can't switch to ${profile.name} — this only works for seeded test accounts (password "${TEST_PASSWORD}"). Sign in manually instead.`,
+        );
+      }
+      await clearCache();
+      const fresh = await fetchProfile(data.user.id);
+      return fresh ?? fallbackUser(data.user.id, data.user.user_metadata?.name);
     },
   };
 }
