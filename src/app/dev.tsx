@@ -201,6 +201,7 @@ export default function DevToolsScreen() {
           <Tag label="🗺️ Map" onPress={() => router.push('/map')} />
           <Tag label="💬 Chats & alerts" onPress={() => router.push('/chats')} />
           <Tag label="🔐 Sign in" onPress={() => router.push('/sign-in')} />
+          <Tag label="🛡️ Admin (platform)" onPress={() => router.push('/admin')} />
         </View>
         <Text variant="caption" tone="muted" style={styles.jumpHint}>
           Open any business (then reach its chat, workspace, inbox & manage from there):

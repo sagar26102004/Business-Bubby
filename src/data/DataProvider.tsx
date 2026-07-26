@@ -9,6 +9,7 @@
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { User } from '@/domain/types';
+import { applyCatalogEntries } from '@/domain/catalogEntries';
 import type { Repositories, SignUpInput } from '@/data/repositories';
 import { createMockRepositories, resetMockData } from '@/data/mock/mockRepositories';
 import { createSupabaseRepositories } from '@/data/supabase';
@@ -70,6 +71,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       .getCurrentUser()
       .then((user) => active && setCurrentUserState(user))
       .finally(() => active && setAuthLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [repositories]);
+
+  // Load the growing collection (community dishes/tags) into the code overlays
+  // once, so suggestions include what other listings and the admin have added.
+  // Best-effort — a failure here must never block the app from starting.
+  useEffect(() => {
+    let active = true;
+    repositories.catalog
+      .listApproved()
+      .then((entries) => active && applyCatalogEntries(entries))
+      .catch(() => {});
     return () => {
       active = false;
     };

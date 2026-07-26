@@ -1,34 +1,30 @@
 /**
- * Map view — businesses plotted around the user's current location.
+ * Map view — businesses plotted around the user's current location on a REAL
+ * street map (Leaflet + OpenStreetMap tiles, via <RealMap>). Works on web and
+ * native (Expo Go) with no map SDK, no native rebuild and no API key.
  *
- * This is a self-contained map: it projects each business's real coordinates
- * onto a plane centred on the user, so it works on web and native with no map
- * SDK or native rebuild. Range rings show 1/3/5 km. Tapping a marker selects it
- * and reveals a card; tapping the card opens the full business page.
- *
- * To upgrade to real street tiles later (react-native-maps / expo-maps in a
- * native build), swap the <MapCanvas> internals — the data flow stays the same.
+ * Range rings show 1/3/5 km. Tapping a marker selects it and reveals a card;
+ * tapping the card opens the full business page.
  */
-import { useMemo, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import type { Business, GeoPoint } from '@/domain/types';
+import type { Business } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Card, ErrorView, LoadingView, Screen, Stars, Text } from '@/components/ui';
+import RealMap, { type RealMapMarker } from '@/components/RealMap';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 const RADIUS_KM = 5; // area shown around the user
 const RING_KMS = [1, 3, 5];
-const MARKER = 40;
 
 export default function MapScreen() {
   const repos = useRepositories();
   const colors = useColors();
   const router = useRouter();
 
-  const [size, setSize] = useState({ width: 0, height: 0 });
   const [selectedId, setSelectedId] = useState<string | undefined>();
 
   const { data, loading, error, reload } = useAsync(async () => {
@@ -41,108 +37,37 @@ export default function MapScreen() {
     return { center: center.point, businesses };
   }, []);
 
-  const onLayout = (e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    setSize({ width, height });
-  };
-
-  // Project a business coordinate to an {x, y} pixel within the canvas.
-  const project = useMemo(() => {
-    const center = data?.center;
-    if (!center || !size.width || !size.height) return null;
-    const cx = size.width / 2;
-    const cy = size.height / 2;
-    const pad = MARKER; // keep markers off the edges
-    const pxPerKm = (Math.min(size.width, size.height) / 2 - pad) / RADIUS_KM;
-    const kmPerDegLat = 111;
-    const kmPerDegLng = 111 * Math.cos((center.latitude * Math.PI) / 180);
-    return (point: GeoPoint) => {
-      const eastKm = (point.longitude - center.longitude) * kmPerDegLng;
-      const northKm = (point.latitude - center.latitude) * kmPerDegLat;
-      return { x: cx + eastKm * pxPerKm, y: cy - northKm * pxPerKm, pxPerKm, cx, cy };
-    };
-  }, [data?.center, size]);
-
   if (loading) return <LoadingView label="Loading map…" />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return null;
 
-  const selected = data.businesses.find((b) => b.id === selectedId);
-  const markers = data.businesses.filter((b) => b.location.point);
+  const withLocation = data.businesses.filter((b) => b.location.point);
+  const selected = withLocation.find((b) => b.id === selectedId);
+  const markers: RealMapMarker[] = withLocation.map((b) => ({
+    id: b.id,
+    point: b.location.point!,
+    emoji: getType(b.type)?.icon ?? '📍',
+    color: getType(b.type)?.color ?? colors.brand,
+  }));
 
   return (
     <Screen padded={false}>
       <Stack.Screen options={{ title: 'Map · nearby' }} />
 
-      <View style={[styles.canvas, { backgroundColor: colors.surfaceAlt }]} onLayout={onLayout}>
-        {project ? (
-          <>
-            {/* Range rings */}
-            {RING_KMS.map((km) => {
-              const r = km * project(data.center).pxPerKm;
-              return (
-                <View
-                  key={km}
-                  pointerEvents="none"
-                  style={[
-                    styles.ring,
-                    {
-                      width: r * 2,
-                      height: r * 2,
-                      borderRadius: r,
-                      left: project(data.center).cx - r,
-                      top: project(data.center).cy - r,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                />
-              );
-            })}
-
-            {/* User location */}
-            <View
-              pointerEvents="none"
-              style={[
-                styles.userDot,
-                {
-                  left: project(data.center).cx - 9,
-                  top: project(data.center).cy - 9,
-                  backgroundColor: colors.accent,
-                  borderColor: colors.surface,
-                },
-              ]}
-            />
-
-            {/* Business markers */}
-            {markers.map((b) => {
-              const p = project(b.location.point!);
-              const type = getType(b.type);
-              const isSel = b.id === selectedId;
-              return (
-                <Pressable
-                  key={b.id}
-                  onPress={() => setSelectedId(b.id)}
-                  style={[
-                    styles.marker,
-                    {
-                      left: p.x - MARKER / 2,
-                      top: p.y - MARKER / 2,
-                      backgroundColor: type?.color ?? colors.brand,
-                      borderColor: isSel ? colors.text : colors.surface,
-                      borderWidth: isSel ? 3 : 2,
-                      transform: [{ scale: isSel ? 1.15 : 1 }],
-                    },
-                  ]}
-                >
-                  <Text style={styles.markerEmoji}>{type?.icon ?? '📍'}</Text>
-                </Pressable>
-              );
-            })}
-          </>
-        ) : null}
+      <View style={styles.canvas}>
+        <RealMap
+          center={data.center}
+          markers={markers}
+          ringsKm={RING_KMS}
+          selectedId={selectedId}
+          onMarkerPress={setSelectedId}
+        />
 
         {/* Legend */}
-        <View style={[styles.legend, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View
+          pointerEvents="none"
+          style={[styles.legend, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
           <Text variant="caption" tone="muted">
             ◉ You · rings at {RING_KMS.join('/')} km · {markers.length} nearby
           </Text>
@@ -200,23 +125,6 @@ function SelectedCard({ business, onPress }: { business: Business; onPress: () =
 
 const styles = StyleSheet.create({
   canvas: { flex: 1, overflow: 'hidden' },
-  ring: { position: 'absolute', borderWidth: 1 },
-  userDot: {
-    position: 'absolute',
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 3,
-  },
-  marker: {
-    position: 'absolute',
-    width: MARKER,
-    height: MARKER,
-    borderRadius: MARKER / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markerEmoji: { fontSize: 18 },
   legend: {
     position: 'absolute',
     top: spacing.md,

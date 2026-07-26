@@ -30,6 +30,13 @@
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
+      ],
+      "@livekit/react-native-expo-plugin",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "microphonePermission": "Localo uses your microphone for in-app voice calls with businesses."
+        }
       ]
     ],
     "experiments": {

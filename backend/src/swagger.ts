@@ -22,6 +22,13 @@ const ROUTES: Record<string, RouteDef[]> = {
     ['post', '/businesses/{id}/products/{productId}/sold', 'Mark a stall item sold/unsold (owner)'],
     ['delete', '/businesses/{id}/products/{productId}', 'Remove a stall item (owner)'],
   ],
+  Catalog: [
+    ['get', '/catalog', 'Growing collection (?kind=&scope=approved|all) — approved is public suggestions, all is super-admin'],
+    ['post', '/catalog/capture', 'Record offerings into the collection (best-effort)'],
+    ['post', '/catalog/tags', 'Add a business tag by hand (super-admin)'],
+    ['patch', '/catalog/{id}', 'Hide/restore an entry (super-admin)'],
+    ['delete', '/catalog/{id}', 'Delete an entry (super-admin)'],
+  ],
   Employees: [
     ['get', '/employees/business/{businessId}', "List a business's team"],
     ['get', '/employees/user/{userId}/businesses', 'Businesses a user works at'],

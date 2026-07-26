@@ -18,11 +18,14 @@ import type {
 } from '@/domain/types';
 import { RENTAL_BASES, offersDineIn } from '@/domain/catalog';
 import { AVAILABLE_MODULES, COMING_SOON_MODULES, enabledModules } from '@/domain/modules';
-import { isFoodShop } from '@/domain/tags';
+import { isFoodShop, SUGGESTED_BUSINESS_TAGS } from '@/domain/tags';
+import { summarizeHours, type OpeningHours } from '@/domain/hours';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { FoodMenuEditor } from '@/features/businesses/FoodMenuEditor';
 import { OfferingsEditor } from '@/features/businesses/OfferingsEditor';
+import { OpeningHoursField } from '@/features/businesses/OpeningHoursField';
+import { TagPicker } from '@/features/businesses/TagPicker';
 import {
   Button,
   Card,
@@ -66,6 +69,12 @@ export default function ManageScreen() {
   const [stallName, setStallName] = useState('');
   const [rentalStatus, setRentalStatus] = useState<RentalStatus>('available');
   const [rentalBasis, setRentalBasis] = useState<RentalBasis | undefined>();
+  // Business page identity — the same fields set at registration, editable now.
+  const [name, setName] = useState('');
+  const [tagline, setTagline] = useState('');
+  const [description, setDescription] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [openingHours, setOpeningHours] = useState<OpeningHours | undefined>();
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -87,6 +96,11 @@ export default function ManageScreen() {
     setStallName(data.business.name);
     setRentalStatus(data.business.rentalStatus ?? 'available');
     setRentalBasis(data.business.rentalBasis);
+    setName(data.business.name);
+    setTagline(data.business.tagline ?? '');
+    setDescription(data.business.description ?? '');
+    setTags(data.business.tags ?? []);
+    setOpeningHours(data.business.openingHours);
   }, [data]);
 
   if (loading) return <LoadingView />;
@@ -141,6 +155,17 @@ export default function ManageScreen() {
         ...(offersDineIn(data.business) ? { tableCount: parsedTableCount } : {}),
         // Stalls start out named after the owner — let them pick a real name.
         ...(isStall && stallName.trim() ? { name: stallName.trim() } : {}),
+        // Business page identity — editable after publishing.
+        ...(isStall
+          ? {}
+          : {
+              ...(name.trim() ? { name: name.trim() } : {}),
+              tagline: tagline.trim() || undefined,
+              description: description.trim() || undefined,
+              tags: tags.length > 0 ? tags : undefined,
+              openingHours,
+              hours: summarizeHours(openingHours),
+            }),
         // Rentals: flip Available/Rented instead of re-listing.
         ...(isRental ? { rentalStatus, rentalBasis } : {}),
       });
@@ -152,7 +177,7 @@ export default function ManageScreen() {
           return Object.keys(patch).length > 0 ? [repos.employees.update(e.id, patch)] : [];
         }),
       );
-      Alert.alert('Saved', 'Catalog, call and chat settings updated.');
+      Alert.alert('Saved', 'Your business page has been updated.');
       router.back();
     } catch (err) {
       Alert.alert('Could not save', err instanceof Error ? err.message : 'Try again.');
@@ -165,7 +190,56 @@ export default function ManageScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: 'Manage' }} />
 
-      <Text variant="title" weight="bold">
+      {/* Business page — the same identity fields set at registration, editable
+          any time. Stalls edit their name in the "What you're selling" section
+          below, so this block is for real businesses only. */}
+      {!isStall ? (
+        <>
+          <Text variant="title" weight="bold">
+            Business page
+          </Text>
+          <Text tone="muted" style={styles.subtitle}>
+            Edit how your listing appears to customers. Changes show on your
+            business page as soon as you save.
+          </Text>
+
+          <Input
+            label="Business name"
+            placeholder="e.g. Sparks Electrical, Meera’s Cafe"
+            value={name}
+            onChangeText={setName}
+          />
+          <Input
+            label="Tagline (optional)"
+            placeholder="One line about what you offer"
+            value={tagline}
+            onChangeText={setTagline}
+          />
+          <Input
+            label="Description (optional)"
+            placeholder="Tell customers more…"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            style={styles.multiline}
+          />
+
+          <Text variant="label" weight="semibold" style={styles.catalogLabel}>
+            Tags
+          </Text>
+          <Text variant="caption" tone="muted" style={styles.subtitle}>
+            How customers find you — add a tag for everything you do.
+          </Text>
+          <TagPicker value={tags} onChange={setTags} suggestions={SUGGESTED_BUSINESS_TAGS} />
+
+          <Text variant="label" weight="semibold" style={styles.catalogLabel}>
+            Opening hours
+          </Text>
+          <OpeningHoursField value={openingHours} onChange={setOpeningHours} />
+        </>
+      ) : null}
+
+      <Text variant="title" weight="bold" style={!isStall ? styles.catalogTitle : undefined}>
         Calls & chat
       </Text>
       <Text tone="muted" style={styles.subtitle}>
@@ -485,6 +559,7 @@ const styles = StyleSheet.create({
   comingSoon: { marginTop: spacing.md },
   catalogTitle: { marginTop: spacing.xl },
   catalogLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
+  multiline: { minHeight: 96, textAlignVertical: 'top' },
   tableInput: { maxWidth: 160 },
   save: { marginTop: spacing.lg },
 });

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { BusinessQuery } from '@/domain/contracts';
 import { route } from '@/http/handler';
 import { optionalAuth, requireAuth, userId, optionalUserId } from '@/http/context';
-import { requireBusinessMember } from '@/authz';
+import { requireBusinessMember, requireSuperAdmin } from '@/authz';
 import { businessService } from '@/services/businesses';
 
 export const businessesRouter = Router();
@@ -33,9 +33,18 @@ businessesRouter.get('/:id/products/:productId', optionalAuth, route(async (req)
   businessService.getProduct(req.params.id, req.params.productId),
 ));
 
-businessesRouter.post('/', requireAuth, route(async (req) =>
-  businessService.create(req.body, userId(req)),
-));
+businessesRouter.post('/', requireAuth, route(async (req) => {
+  const uid = userId(req);
+  // Naming a foreign owner is a super-admin power; self-owned listings are open.
+  const ownerId = typeof req.body?.ownerId === 'string' ? req.body.ownerId.trim() : '';
+  if (ownerId && ownerId !== uid) await requireSuperAdmin(uid);
+  return businessService.create(req.body, uid);
+}));
+
+businessesRouter.post('/:id/reassign-owner', requireAuth, route(async (req) => {
+  await requireSuperAdmin(optionalUserId(req));
+  return businessService.reassignOwner(req.params.id, req.body.newOwnerId);
+}));
 
 businessesRouter.patch('/:id', requireAuth, route(async (req) => {
   await requireBusinessMember(req.params.id, optionalUserId(req));

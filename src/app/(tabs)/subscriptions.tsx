@@ -9,9 +9,9 @@
  * .monthlySpend, newest first).
  */
 import { useCallback, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, View } from 'react-native';
+import { LayoutAnimation, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
-import type { Membership } from '@/domain/types';
+import type { Membership, TrackedItem } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney } from '@/lib/money';
@@ -48,6 +48,15 @@ const dateLabel = (iso: string) => {
 const renewsSoon = (m: Membership) =>
   new Date(m.expiresAt).getTime() - Date.now() < 7 * 24 * 3600 * 1000;
 
+/** "Track my child" / "children" / "goods" from the tracked items on a bus. */
+function trackNoun(items: TrackedItem[]): string {
+  const children = items.filter((t) => t.kind === 'child').length;
+  const goods = items.filter((t) => t.kind === 'goods').length;
+  if (children && !goods) return children > 1 ? 'children' : 'child';
+  if (goods && !children) return goods > 1 ? 'goods' : 'goods';
+  return 'child & goods';
+}
+
 export default function SubscriptionsScreen() {
   const { currentUser, isGuest } = useAuth();
   const repos = useRepositories();
@@ -56,6 +65,8 @@ export default function SubscriptionsScreen() {
 
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [monthIndex, setMonthIndex] = useState(0);
+  // Which business cards are expanded to show their per-child plan dropdown.
+  const [expandedBiz, setExpandedBiz] = useState<Record<string, boolean>>({});
 
   // "I paid this month" report flow.
   const [reportSub, setReportSub] = useState<Membership | null>(null);
@@ -105,10 +116,16 @@ export default function SubscriptionsScreen() {
   if (!data) return <LoadingView label="Loading your subscriptions…" />;
 
   const { subs, months, tracked } = data;
-  // Businesses where a child/goods of mine is on a vehicle — I can watch it live.
-  const trackableBusinessIds = new Set(
-    tracked.filter((t) => t.vehicleId).map((t) => t.businessId),
-  );
+  // Businesses where a child/goods of mine is riding a vehicle — I can watch it
+  // live. Grouped per business so the card shows a "Track my child" button that
+  // opens exactly that bus (only the vehicles carrying MY items are shown).
+  const trackedByBusiness = new Map<string, TrackedItem[]>();
+  tracked.forEach((t) => {
+    if (!t.vehicleId) return;
+    const list = trackedByBusiness.get(t.businessId) ?? [];
+    list.push(t);
+    trackedByBusiness.set(t.businessId, list);
+  });
   const currentMonth = months[0];
   const month = months[Math.min(monthIndex, Math.max(months.length - 1, 0))];
 
@@ -123,6 +140,11 @@ export default function SubscriptionsScreen() {
   const openBreakdown = () => {
     setMonthIndex(0);
     setBreakdownOpen(true);
+  };
+
+  const toggleBiz = (id: string) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpandedBiz((e) => ({ ...e, [id]: !e[id] }));
   };
 
   const openReport = (s: Membership) => {
@@ -182,70 +204,123 @@ export default function SubscriptionsScreen() {
             </Text>
           </Card>
 
-          {[...byBusiness.values()].map((list) => (
-            <View key={list[0].businessId} style={styles.group}>
-              <View style={styles.groupTitleRow}>
-                <Text variant="subheading" weight="bold" style={styles.flex}>
-                  {list[0].businessName}
-                </Text>
-                {trackableBusinessIds.has(list[0].businessId) ? (
-                  <Tag
-                    label="📍 Track"
-                    onPress={() => router.push(`/track/${list[0].businessId}`)}
+          {[...byBusiness.values()].map((list) => {
+            const bizId = list[0].businessId;
+            const open = !!expandedBiz[bizId];
+            const trackedHere = trackedByBusiness.get(bizId) ?? [];
+            const canTrack = trackedHere.length > 0;
+            // Preselect the bus when there's a single one carrying my item(s).
+            const vehicleIds = [...new Set(trackedHere.map((t) => t.vehicleId).filter(Boolean))];
+            const trackHref =
+              vehicleIds.length === 1
+                ? (`/track/${bizId}?vehicle=${vehicleIds[0]}` as const)
+                : (`/track/${bizId}` as const);
+
+            // Card summary: total monthly, the soonest renewal, and how the
+            // whole family's fee stands this month.
+            const monthly = list.reduce((sum, s) => sum + (s.standalone ? 0 : s.pricePerMonth), 0);
+            const nextRenewal = [...list].sort((a, b) => a.expiresAt.localeCompare(b.expiresAt))[0]
+              ?.expiresAt;
+            const unpaid = list.filter((s) => s.payment && s.payment.status === 'unpaid');
+            const pending = list.filter((s) => s.payment && s.payment.status === 'pending');
+
+            return (
+              <Card key={bizId} style={styles.bizCard}>
+                {/* Header — tap to open the per-child dropdown */}
+                <Pressable onPress={() => toggleBiz(bizId)} style={styles.bizHeader}>
+                  <View style={styles.flex}>
+                    <Text variant="subheading" weight="bold">
+                      {list[0].businessName}
+                    </Text>
+                    <Text variant="caption" tone="muted" style={styles.bizSub}>
+                      {list.length} {list.length === 1 ? 'plan' : 'plans'} · {formatMoney(monthly)}/mo
+                      {nextRenewal ? ` · Renews ${dateLabel(nextRenewal)}` : ''}
+                    </Text>
+                    {unpaid.length > 0 ? (
+                      <Text variant="caption" tone="danger" weight="semibold" style={styles.bizStatus}>
+                        ⚠ {unpaid.length} of {list.length} unpaid this month
+                      </Text>
+                    ) : pending.length > 0 ? (
+                      <Text variant="caption" tone="accent" weight="semibold" style={styles.bizStatus}>
+                        ⏳ Payment awaiting approval
+                      </Text>
+                    ) : (
+                      <Text variant="caption" tone="success" weight="semibold" style={styles.bizStatus}>
+                        ✓ All paid this month
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={styles.chevron} tone="muted">
+                    {open ? '▾' : '▸'}
+                  </Text>
+                </Pressable>
+
+                {canTrack ? (
+                  <Button
+                    title={`🚌 Track my ${trackNoun(trackedHere)}`}
+                    onPress={() => router.push(trackHref)}
+                    style={styles.trackBtn}
                   />
                 ) : null}
-              </View>
-              {list.map((s) => (
-                <Card
-                  key={s.id}
-                  onPress={() => router.push(`/business/${s.businessId}`)}
-                  style={styles.subCard}
-                >
-                  <View style={styles.subTop}>
-                    <Text weight="semibold" style={styles.planName}>
-                      {s.planName}
-                      {s.enrolleeName ? ` · ${s.enrolleeName}` : ''}
-                    </Text>
-                    <Text weight="semibold" tone="brand">
-                      {formatMoney(s.pricePerMonth)}/mo
-                    </Text>
-                  </View>
-                  <Text variant="caption" tone="muted" style={styles.subDates}>
-                    Subscribed {dateLabel(s.startedAt)} · Last renewed {dateLabel(s.renewedAt)}
-                  </Text>
-                  <View style={styles.subBottom}>
-                    <Tag label={renewsSoon(s) ? '⏳ Renews soon' : '🟢 Active'} />
-                    <Text variant="caption" tone="muted">
-                      Renews {dateLabel(s.expiresAt)}
-                    </Text>
-                  </View>
 
-                  {s.payment ? (
-                    <View style={[styles.payRow, { borderTopColor: colors.border }]}>
-                      {s.payment.status === 'paid' ? (
-                        <Text variant="caption" weight="semibold" tone="success">
-                          ✓ Paid this month
-                        </Text>
-                      ) : s.payment.status === 'pending' ? (
-                        <Text variant="caption" weight="semibold" tone="accent">
-                          ⏳ Reported — awaiting approval
-                        </Text>
-                      ) : (
-                        <>
-                          <Text variant="caption" tone="danger" weight="semibold">
-                            {s.payment.daysOverdue > 0
-                              ? `Unpaid · ${s.payment.daysOverdue}d overdue`
-                              : 'Payment due'}
+                {/* Dropdown — one row per enrolled child, its charge + fee status */}
+                {open ? (
+                  <View style={styles.dropdown}>
+                    {list.map((s) => (
+                      <View
+                        key={s.id}
+                        style={[styles.childRow, { borderTopColor: colors.border }]}
+                      >
+                        <View style={styles.childTop}>
+                          <Text weight="semibold" style={styles.flex}>
+                            {s.enrolleeName ?? s.planName}
                           </Text>
-                          <Tag label="✅ I've paid this month" onPress={() => openReport(s)} />
-                        </>
-                      )}
-                    </View>
-                  ) : null}
-                </Card>
-              ))}
-            </View>
-          ))}
+                          <Text weight="semibold" tone="brand">
+                            {formatMoney(s.pricePerMonth)}/mo
+                          </Text>
+                        </View>
+                        <Text variant="caption" tone="muted" style={styles.childDates}>
+                          {s.enrolleeName ? `${s.planName} · ` : ''}Subscribed {dateLabel(s.startedAt)} ·
+                          Renews {dateLabel(s.expiresAt)}
+                          {renewsSoon(s) ? ' ⏳' : ''}
+                        </Text>
+
+                        {s.payment ? (
+                          s.payment.status === 'paid' ? (
+                            <Text variant="caption" weight="semibold" tone="success" style={styles.childPay}>
+                              ✓ Paid this month
+                            </Text>
+                          ) : s.payment.status === 'pending' ? (
+                            <Text variant="caption" weight="semibold" tone="accent" style={styles.childPay}>
+                              ⏳ Reported — awaiting approval
+                            </Text>
+                          ) : (
+                            <View style={styles.childPayUnpaid}>
+                              <Text variant="caption" tone="danger" weight="semibold">
+                                {s.payment.daysOverdue > 0
+                                  ? `Unpaid · ${s.payment.daysOverdue}d overdue`
+                                  : 'Payment due'}
+                              </Text>
+                              <Tag label="✅ I've paid" onPress={() => openReport(s)} />
+                            </View>
+                          )
+                        ) : null}
+                      </View>
+                    ))}
+                    <Pressable
+                      onPress={() => router.push(`/business/${bizId}`)}
+                      style={styles.viewBiz}
+                      hitSlop={6}
+                    >
+                      <Text variant="caption" tone="accent" weight="semibold">
+                        View business ›
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </Card>
+            );
+          })}
         </>
       )}
 
@@ -375,35 +450,27 @@ const styles = StyleSheet.create({
   cta: { marginTop: spacing.lg, alignSelf: 'stretch' },
   totalCard: { marginBottom: spacing.xl },
   totalAmount: { marginVertical: spacing.xs },
-  group: { marginBottom: spacing.lg },
-  groupTitle: { marginBottom: spacing.md },
-  groupTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  subCard: { marginBottom: spacing.sm },
-  subTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
-  planName: { flex: 1 },
-  subDates: { marginTop: spacing.xs },
-  subBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: spacing.md,
-  },
   flex: { flex: 1 },
-  payRow: {
+  bizCard: { marginBottom: spacing.md },
+  bizHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  bizSub: { marginTop: 2 },
+  bizStatus: { marginTop: spacing.xs },
+  chevron: { fontSize: 22, paddingLeft: spacing.sm },
+  trackBtn: { marginTop: spacing.md },
+  dropdown: { marginTop: spacing.md },
+  childRow: { paddingTop: spacing.md, marginTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth },
+  childTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  childDates: { marginTop: spacing.xs },
+  childPay: { marginTop: spacing.sm },
+  childPayUnpaid: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.sm,
     flexWrap: 'wrap',
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: spacing.sm,
   },
+  viewBiz: { marginTop: spacing.md, alignSelf: 'flex-start' },
   reportSub: { marginTop: spacing.xs, marginBottom: spacing.md },
   reportLabel: { marginTop: spacing.sm, marginBottom: spacing.xs },
   methods: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },

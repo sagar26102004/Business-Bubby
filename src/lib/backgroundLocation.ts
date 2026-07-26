@@ -14,6 +14,7 @@
  * the toggle, permissions and task wiring stay exactly as they are.
  */
 import { Platform } from 'react-native';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 
@@ -21,6 +22,15 @@ import type { GeoPoint } from '@/domain/types';
 
 /** Unique name for the driver's background location task. */
 export const DRIVER_LOCATION_TASK = 'localo-driver-location';
+
+/**
+ * Running inside Expo Go (the store client), not a dev/standalone build.
+ * Background location is unavailable here (nonexistent on Android, Simulator-
+ * only on iOS), and even *calling* the background APIs makes expo-location emit
+ * a console warning. So in Expo Go we skip the background path entirely and
+ * share foreground-only — a real dev build lights the background path back up.
+ */
+const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 let latestFix: (GeoPoint & { at: number }) | null = null;
 
@@ -68,6 +78,10 @@ export async function startBackgroundShare(): Promise<ShareResult> {
     const fg = await Location.requestForegroundPermissionsAsync();
     if (fg.status !== 'granted') return { ok: false, reason: 'denied' };
 
+    // Expo Go can't run background updates — share foreground-only and skip the
+    // background APIs so expo-location doesn't warn about the unsupported task.
+    if (isExpoGo) return { ok: true, background: false };
+
     const bg = await Location.requestBackgroundPermissionsAsync();
     if (bg.status === 'granted') {
       const already = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK).catch(
@@ -97,7 +111,7 @@ export async function startBackgroundShare(): Promise<ShareResult> {
 
 /** Stop sharing — turns off OS background updates if they were running. */
 export async function stopBackgroundShare(): Promise<void> {
-  if (Platform.OS === 'web') return;
+  if (Platform.OS === 'web' || isExpoGo) return;
   try {
     const started = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK).catch(
       () => false,

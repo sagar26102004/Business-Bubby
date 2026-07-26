@@ -1,6 +1,7 @@
 /** Mounts every resource router. One group per repository interface. */
 import { Router } from 'express';
 import { businessesRouter } from './businesses';
+import { catalogRouter } from './catalog';
 import { employeesRouter } from './employees';
 import { usersRouter } from './users';
 import { notificationsRouter } from './notifications';
@@ -20,6 +21,7 @@ import { logbookRouter } from './logbook';
 export const api = Router();
 
 api.use('/businesses', businessesRouter);
+api.use('/catalog', catalogRouter);
 api.use('/employees', employeesRouter);
 api.use('/users', usersRouter);
 api.use('/notifications', notificationsRouter);

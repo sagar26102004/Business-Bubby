@@ -114,6 +114,8 @@ export default function WorkspaceMembersScreen() {
   // Grouped-list UI state.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [busyPayId, setBusyPayId] = useState<string | null>(null);
+  // Which parent group is busy running a "Mark all paid" sweep (its key).
+  const [busyGroupPay, setBusyGroupPay] = useState<string | null>(null);
   // Which member's bus-assignment picker is open (a membership id, or `group:<key>`).
   const [busPickerFor, setBusPickerFor] = useState<string | null>(null);
   const [busBusy, setBusBusy] = useState(false);
@@ -121,6 +123,8 @@ export default function WorkspaceMembersScreen() {
   // Per-request accept inputs (plan name + monthly price), keyed by request id.
   const [reqPlan, setReqPlan] = useState<Record<string, string>>({});
   const [reqPrice, setReqPrice] = useState<Record<string, string>>({});
+  // Whether to mark the first month paid on accept (default OFF = unpaid).
+  const [reqPaid, setReqPaid] = useState<Record<string, boolean>>({});
   const [reqError, setReqError] = useState<Record<string, string | null>>({});
   const [busyReq, setBusyReq] = useState<string | null>(null);
   // Which requests have their plan/price inputs revealed for tweaking.
@@ -248,6 +252,35 @@ export default function WorkspaceMembersScreen() {
     }
     reload();
   };
+  /**
+   * Parent-level "Mark all paid": clear this month for every billed child under
+   * the account in one tap, instead of opening each one. Records a cash payment
+   * for the unpaid ones and approves any the customer already reported; already-
+   * paid children are skipped.
+   */
+  const markAllPaid = async (key: string, items: Membership[]) => {
+    setBusyGroupPay(key);
+    try {
+      for (const m of items) {
+        if (m.standalone || m.status !== 'active') continue;
+        const pay = m.payment;
+        if (!pay || pay.status === 'paid') continue;
+        if (pay.status === 'pending' && pay.pendingPaymentId) {
+          await repos.memberships.approvePayment(pay.pendingPaymentId, myName);
+        } else {
+          await repos.memberships.recordPayment({
+            membershipId: m.id,
+            periodStart: pay.periodStart,
+            method: 'cash',
+            byName: myName,
+          });
+        }
+      }
+      reload();
+    } finally {
+      setBusyGroupPay(null);
+    }
+  };
 
   // ─── Bus assignment (tracking businesses only) ──────────────────────────
   // A member's current bus, if any: the tracked-child row we filed under their
@@ -349,7 +382,16 @@ export default function WorkspaceMembersScreen() {
     }
     setBusyReq(m.id);
     try {
-      await repos.memberships.accept(m.id, { planName, pricePerMonth: price });
+      const enrolled = await repos.memberships.accept(m.id, { planName, pricePerMonth: price });
+      // Enrolments start UNPAID; only clear the first month if the owner ticked it.
+      if (reqPaid[m.id] && enrolled.payment) {
+        await repos.memberships.recordPayment({
+          membershipId: enrolled.id,
+          periodStart: enrolled.payment.periodStart,
+          method: 'cash',
+          byName: myName,
+        });
+      }
       setReqError((e) => ({ ...e, [m.id]: null }));
       reload();
     } finally {
@@ -550,6 +592,10 @@ export default function WorkspaceMembersScreen() {
     const activeItems = items.filter((i) => i.status === 'active');
     const cancelledItems = items.filter((i) => i.status === 'cancelled');
     const activeAssignable = activeItems.filter((i) => !i.standalone);
+    // Billed children who still owe this month — the ones "Mark all paid" clears.
+    const unpaidActive = activeItems.filter(
+      (i) => !i.standalone && i.payment && i.payment.status !== 'paid',
+    );
     const summary =
       activeItems.length > 0
         ? `${activeItems.length} active · ${formatMoney(g.total)}/mo${
@@ -587,6 +633,21 @@ export default function WorkspaceMembersScreen() {
                   📋 Details
                 </Text>
               </Pressable>
+              {unpaidActive.length > 0 ? (
+                <Pressable
+                  onPress={() => busyGroupPay !== g.key && markAllPaid(g.key, unpaidActive)}
+                  hitSlop={6}
+                  disabled={busyGroupPay === g.key}
+                >
+                  <Text
+                    variant="caption"
+                    tone={busyGroupPay === g.key ? 'muted' : 'success'}
+                    weight="semibold"
+                  >
+                    ✓ Mark all paid
+                  </Text>
+                </Pressable>
+              ) : null}
               {activeItems.length > 0 ? (
                 <Pressable onPress={() => stopAll(activeItems)} hitSlop={6}>
                   <Text variant="caption" tone="danger" weight="semibold">
@@ -760,6 +821,22 @@ export default function WorkspaceMembersScreen() {
                   </>
                 ) : null}
 
+                {/* Enrolments are UNPAID by default; the owner can tick the
+                    first month as already collected (e.g. cash on signup). */}
+                <Pressable
+                  onPress={() => setReqPaid((p) => ({ ...p, [m.id]: !p[m.id] }))}
+                  style={styles.paidToggle}
+                  hitSlop={6}
+                >
+                  <Text
+                    variant="caption"
+                    weight="semibold"
+                    tone={reqPaid[m.id] ? 'success' : 'muted'}
+                  >
+                    {reqPaid[m.id] ? '☑' : '☐'} Mark first month as paid
+                  </Text>
+                </Pressable>
+
                 {reqError[m.id] ? (
                   <Text variant="caption" tone="danger" style={styles.error}>
                     {reqError[m.id]}
@@ -824,6 +901,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   headerAdd: { paddingHorizontal: spacing.md, fontSize: 16 },
   sectionHead: { marginTop: spacing.md, marginBottom: spacing.sm },
+  paidToggle: { marginTop: spacing.sm, alignSelf: 'flex-start' },
   reqActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   reqBtn: { flex: 1 },
   adjustLink: { marginTop: spacing.sm, alignSelf: 'flex-start' },

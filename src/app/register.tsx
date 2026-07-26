@@ -26,7 +26,7 @@
  * brokers/agents do, plumbers travel (kind: 'office' vs 'service_area',
  * which drives "Serves <area>" display).
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +41,7 @@ import {
 } from '@/domain/catalog';
 import { COUNTRIES, STATE_NAMES, citiesForState, stateForCity } from '@/domain/geoCatalog';
 import { SUGGESTED_BUSINESS_TAGS, hasTag, isFoodShop } from '@/domain/tags';
+import { isSuperAdminUser } from '@/domain/superAdmin';
 import {
   AVAILABLE_MODULES,
   COMING_SOON_MODULES,
@@ -56,17 +57,22 @@ import type {
   RentalBasis,
   RentalItem,
   ServiceItem,
+  User,
   VehicleKind,
 } from '@/domain/types';
 import type { NewBusinessInput, NewEmployeeInput } from '@/data/repositories';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
 import { useAsync } from '@/lib/useAsync';
+import { clearRegisterDraft, loadRegisterDraft, saveRegisterDraft } from '@/lib/registerDraft';
 import { AutocompleteInput, Button, Card, Input, Screen, Tag, Text } from '@/components/ui';
 import { EmployeeEditor } from '@/features/businesses/EmployeeEditor';
 import { FoodMenuEditor } from '@/features/businesses/FoodMenuEditor';
 import { LocationPicker } from '@/features/businesses/LocationPicker';
 import { OfferingsEditor } from '@/features/businesses/OfferingsEditor';
+import { OwnerPicker } from '@/features/businesses/OwnerPicker';
+import { OpeningHoursField } from '@/features/businesses/OpeningHoursField';
+import { hasUsableHours, summarizeHours, type OpeningHours } from '@/domain/hours';
 import { TagPicker } from '@/features/businesses/TagPicker';
 import { PhotosField } from '@/features/media/PhotosField';
 import { radius, spacing, useColors } from '@/theme/theme';
@@ -91,6 +97,7 @@ const KIND_OPTIONS: { id: ListingKind; icon: string; title: string; blurb: strin
 
 type StepId =
   | 'kind'
+  | 'owner'
   | 'category'
   | 'basics'
   | 'sell'
@@ -112,6 +119,43 @@ interface VehicleDraft {
   petName?: string;
 }
 
+/**
+ * A snapshot of every wizard answer — persisted so an accidental exit doesn't
+ * lose progress. Mirrors the component's form state exactly.
+ */
+interface RegisterDraft {
+  savedAt: number;
+  stepIndex: number;
+  kind: ListingKind;
+  kindChosen: boolean;
+  name: string;
+  tagline: string;
+  description: string;
+  openingHours?: OpeningHours;
+  subcategoryId?: string;
+  tags: string[];
+  priceLabel: string;
+  images: string[];
+  sellItems: MenuItem[];
+  services: ServiceItem[];
+  rentalBasis?: RentalBasis;
+  rentalItems: RentalItem[];
+  vehicleDrafts: VehicleDraft[];
+  modules: ModuleId[] | null;
+  sellChoice: Choice;
+  servicesChoice: Choice;
+  rentChoice: Choice;
+  teamChoice: Choice;
+  hasOffice: Choice;
+  point?: GeoPoint;
+  addressLine: string;
+  city: string;
+  region: string;
+  country: string;
+  employees: NewEmployeeInput[];
+  owner: User | null;
+}
+
 export default function RegisterScreen() {
   const repos = useRepositories();
   const { currentUser, isGuest } = useAuth();
@@ -126,6 +170,9 @@ export default function RegisterScreen() {
   const [name, setName] = useState('');
   const [tagline, setTagline] = useState('');
   const [description, setDescription] = useState('');
+  // Structured opening hours (per-day open/close) — drives the Open/Closed badge
+  // and the timings on the business page. See domain/hours.ts.
+  const [openingHours, setOpeningHours] = useState<OpeningHours | undefined>(undefined);
   // Stall items pick ONE category (stall browsing runs on it); businesses
   // carry many TAGS — what they offer, not a box they're forced into.
   const [subcategoryId, setSubcategoryId] = useState<string | undefined>();
@@ -163,6 +210,9 @@ export default function RegisterScreen() {
   const [country, setCountry] = useState('India');
 
   const [employees, setEmployees] = useState<NewEmployeeInput[]>([]);
+  // Super-admin only: who the listing belongs to. null = the super-admin
+  // themselves. Ordinary users never see this step.
+  const [owner, setOwner] = useState<User | null>(null);
   const [submitting, setSubmitting] = useState(false);
   // Why: a silently disabled Next button reads as broken. Next stays tappable
   // and tapping it while a step is incomplete explains exactly what's missing.
@@ -182,14 +232,18 @@ export default function RegisterScreen() {
   // An existing stall already has a location — don't ask again.
   const addingToStall = isItem && !!myStall;
 
+  // Super-admins get an extra "who owns this" step (business flow only) so they
+  // can register a listing on behalf of another user.
+  const isSuper = isSuperAdminUser(currentUser);
   const stepIds = useMemo<StepId[]>(() => {
     if (isItem) {
       return addingToStall
         ? ['kind', 'category', 'basics', 'review']
         : ['kind', 'category', 'basics', 'location', 'review'];
     }
-    return ['kind', 'category', 'basics', 'sell', 'services', 'rent', 'modules', 'location', 'team', 'review'];
-  }, [isItem, addingToStall]);
+    const base: StepId[] = ['kind', 'category', 'basics', 'sell', 'services', 'rent', 'modules', 'location', 'team', 'review'];
+    return isSuper ? (['kind', 'owner', ...base.slice(1)] as StepId[]) : base;
+  }, [isItem, addingToStall, isSuper]);
 
   const safeIndex = Math.min(stepIndex, stepIds.length - 1);
   const step = stepIds[safeIndex];
@@ -219,13 +273,140 @@ export default function RegisterScreen() {
     setStepIndex(1);
   };
 
-  // "/register?type=item" (e.g. the stall's Add-an-item button) lands
-  // straight on the stall flow; any other preset goes to the business flow.
   const params = useLocalSearchParams<{ type?: string }>();
+
+  // ── Draft autosave ────────────────────────────────────────────────────────
+  // A long wizard where one stray back-tap wiped everything was the complaint.
+  // We snapshot answers to storage and restore them on return.
+  const hydratedRef = useRef(false);
+
+  const buildSnapshot = (): RegisterDraft => ({
+    savedAt: Date.now(),
+    stepIndex,
+    kind,
+    kindChosen,
+    name,
+    tagline,
+    description,
+    openingHours,
+    subcategoryId,
+    tags,
+    priceLabel,
+    images,
+    sellItems,
+    services,
+    rentalBasis,
+    rentalItems,
+    vehicleDrafts,
+    modules,
+    sellChoice,
+    servicesChoice,
+    rentChoice,
+    teamChoice,
+    hasOffice,
+    point,
+    addressLine,
+    city,
+    region,
+    country,
+    employees,
+    owner,
+  });
+
+  const applySnapshot = (d: RegisterDraft) => {
+    setStepIndex(d.stepIndex ?? 0);
+    setKind(d.kind ?? 'business');
+    setKindChosen(d.kindChosen ?? false);
+    setName(d.name ?? '');
+    setTagline(d.tagline ?? '');
+    setDescription(d.description ?? '');
+    setOpeningHours(d.openingHours);
+    setSubcategoryId(d.subcategoryId);
+    setTags(d.tags ?? []);
+    setPriceLabel(d.priceLabel ?? '');
+    setImages(d.images ?? []);
+    setSellItems(d.sellItems ?? []);
+    setServices(d.services ?? []);
+    setRentalBasis(d.rentalBasis);
+    setRentalItems(d.rentalItems ?? []);
+    setVehicleDrafts(d.vehicleDrafts ?? []);
+    setModules(d.modules ?? null);
+    setSellChoice(d.sellChoice ?? null);
+    setServicesChoice(d.servicesChoice ?? null);
+    setRentChoice(d.rentChoice ?? null);
+    setTeamChoice(d.teamChoice ?? null);
+    setHasOffice(d.hasOffice ?? null);
+    setPoint(d.point);
+    setAddressLine(d.addressLine ?? '');
+    setCity(d.city ?? '');
+    setRegion(d.region ?? '');
+    setCountry(d.country ?? 'India');
+    setEmployees(d.employees ?? []);
+    setOwner(d.owner ?? null);
+  };
+
+  // On mount: restore a saved draft if there is one, else honour a "?type="
+  // preset ("/register?type=item" lands straight on the stall flow).
   useEffect(() => {
-    if (params.type && !kindChosen) chooseKind(params.type === 'item' ? 'stall' : 'business');
+    let active = true;
+    (async () => {
+      const draft = await loadRegisterDraft<RegisterDraft>();
+      if (!active) return;
+      if (draft && draft.kindChosen) {
+        applySnapshot(draft);
+      } else if (params.type && !kindChosen) {
+        chooseKind(params.type === 'item' ? 'stall' : 'business');
+      }
+      hydratedRef.current = true;
+    })();
+    return () => {
+      active = false;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Once the user has actually started (picked a kind and moved on), persist
+  // every change — debounced so we don't hammer storage on each keystroke.
+  const hasProgress =
+    kindChosen && (stepIndex > 0 || name.trim().length > 0 || tags.length > 0);
+  useEffect(() => {
+    if (!hydratedRef.current || !hasProgress) return;
+    const snap = buildSnapshot();
+    const t = setTimeout(() => saveRegisterDraft(snap), 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    hasProgress,
+    stepIndex,
+    kind,
+    kindChosen,
+    name,
+    tagline,
+    description,
+    openingHours,
+    subcategoryId,
+    tags,
+    priceLabel,
+    images,
+    sellItems,
+    services,
+    rentalBasis,
+    rentalItems,
+    vehicleDrafts,
+    modules,
+    sellChoice,
+    servicesChoice,
+    rentChoice,
+    teamChoice,
+    hasOffice,
+    point,
+    addressLine,
+    city,
+    region,
+    country,
+    employees,
+    owner,
+  ]);
 
   const stepValid = (id: StepId): boolean => {
     switch (id) {
@@ -409,12 +590,18 @@ export default function RegisterScreen() {
             tagline: tagline.trim() || undefined,
             description: description.trim() || undefined,
             type: derivedType,
+            // Super-admin only: hand the listing to the chosen owner (else self).
+            ownerId: owner?.id,
             // Tags drive discovery; a matching classic subcategory (Cafe →
             // cafe) is derived for anything still keyed on it.
             subcategoryId: getType(derivedType)?.subcategories.find((s) => hasTag(tags, s.name))?.id,
             tags: tags.length > 0 ? tags : undefined,
             menu: foodShop ? items : undefined,
             products: !foodShop ? items : undefined,
+            // Structured hours drive Open/Closed; the free-text `hours` label is
+            // derived from them as a compact fallback for older readers.
+            openingHours,
+            hours: summarizeHours(openingHours),
             services:
               servicesChoice !== 'no' && services.length > 0 ? services : undefined,
             rentalBasis: rentChoice === 'yes' ? rentalBasis : undefined,
@@ -441,6 +628,8 @@ export default function RegisterScreen() {
           });
         }
       }
+      // Published — the draft has served its purpose.
+      await clearRegisterDraft();
       resetForm();
       // Replace the wizard in history so Back from the new listing's page
       // returns to My Business, not into the emptied form.
@@ -461,6 +650,7 @@ export default function RegisterScreen() {
     setName('');
     setTagline('');
     setDescription('');
+    setOpeningHours(undefined);
     setSubcategoryId(undefined);
     setTags([]);
     setPriceLabel('');
@@ -481,6 +671,7 @@ export default function RegisterScreen() {
     setRegion('');
     setCountry('India');
     setEmployees([]);
+    setOwner(null);
   };
 
   const heading = (): { title: string; subtitle?: string } => {
@@ -489,6 +680,12 @@ export default function RegisterScreen() {
         return {
           title: 'What are you listing?',
           subtitle: 'Just this one question — no categories to figure out.',
+        };
+      case 'owner':
+        return {
+          title: 'Who owns this listing?',
+          subtitle:
+            'As a super-admin you can register on someone’s behalf. Leave it as yourself, or assign it to a registered user.',
         };
       case 'category':
         if (isItem) {
@@ -583,6 +780,25 @@ export default function RegisterScreen() {
           </View>
         );
 
+      case 'owner':
+        return (
+          <>
+            <Card style={styles.banner}>
+              <Text weight="semibold">🛡️ Super-admin</Text>
+              <Text variant="caption" tone="muted">
+                You’re registering this listing. Assign it to whoever should own and
+                manage it — they’ll get full control; you can change the owner later
+                from the business page.
+              </Text>
+            </Card>
+            <OwnerPicker
+              value={owner}
+              onChange={setOwner}
+              selfLabel={currentUser ? `Me (${currentUser.name})` : 'Me'}
+            />
+          </>
+        );
+
       case 'category':
         return (
           <>
@@ -634,12 +850,15 @@ export default function RegisterScreen() {
               onChangeText={setName}
             />
             {!isItem ? (
-              <Input
-                label="Tagline (optional)"
-                placeholder="One line about what you offer"
-                value={tagline}
-                onChangeText={setTagline}
-              />
+              <>
+                <Input
+                  label="Tagline (optional)"
+                  placeholder="One line about what you offer"
+                  value={tagline}
+                  onChangeText={setTagline}
+                />
+                <OpeningHoursField value={openingHours} onChange={setOpeningHours} />
+              </>
             ) : null}
             {/* Only stall items carry a price here — a business prices its
                 menu / products / services / rentals on their own steps. */}
@@ -939,8 +1158,17 @@ export default function RegisterScreen() {
               },
           { id: 'basics', label: isItem ? 'Item' : 'Name', value: name.trim() || '— add a name' },
         ];
+        if (stepIds.includes('owner')) {
+          rows.splice(1, 0, {
+            id: 'owner',
+            label: 'Owner',
+            value: owner ? owner.name : currentUser ? `${currentUser.name} (you)` : 'You',
+          });
+        }
         if (isItem && priceLabel.trim())
           rows.push({ id: 'basics', label: 'Price', value: priceLabel.trim() });
+        if (!isItem && hasUsableHours(openingHours))
+          rows.push({ id: 'basics', label: 'Hours', value: summarizeHours(openingHours) ?? '' });
         if (stepIds.includes('sell')) {
           rows.push({
             id: 'sell',

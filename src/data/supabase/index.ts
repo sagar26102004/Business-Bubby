@@ -16,6 +16,7 @@ import type { Repositories } from '@/data/repositories';
 import { createSupabaseAuth } from './auth';
 import { createSupabaseUsers } from './users';
 import { createSupabaseBusinesses } from './businesses';
+import { createSupabaseCatalog } from './catalog';
 import { createSupabaseEmployees } from './employees';
 import { createSupabasePlaces } from './places';
 import { createSupabaseChat } from './chat';
@@ -37,6 +38,7 @@ export function createSupabaseRepositories(): Repositories {
     auth: createSupabaseAuth(),
     users: createSupabaseUsers(),
     businesses: createSupabaseBusinesses(),
+    catalog: createSupabaseCatalog(),
     employees: createSupabaseEmployees(),
     places: createSupabasePlaces(),
     chat: createSupabaseChat(),

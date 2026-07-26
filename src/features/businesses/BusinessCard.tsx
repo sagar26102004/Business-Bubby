@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Business, PlaceKind } from '@/domain/types';
+import { openState } from '@/domain/hours';
 import { formatDistance, priceLevelLabel, rentalBasisLabel } from '@/domain/catalog';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -30,6 +31,11 @@ export function BusinessCard({ business }: { business: Business }) {
 
   const distance = formatDistance(business.distanceKm);
   const price = priceLevelLabel(business.priceLevel);
+
+  // Open/Closed is computed from structured hours when present, else the stored
+  // openNow flag; the 🕒 label prefers today's timings over the legacy summary.
+  const status = openState(business);
+  const hoursLabel = status.todayLabel ?? business.hours;
 
   // Rentals: what matters is how far the flat/room is from the places the
   // renter lives their life around, so show Current/Home/Work distances.
@@ -102,21 +108,21 @@ export function BusinessCard({ business }: { business: Business }) {
                 {business.rentalStatus === 'available' ? 'Available' : 'Rented'}
               </Text>
             </View>
-          ) : typeof business.openNow === 'boolean' ? (
+          ) : typeof status.open === 'boolean' ? (
             <View
               style={[
                 styles.statusPill,
-                { backgroundColor: business.openNow ? colors.success : colors.textMuted },
+                { backgroundColor: status.open ? colors.success : colors.textMuted },
               ]}
             >
               <Text variant="caption" weight="semibold" tone="inverse">
-                {business.openNow ? 'Open Now' : 'Closed'}
+                {status.open ? 'Open Now' : 'Closed'}
               </Text>
             </View>
           ) : null}
-          {business.hours ? (
+          {hoursLabel ? (
             <Text variant="caption" tone="muted">
-              🕒 {business.hours}
+              🕒 {hoursLabel}
             </Text>
           ) : null}
           {distance ? (

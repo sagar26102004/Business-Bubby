@@ -10,6 +10,17 @@ export interface GeoPoint {
   longitude: number;
 }
 
+/** Structured opening hours (mirror of src/domain/hours.ts). */
+export interface DayHours {
+  closed?: boolean;
+  open?: string;
+  close?: string;
+}
+export interface OpeningHours {
+  days: DayHours[];
+  note?: string;
+}
+
 export type ListingType = 'service' | 'shop' | 'item' | 'rental';
 export type LocationKind = 'office' | 'home' | 'service_area';
 
@@ -33,6 +44,8 @@ export interface User {
   avatarUrl?: string;
   bio?: string;
   isProfilePublic: boolean;
+  /** Platform super-admin (see lib/superAdmin) — mirrored onto the profile. */
+  isSuperAdmin?: boolean;
 }
 
 export type EmployeeLevel = 'manager' | 'staff';
@@ -306,6 +319,7 @@ export interface Business {
   tags?: string[];
   openNow?: boolean;
   hours?: string;
+  openingHours?: OpeningHours;
   rentalBasis?: RentalBasis;
   rentals?: RentalItem[];
   rentalStatus?: RentalStatus;
@@ -451,6 +465,21 @@ export interface MonthlySpend {
   month: string;
   total: number;
   lines: MonthlySpendLine[];
+}
+
+export type CatalogEntryKind = 'tag' | 'dish' | 'service' | 'product';
+
+export interface CatalogEntry {
+  id: string;
+  kind: CatalogEntryKind;
+  name: string;
+  key: string;
+  approved: boolean;
+  adminAdded?: boolean;
+  count: number;
+  addedBy?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export type PlaceKind = 'current' | 'home' | 'work' | 'custom';

@@ -7,6 +7,7 @@ import { asData, rowsData, toJson, uuidOrNull } from '@/lib/data';
 import { normalizeRole } from '@/lib/roles';
 import { haversineKm } from '@/lib/geo';
 import { notFound } from '@/http/errors';
+import { captureBusinessOfferings } from './catalog';
 
 /** Stamp stable ids onto products that don't have one yet. */
 const withProductIds = (products?: ProductItem[]): ProductItem[] | undefined =>
@@ -85,12 +86,18 @@ export const businessService = {
   },
 
   async create(input: NewBusinessInput, ownerId: string): Promise<Business> {
+    // A super-admin can list on someone else's behalf (input.ownerId); the
+    // router has already verified they're allowed to name a foreign owner.
+    const effectiveOwnerId = input.ownerId?.trim() || ownerId;
+
     // Personal stalls: one 'item' listing per user; fold new products in.
     if (input.type === 'item') {
-      const stall = await this.getStallForOwner(ownerId);
+      const stall = await this.getStallForOwner(effectiveOwnerId);
       if (stall) {
         stall.products = [...(stall.products ?? []), ...(withProductIds(input.products) ?? [])];
-        return saveBusiness(stall);
+        const saved = await saveBusiness(stall);
+        await captureBusinessOfferings(saved);
+        return saved;
       }
     }
 
@@ -107,7 +114,7 @@ export const businessService = {
 
     const business: Business = {
       id: businessId,
-      ownerId,
+      ownerId: effectiveOwnerId,
       name: input.name,
       tagline: input.tagline,
       description: input.description,
@@ -122,6 +129,8 @@ export const businessService = {
       menu: input.menu,
       services: input.services,
       products: withProductIds(input.products),
+      hours: input.hours,
+      openingHours: input.openingHours,
       modules: input.modules,
       employeeIds,
       callHandlerIds: employeeIds,
@@ -135,7 +144,7 @@ export const businessService = {
     };
 
     await prisma.business.create({
-      data: { id: businessId, ownerId, type: business.type, data: toJson(business) },
+      data: { id: businessId, ownerId: effectiveOwnerId, type: business.type, data: toJson(business) },
     });
     if (newEmployees.length) {
       await prisma.employee.createMany({
@@ -147,6 +156,7 @@ export const businessService = {
         })),
       });
     }
+    await captureBusinessOfferings(business);
     return business;
   },
 
@@ -186,6 +196,23 @@ export const businessService = {
     if (!business) throw notFound(`Business ${id} not found`);
     Object.assign(business, patch);
     if (patch.products) business.products = withProductIds(patch.products);
-    return saveBusiness(business);
+    const saved = await saveBusiness(business);
+    // Capture new offerings when the listing's tags/menu/services/products change.
+    if (patch.tags || patch.menu || patch.services || patch.products) {
+      await captureBusinessOfferings(saved);
+    }
+    return saved;
+  },
+
+  async reassignOwner(id: string, newOwnerId: string): Promise<Business> {
+    const business = await findBusiness(id);
+    if (!business) throw notFound(`Business ${id} not found`);
+    business.ownerId = newOwnerId;
+    // Keep the scoping column in step so membership checks follow the new owner.
+    await prisma.business.update({
+      where: { id },
+      data: { ownerId: newOwnerId, data: toJson(business) },
+    });
+    return business;
   },
 };

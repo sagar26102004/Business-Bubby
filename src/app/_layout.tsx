@@ -149,6 +149,7 @@ export default function RootLayout() {
           <Stack.Screen name="business/[id]" options={{ title: 'Business' }} />
           <Stack.Screen name="employee/[id]" options={{ title: 'Profile' }} />
           <Stack.Screen name="map" options={{ title: 'Map' }} />
+          <Stack.Screen name="directions/[businessId]" options={{ title: 'Directions' }} />
           <Stack.Screen name="search" options={{ headerShown: false }} />
           <Stack.Screen name="browse/[type]" options={{ title: 'Browse' }} />
           <Stack.Screen name="qr/[businessId]" options={{ title: 'QR code' }} />
@@ -176,6 +177,7 @@ export default function RootLayout() {
           <Stack.Screen name="stall/[businessId]" options={{ title: 'Manage stall' }} />
           <Stack.Screen name="fleet/[businessId]" options={{ title: 'Fleet & tracking' }} />
           <Stack.Screen name="fleet/[businessId]/vehicles" options={{ title: 'Vehicles' }} />
+          <Stack.Screen name="fleet/[businessId]/journey" options={{ title: 'Journeys' }} />
           <Stack.Screen name="fleet/[businessId]/items" options={{ title: 'Tracked items' }} />
           <Stack.Screen name="track/[businessId]" options={{ title: 'Live tracking' }} />
           <Stack.Screen name="workspace/[businessId]" options={{ title: 'Workspace' }} />
@@ -190,6 +192,7 @@ export default function RootLayout() {
           <Stack.Screen name="inbox/[businessId]/index" options={{ title: 'Inbox' }} />
           <Stack.Screen name="inbox/[businessId]/[participantId]" options={{ title: 'Chat' }} />
           <Stack.Screen name="dev" options={{ title: 'Dev tools' }} />
+          <Stack.Screen name="admin" options={{ title: 'Admin' }} />
           <Stack.Screen name="sign-in" options={{ presentation: 'modal', title: 'Sign in' }} />
         </Stack>
         {/* On a reload, send deep routes back to Home (mock/auth reset). */}

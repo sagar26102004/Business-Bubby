@@ -405,6 +405,20 @@ export function dishImage(dish: Dish): string {
   return `https://loremflickr.com/320/240/${keywords}`;
 }
 
+/**
+ * Community dishes — names owners have listed that the code catalog didn't
+ * know. They're loaded from approved `CatalogEntry` rows at app start (see
+ * domain/catalogEntries.ts) and fold into `searchDishes` so the next owner
+ * gets them as ready suggestions. They carry only a name (no curated
+ * description / veg dot / photo), so tapping one just fills the name.
+ */
+let communityDishes: Dish[] = [];
+
+/** Replace the community-dish overlay merged into `searchDishes`. */
+export function setCommunityDishes(dishes: Dish[]): void {
+  communityDishes = dishes;
+}
+
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
@@ -427,7 +441,8 @@ export function searchDishes(
   const limit = opts.limit ?? 8;
 
   const scored: { dish: Dish; score: number }[] = [];
-  for (const dish of DISH_CATALOG) {
+  const all = communityDishes.length ? [...DISH_CATALOG, ...communityDishes] : DISH_CATALOG;
+  for (const dish of all) {
     const name = norm(dish.name);
     let score: number;
     if (name.startsWith(q)) score = 0;

@@ -16,6 +16,8 @@ import type {
   Business,
   Call,
   CallParticipant,
+  CatalogEntry,
+  CatalogEntryKind,
   ChatMessage,
   Employee,
   GeoPoint,
@@ -35,6 +37,7 @@ import type {
   Vehicle,
 } from '@/domain/types';
 import { getVehicleKind } from '@/domain/catalog';
+import { applyCatalogEntries, catalogKey, isCodeCatalogName } from '@/domain/catalogEntries';
 import { normalizeRole } from '@/domain/roles';
 import type {
   AuthRepository,
@@ -45,6 +48,8 @@ import type {
   BusinessQuery,
   BusinessRepository,
   CallRepository,
+  CaptureEntryInput,
+  CatalogRepository,
   ChatAuthor,
   ChatRepository,
   ChatThreadSummary,
@@ -174,6 +179,133 @@ const nextId = (prefix: string) => `${prefix}_${Date.now().toString(36)}_${idCou
 const withProductIds = (products?: ProductItem[]): ProductItem[] | undefined =>
   products?.map((p) => (p.id ? p : { ...p, id: nextId('p') }));
 
+// The app's GROWING collection — starts empty (the curated head start lives in
+// code, domain/dishes.ts + domain/tags.ts), fills as listings are created and a
+// super-admin adds tags. See CatalogRepository.
+const catalogEntries: CatalogEntry[] = [];
+
+/**
+ * Record offerings not already in the code catalog or the store, bumping the
+ * count on ones already seen. Shared by the repo's `capture` and the automatic
+ * capture that runs on every business create/update.
+ */
+function applyCapture(inputs: CaptureEntryInput[], addedBy?: string): void {
+  for (const input of inputs) {
+    const name = input.name?.trim();
+    if (!name) continue;
+    const key = catalogKey(name);
+    const existing = catalogEntries.find((e) => e.kind === input.kind && e.key === key);
+    if (existing) {
+      existing.count += 1;
+      existing.updatedAt = new Date().toISOString();
+      continue;
+    }
+    if (isCodeCatalogName(input.kind, name)) continue; // already shipped in code
+    catalogEntries.push({
+      id: nextId('cat'),
+      kind: input.kind,
+      name,
+      key,
+      approved: true, // live immediately; a super-admin hides bad ones after
+      count: 1,
+      addedBy,
+      createdAt: new Date().toISOString(),
+    });
+  }
+  applyCatalogEntries(catalogEntries); // keep the in-session overlays fresh
+}
+
+/** Everything a listing contributes to the collection: its tags + offerings. */
+function businessCaptureInputs(b: Business): CaptureEntryInput[] {
+  const out: CaptureEntryInput[] = [];
+  for (const t of b.tags ?? []) out.push({ kind: 'tag', name: t });
+  for (const m of b.menu ?? []) out.push({ kind: 'dish', name: m.name });
+  for (const s of b.services ?? []) out.push({ kind: 'service', name: s.name });
+  for (const p of b.products ?? []) out.push({ kind: 'product', name: p.name });
+  return out;
+}
+
+/** Best-effort capture of a listing's offerings — never fails the write. */
+function captureFromBusiness(b: Business): void {
+  try {
+    applyCapture(businessCaptureInputs(b), b.ownerId);
+  } catch {
+    /* ignore — capturing is a side effect of listing */
+  }
+}
+
+class MockCatalogRepository implements CatalogRepository {
+  async listApproved(kind?: CatalogEntryKind): Promise<CatalogEntry[]> {
+    await delay(60);
+    return catalogEntries
+      .filter((e) => e.approved && (kind ? e.kind === kind : true))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .map(clone);
+  }
+
+  async listAll(kind?: CatalogEntryKind): Promise<CatalogEntry[]> {
+    await delay(60);
+    return catalogEntries
+      .filter((e) => (kind ? e.kind === kind : true))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .map(clone);
+  }
+
+  async capture(inputs: CaptureEntryInput[], addedBy?: string): Promise<void> {
+    try {
+      applyCapture(inputs, addedBy);
+    } catch {
+      /* ignore — capturing must never fail the caller */
+    }
+  }
+
+  async addTag(name: string): Promise<CatalogEntry> {
+    await delay(80);
+    const clean = name.trim().replace(/\s+/g, ' ');
+    if (!clean) throw new Error('Type a tag name first.');
+    const key = catalogKey(clean);
+    const existing = catalogEntries.find((e) => e.kind === 'tag' && e.key === key);
+    if (existing) {
+      // Re-adding a hidden/known tag just makes it live + admin-blessed again.
+      existing.approved = true;
+      existing.adminAdded = true;
+      existing.updatedAt = new Date().toISOString();
+      applyCatalogEntries(catalogEntries);
+      return clone(existing);
+    }
+    const entry: CatalogEntry = {
+      id: nextId('cat'),
+      kind: 'tag',
+      name: clean,
+      key,
+      approved: true,
+      adminAdded: true,
+      count: 0,
+      createdAt: new Date().toISOString(),
+    };
+    catalogEntries.push(entry);
+    applyCatalogEntries(catalogEntries);
+    return clone(entry);
+  }
+
+  async setApproved(id: string, approved: boolean): Promise<CatalogEntry> {
+    await delay(70);
+    const entry = catalogEntries.find((e) => e.id === id);
+    if (!entry) throw new Error(`Catalog entry ${id} not found`);
+    entry.approved = approved;
+    entry.updatedAt = new Date().toISOString();
+    applyCatalogEntries(catalogEntries);
+    return clone(entry);
+  }
+
+  async remove(id: string): Promise<void> {
+    await delay(70);
+    const i = catalogEntries.findIndex((e) => e.id === id);
+    if (i >= 0) catalogEntries.splice(i, 1);
+    applyCatalogEntries(catalogEntries);
+  }
+}
+
 class MockBusinessRepository implements BusinessRepository {
   async list(query: BusinessQuery = {}): Promise<Business[]> {
     await delay();
@@ -239,12 +371,17 @@ class MockBusinessRepository implements BusinessRepository {
   async create(input: NewBusinessInput, ownerId: string): Promise<Business> {
     await delay();
 
+    // A super-admin can list on someone else's behalf by naming the target
+    // owner in the input; ordinary registration leaves it unset (self-owned).
+    const effectiveOwnerId = input.ownerId?.trim() || ownerId;
+
     // Personal stalls: a user has ONE 'item' listing. Listing another item
     // adds it to the existing stall's products instead of creating a listing.
     if (input.type === 'item') {
-      const stall = businesses.find((b) => b.type === 'item' && b.ownerId === ownerId);
+      const stall = businesses.find((b) => b.type === 'item' && b.ownerId === effectiveOwnerId);
       if (stall) {
         stall.products = [...(stall.products ?? []), ...(withProductIds(input.products) ?? [])];
+        captureFromBusiness(stall);
         return clone(stall);
       }
     }
@@ -265,7 +402,7 @@ class MockBusinessRepository implements BusinessRepository {
 
     const business: Business = {
       id: businessId,
-      ownerId,
+      ownerId: effectiveOwnerId,
       name: input.name,
       tagline: input.tagline,
       description: input.description,
@@ -280,6 +417,8 @@ class MockBusinessRepository implements BusinessRepository {
       menu: input.menu,
       services: input.services,
       products: withProductIds(input.products),
+      hours: input.hours,
+      openingHours: input.openingHours,
       modules: input.modules,
       employeeIds,
       // By default everyone on the team handles calls and receives chats;
@@ -297,6 +436,7 @@ class MockBusinessRepository implements BusinessRepository {
       createdAt: new Date().toISOString(),
     };
     businesses.push(business);
+    captureFromBusiness(business);
     return clone(business);
   }
 
@@ -351,6 +491,16 @@ class MockBusinessRepository implements BusinessRepository {
     Object.assign(business, patch);
     // Products edited in Manage come back without ids for the new rows.
     if (patch.products) business.products = withProductIds(patch.products);
+    // Manage edits add new tags/menu/services/products — capture them too.
+    if (patch.tags || patch.menu || patch.services || patch.products) captureFromBusiness(business);
+    return clone(business);
+  }
+
+  async reassignOwner(id: string, newOwnerId: string): Promise<Business> {
+    await delay(90);
+    const business = businesses.find((b) => b.id === id);
+    if (!business) throw new Error(`Business ${id} not found`);
+    business.ownerId = newOwnerId;
     return clone(business);
   }
 }
@@ -1783,6 +1933,12 @@ class MockCallRepository implements CallRepository {
     return found ? clone(found) : null;
   }
 
+  async getAudioToken(): Promise<{ token: string; url: string }> {
+    // The in-memory mock has no media server. Live audio needs a real backend
+    // (Supabase edge function or the Express API) that can mint LiveKit tokens.
+    throw new Error('Live call audio needs the Supabase or API backend.');
+  }
+
   private mustFind(callId: string): Call {
     const call = calls.find((c) => c.id === callId);
     if (!call) throw new Error(`Call ${callId} not found`);
@@ -2605,6 +2761,7 @@ class MockLogbookRepository implements LogbookRepository {
 export function createMockRepositories(): Repositories {
   return {
     businesses: new MockBusinessRepository(),
+    catalog: new MockCatalogRepository(),
     employees: new MockEmployeeRepository(),
     users: new MockUserRepository(),
     auth: new MockAuthRepository(),

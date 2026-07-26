@@ -7,11 +7,13 @@
 import type {
   BillLine,
   BusinessLocation,
+  CatalogEntryKind,
   EmployeeLevel,
   GeoPoint,
   ListingType,
   MenuItem,
   OfferingKind,
+  OpeningHours,
   PartyDetails,
   ProductItem,
   RentalBasis,
@@ -44,6 +46,8 @@ export interface NewBusinessInput {
   type: ListingType;
   subcategoryId?: string;
   tags?: string[];
+  /** Super-admin registering for someone else sets the target owner's id here. */
+  ownerId?: string;
   location: BusinessLocation;
   phone?: string;
   email?: string;
@@ -52,6 +56,8 @@ export interface NewBusinessInput {
   menu?: MenuItem[];
   services?: ServiceItem[];
   products?: ProductItem[];
+  hours?: string;
+  openingHours?: OpeningHours;
   modules?: string[];
   rentalBasis?: RentalBasis;
   rentals?: RentalItem[];
@@ -261,4 +267,10 @@ export interface NewLogEntryInput {
   amount?: number;
   customerName?: string;
   recordedByName: string;
+}
+
+/** One offering (or tag) to record into the growing catalog collection. */
+export interface CaptureEntryInput {
+  kind: CatalogEntryKind;
+  name: string;
 }

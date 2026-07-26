@@ -12,6 +12,7 @@ import type {
   NewBusinessInput,
 } from '@/data/repositories';
 import { haversineKm } from '@/lib/geo';
+import { captureBusinessOfferings } from './catalog';
 import { sb, uuid, nowIso, uuidOrNull } from './shared';
 
 /** Stamp a stable id on any product that doesn't have one yet. */
@@ -107,13 +108,19 @@ export function createSupabaseBusinesses(): BusinessRepository {
     },
 
     async create(input: NewBusinessInput, ownerId: string): Promise<Business> {
+      // A super-admin can list on someone else's behalf by naming the target
+      // owner; the insert with a foreign owner_id is allowed only for them (see
+      // migration 0004's businesses_insert policy). Ordinary registration
+      // leaves it unset and the row is self-owned.
+      const effectiveOwnerId = input.ownerId?.trim() || ownerId;
+
       // Personal stalls: a user has ONE 'item' listing. Adding another item folds
       // its products into the existing stall instead of creating a new listing.
       if (input.type === 'item') {
         const { data: existing } = await sb()
           .from('businesses')
           .select('data')
-          .eq('owner_id', ownerId)
+          .eq('owner_id', effectiveOwnerId)
           .eq('type', 'item')
           .maybeSingle();
         if (existing) {
@@ -124,6 +131,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
           };
           const { error } = await sb().from('businesses').update({ data: next }).eq('id', stall.id);
           if (error) throw error;
+          await captureBusinessOfferings(next);
           return next;
         }
       }
@@ -141,7 +149,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
 
       const business: Business = {
         id: businessId,
-        ownerId,
+        ownerId: effectiveOwnerId,
         name: input.name,
         tagline: input.tagline,
         description: input.description,
@@ -156,6 +164,8 @@ export function createSupabaseBusinesses(): BusinessRepository {
         menu: input.menu,
         services: input.services,
         products: withProductIds(input.products),
+        hours: input.hours,
+        openingHours: input.openingHours,
         modules: input.modules,
         employeeIds,
         callHandlerIds: employeeIds,
@@ -171,7 +181,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
       // Business first (RLS on employees checks membership, which needs the row).
       const { error: bErr } = await sb()
         .from('businesses')
-        .insert({ id: businessId, owner_id: ownerId, type: input.type, data: business });
+        .insert({ id: businessId, owner_id: effectiveOwnerId, type: input.type, data: business });
       if (bErr) throw bErr;
 
       if (newEmployees.length > 0) {
@@ -185,6 +195,8 @@ export function createSupabaseBusinesses(): BusinessRepository {
         );
         if (eErr) throw eErr;
       }
+      // Grow the collection with anything new this listing offers.
+      await captureBusinessOfferings(business);
       return business;
     },
 
@@ -259,6 +271,28 @@ export function createSupabaseBusinesses(): BusinessRepository {
       delete (next as { ratingCount?: number }).ratingCount;
       delete (next as { distanceKm?: number }).distanceKm;
       const { error } = await sb().from('businesses').update({ data: next }).eq('id', id);
+      if (error) throw error;
+      // Manage edits add new tags/menu/services/products — capture those too.
+      if (patch.tags || patch.menu || patch.services || patch.products) {
+        await captureBusinessOfferings(next);
+      }
+      return this.getById(id) as Promise<Business>;
+    },
+
+    async reassignOwner(id: string, newOwnerId: string): Promise<Business> {
+      const current = await this.getById(id);
+      if (!current) throw new Error(`Business ${id} not found`);
+      const next: Business = { ...current, ownerId: newOwnerId };
+      delete (next as { ratingAvg?: number }).ratingAvg;
+      delete (next as { ratingCount?: number }).ratingCount;
+      delete (next as { distanceKm?: number }).distanceKm;
+      // Update BOTH the scoping column and the document — is_business_member and
+      // getStallForOwner key on the column, everything else reads data.ownerId.
+      // RLS allows this only for a super-admin (migration 0004).
+      const { error } = await sb()
+        .from('businesses')
+        .update({ owner_id: newOwnerId, data: next })
+        .eq('id', id);
       if (error) throw error;
       return this.getById(id) as Promise<Business>;
     },

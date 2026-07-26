@@ -6,9 +6,11 @@
 import { Fragment, useCallback, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
-import type { Business, Employee, PlaceKind, TrackedItem } from '@/domain/types';
+import type { Business, Employee, PlaceKind, TrackedItem, User } from '@/domain/types';
 import { commerceVocab, formatDistance, getSubcategory, getType, offersDineIn, rentalBasisLabel } from '@/domain/catalog';
 import { hasModule } from '@/domain/modules';
+import { isSuperAdminUser } from '@/domain/superAdmin';
+import { openState, weeklySchedule } from '@/domain/hours';
 import { haversineKm } from '@/lib/geo';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -27,7 +29,8 @@ import { EmployeeRow } from '@/features/employees/EmployeeRow';
 import { CatalogAccordion } from '@/features/businesses/CatalogAccordion';
 import { ProductTile } from '@/features/businesses/ProductTile';
 import { PortfolioGallery } from '@/features/businesses/PortfolioGallery';
-import { canShowPreciseLocation, locationSummary } from '@/features/businesses/location';
+import { OwnerPicker } from '@/features/businesses/OwnerPicker';
+import { canShowPreciseLocation, hasShowableCoordinates, locationSummary } from '@/features/businesses/location';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 const PLACE_ICONS: Record<PlaceKind, string> = {
@@ -77,6 +80,28 @@ export default function BusinessDetailScreen() {
 
   // The team sits at the bottom, folded away — customers come to order.
   const [teamOpen, setTeamOpen] = useState(false);
+  // Super-admin: reassign-owner panel state.
+  const [reassignOpen, setReassignOpen] = useState(false);
+  const [newOwner, setNewOwner] = useState<User | null>(null);
+  const [reassigning, setReassigning] = useState(false);
+  const [reassignMsg, setReassignMsg] = useState<string | null>(null);
+
+  const doReassign = useCallback(async () => {
+    if (!newOwner || !data) return;
+    setReassigning(true);
+    setReassignMsg(null);
+    try {
+      await repos.businesses.reassignOwner(data.business.id, newOwner.id);
+      setReassignMsg(`✓ Owner changed to ${newOwner.name}.`);
+      setReassignOpen(false);
+      setNewOwner(null);
+      reload();
+    } catch (err) {
+      setReassignMsg(err instanceof Error ? err.message : 'Could not change the owner.');
+    } finally {
+      setReassigning(false);
+    }
+  }, [newOwner, data, repos, reload]);
 
   // Refetch when coming back from rate/order/chat screens so fresh reviews and
   // counts show — but keep the current content on screen while it reloads.
@@ -93,11 +118,10 @@ export default function BusinessDetailScreen() {
   if (!data) return <EmptyView title="Not found" subtitle="This listing may have been removed." />;
 
   const { business, employees, owner, publicByEmployeeId, myTrackedItems, myOrders, places, reviews, myReview } = data;
-  const type = getType(business.type);
-  const subcategory = getSubcategory(business.type, business.subcategoryId);
   const showPrecise = canShowPreciseLocation(business.location);
   const isOwner = currentUser?.id === business.ownerId;
   const isMember = isOwner || employees.some((e) => e.userId && e.userId === currentUser?.id);
+  const isSuper = isSuperAdminUser(currentUser);
 
   const hasMenu = (business.menu?.length ?? 0) > 0;
   // Enrol/Subscribe and Order are now two distinct buttons on two distinct
@@ -138,52 +162,6 @@ export default function BusinessDetailScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: business.name }} />
 
-      {business.rentalStatus || typeof business.openNow === 'boolean' || business.hours ? (
-      <View style={styles.tags}>
-        {business.rentalStatus ? (
-          <View
-            style={[
-              styles.statusPill,
-              {
-                backgroundColor:
-                  business.rentalStatus === 'available' ? colors.success : colors.danger,
-              },
-            ]}
-          >
-            <Text variant="caption" weight="semibold" tone="inverse">
-              {business.rentalStatus === 'available' ? 'Available' : 'Rented'}
-            </Text>
-          </View>
-        ) : typeof business.openNow === 'boolean' ? (
-          <View
-            style={[
-              styles.statusPill,
-              { backgroundColor: business.openNow ? colors.success : colors.textMuted },
-            ]}
-          >
-            <Text variant="caption" weight="semibold" tone="inverse">
-              {business.openNow ? 'Open Now' : 'Closed'}
-            </Text>
-          </View>
-        ) : null}
-        {business.hours ? (
-          <View style={[styles.statusPill, { backgroundColor: colors.surfaceAlt }]}>
-            <Text variant="caption" weight="semibold" tone="muted">
-              🕒 {business.hours}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-      ) : null}
-
-      <View style={styles.tags}>
-        {type ? <Tag label={type.singular} icon={type.icon} tone="brand" /> : null}
-        {subcategory ? <Tag label={subcategory.name} icon={subcategory.icon} /> : null}
-        {business.rentalBasis ? (
-          <Tag label={rentalBasisLabel(business.rentalBasis)!} icon="🔑" />
-        ) : null}
-      </View>
-
       <Text variant="title" weight="bold" style={styles.name}>
         {business.name}
       </Text>
@@ -214,6 +192,76 @@ export default function BusinessDetailScreen() {
         <Text style={styles.description}>{business.description}</Text>
       ) : null}
 
+      {/* Open/closed status + the hours you can reach them — sits right under
+          the name & description, not up in the app bar. Open/Closed is computed
+          from structured hours when present, else the stored openNow flag. */}
+      {(() => {
+        const status = openState(business);
+        const todayLabel = status.todayLabel ?? business.hours;
+        if (!business.rentalStatus && typeof status.open !== 'boolean' && !todayLabel) return null;
+        return (
+          <View style={styles.statusRow}>
+            {business.rentalStatus ? (
+              <View
+                style={[
+                  styles.statusPill,
+                  {
+                    backgroundColor:
+                      business.rentalStatus === 'available' ? colors.success : colors.danger,
+                  },
+                ]}
+              >
+                <Text variant="caption" weight="semibold" tone="inverse">
+                  {business.rentalStatus === 'available' ? 'Available' : 'Rented'}
+                </Text>
+              </View>
+            ) : typeof status.open === 'boolean' ? (
+              <View
+                style={[
+                  styles.statusPill,
+                  { backgroundColor: status.open ? colors.success : colors.textMuted },
+                ]}
+              >
+                <Text variant="caption" weight="semibold" tone="inverse">
+                  {status.open ? 'Open Now' : 'Closed'}
+                </Text>
+              </View>
+            ) : null}
+            {todayLabel ? (
+              <View style={[styles.statusPill, { backgroundColor: colors.surfaceAlt }]}>
+                <Text variant="caption" weight="semibold" tone="muted">
+                  🕒 {todayLabel}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        );
+      })()}
+
+      {/* Full weekly schedule (today highlighted) when structured hours exist. */}
+      {business.openingHours ? (
+        <Card style={styles.scheduleCard}>
+          {weeklySchedule(business.openingHours).map((row) => (
+            <View key={row.label} style={styles.scheduleRow}>
+              <Text weight={row.today ? 'bold' : 'regular'} tone={row.today ? 'brand' : 'default'}>
+                {row.label}
+              </Text>
+              <Text
+                weight={row.today ? 'semibold' : 'regular'}
+                tone={row.text === 'Closed' ? 'muted' : 'default'}
+              >
+                {row.text}
+              </Text>
+            </View>
+          ))}
+          {business.openingHours.note ? (
+            <Text variant="caption" tone="muted" style={styles.scheduleNote}>
+              {business.openingHours.note}
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
+
       {/* Location — right with the description, and it respects the owner's
           privacy choice */}
       <SectionTitle>Location</SectionTitle>
@@ -238,6 +286,16 @@ export default function BusinessDetailScreen() {
               );
             })
           : null}
+        {/* Directions — opens the exact spot with a blue route from where you
+            are now, Google-Maps style. Only when the owner shares a precise pin. */}
+        {hasShowableCoordinates(business.location) ? (
+          <Button
+            title="🧭 Get directions"
+            variant="secondary"
+            onPress={() => router.push(`/directions/${business.id}`)}
+            style={styles.directionsBtn}
+          />
+        ) : null}
       </Card>
 
       {/* Work showcase — the business's portfolio of past work */}
@@ -564,6 +622,13 @@ export default function BusinessDetailScreen() {
             />
           </>
         ) : null}
+        {isOwner && business.type !== 'item' ? (
+          <Button
+            title="✏️ Edit business page"
+            onPress={() => router.push(`/manage/${business.id}`)}
+            style={styles.manageBtn}
+          />
+        ) : null}
         <Button
           title="🔳 QR code & share link"
           variant="secondary"
@@ -579,6 +644,61 @@ export default function BusinessDetailScreen() {
           />
         ) : null}
       </View>
+
+      {/* Super-admin: hand this listing to a different owner. */}
+      {isSuper ? (
+        <Card style={styles.adminCard}>
+          <Text weight="semibold">🛡️ Super-admin</Text>
+          <Text variant="caption" tone="muted" style={styles.adminSub}>
+            Current owner: {owner?.name ?? 'Unknown'}
+            {isOwner ? ' · that’s you' : ''}
+          </Text>
+          {reassignOpen ? (
+            <>
+              <OwnerPicker
+                value={newOwner}
+                onChange={setNewOwner}
+                selfLabel={currentUser ? `Me (${currentUser.name})` : 'Me'}
+                hideSelf
+              />
+              <View style={styles.adminButtons}>
+                <Button
+                  title="Cancel"
+                  variant="ghost"
+                  onPress={() => {
+                    setReassignOpen(false);
+                    setNewOwner(null);
+                    setReassignMsg(null);
+                  }}
+                  style={styles.adminBtn}
+                />
+                <Button
+                  title={newOwner ? `Make ${newOwner.name} the owner` : 'Pick a new owner'}
+                  onPress={doReassign}
+                  loading={reassigning}
+                  style={styles.adminBtnWide}
+                />
+              </View>
+            </>
+          ) : (
+            <Button
+              title="Change owner"
+              variant="secondary"
+              onPress={() => setReassignOpen(true)}
+              style={styles.adminOpenBtn}
+            />
+          )}
+          {reassignMsg ? (
+            <Text
+              variant="caption"
+              tone={reassignMsg.startsWith('✓') ? 'brand' : 'danger'}
+              style={styles.adminSub}
+            >
+              {reassignMsg}
+            </Text>
+          ) : null}
+        </Card>
+      ) : null}
 
       {/* Team, last and folded away: customers come here to order, not to read
           the staff list. Owner → managers → featured staff (under their
@@ -670,6 +790,10 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: radius.sm,
   },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
+  scheduleCard: { marginBottom: spacing.lg, gap: spacing.xs },
+  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between' },
+  scheduleNote: { marginTop: spacing.xs },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   name: { marginBottom: spacing.xs },
   provider: { marginBottom: spacing.xs },
@@ -678,6 +802,7 @@ const styles = StyleSheet.create({
   description: { marginBottom: spacing.lg },
   sectionTitle: { marginTop: spacing.lg, marginBottom: spacing.md },
   locNote: { marginTop: spacing.xs },
+  directionsBtn: { marginTop: spacing.md },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -714,4 +839,10 @@ const styles = StyleSheet.create({
   contactRow: { flexDirection: 'row', gap: spacing.md },
   contactBtn: { flex: 1 },
   manageBtn: { marginTop: spacing.md },
+  adminCard: { marginTop: spacing.lg },
+  adminSub: { marginTop: spacing.xs },
+  adminOpenBtn: { marginTop: spacing.md },
+  adminButtons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  adminBtn: { flex: 1 },
+  adminBtnWide: { flex: 2 },
 });

@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { TAG_CATALOG } from '@/domain/tags';
+import { allBusinessTags, canonicalTag } from '@/domain/tags';
 import { AutocompleteInput, Button, Tag, Text } from '@/components/ui';
 import { spacing } from '@/theme/theme';
 
@@ -25,9 +25,8 @@ export function TagPicker({ value, onChange, suggestions = [] }: TagPickerProps)
     const typed = raw.trim().replace(/\s+/g, ' ');
     setText('');
     if (!typed || has(typed)) return;
-    // Prefer the catalog's casing when the tag is a known one.
-    const canonical = TAG_CATALOG.find((c) => c.toLowerCase() === typed.toLowerCase()) ?? typed;
-    onChange([...value, canonical]);
+    // Prefer a known tag's casing (curated catalog or community) over free text.
+    onChange([...value, canonicalTag(typed)]);
   };
 
   const remove = (tag: string) => onChange(value.filter((v) => v !== tag));
@@ -53,7 +52,7 @@ export function TagPicker({ value, onChange, suggestions = [] }: TagPickerProps)
         placeholder="Type a tag… e.g. Cafe, Plumber, Video editor"
         value={text}
         onChangeText={setText}
-        options={TAG_CATALOG.filter((c) => !has(c))}
+        options={allBusinessTags().filter((c) => !has(c))}
         onSelect={add}
       />
       {text.trim() ? (

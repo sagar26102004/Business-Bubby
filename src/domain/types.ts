@@ -11,6 +11,9 @@
  * single tier: Type → Subcategory. Everything is data-driven and extensible.
  */
 
+import type { OpeningHours } from './hours';
+export type { OpeningHours, DayHours } from './hours';
+
 /** A geographic coordinate. */
 export interface GeoPoint {
   latitude: number;
@@ -54,6 +57,13 @@ export interface User {
   bio?: string;
   /** When true this person is discoverable as an employee across the app. */
   isProfilePublic: boolean;
+  /**
+   * Platform super-admin: a privileged operator who can register businesses on
+   * behalf of anyone and hand ownership to another user. Derived from the
+   * account's phone (see domain/superAdmin.ts) and persisted on the profile so
+   * the backends can gate on it. Absent/false for ordinary users.
+   */
+  isSuperAdmin?: boolean;
 }
 
 /**
@@ -508,6 +518,36 @@ export interface Review {
   updatedAt?: string;
 }
 
+/**
+ * A crowd-sourced catalog entry — how the app's own collection of dishes,
+ * services, products and business tags GROWS at runtime instead of only in
+ * code. When an owner lists an offering the code catalog doesn't know
+ * (domain/dishes.ts, domain/tags.ts), it's captured here so the next owner
+ * gets it as a ready suggestion; a super-admin also adds business tags by hand
+ * from the admin screen. Kept live-immediately (admin can hide bad ones), so
+ * `approved` is the moderation flag rather than a review gate.
+ */
+export type CatalogEntryKind = 'tag' | 'dish' | 'service' | 'product';
+
+export interface CatalogEntry {
+  id: string;
+  kind: CatalogEntryKind;
+  /** The offering/tag name, in the casing it was first seen. */
+  name: string;
+  /** Lowercase, whitespace-collapsed dedup key (one row per kind+key). */
+  key: string;
+  /** Live in suggestions when true; a super-admin sets false to hide it. */
+  approved: boolean;
+  /** True when a super-admin typed it in (vs auto-captured from a listing). */
+  adminAdded?: boolean;
+  /** How many listings have contributed this — a popularity signal. */
+  count: number;
+  /** The user whose listing first contributed it (unset for admin-added). */
+  addedBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 /** Lifecycle of a booking/appointment request. */
 export type BookingStatus = 'requested' | 'accepted' | 'declined' | 'completed';
 
@@ -621,9 +661,16 @@ export interface Business {
   openNow?: boolean;
   /**
    * Free-text opening hours label shown beside the open/closed status, e.g.
-   * "9 AM – 6 PM" or "9–5". A per-day hours model can replace this later.
+   * "9 AM – 6 PM" or "9–5". Kept as a display fallback; when `openingHours` is
+   * set this is derived from it (a compact summary) so old readers still work.
    */
   hours?: string;
+  /**
+   * Structured opening hours (per-day open/close) — the source of truth for the
+   * Open/Closed status and the timings shown on the business page. See
+   * domain/hours.ts for the model and helpers (`openState`, `isOpenNow`, …).
+   */
+  openingHours?: OpeningHours;
   /**
    * Whether rentals are offered per day, per month, or both — asked at
    * listing time so the owner never has to re-list to switch.
@@ -731,6 +778,40 @@ export interface Vehicle {
    * (`Employee.userId` set) can actually share a live location.
    */
   driverEmployeeId?: string;
+  /** Saved routes for this vehicle (morning run, way back home, …). */
+  journeys?: VehicleJourney[];
+  /** Which saved journey the vehicle is currently running, if any. */
+  activeJourneyId?: string;
+  createdAt: string;
+}
+
+/**
+ * One point on a vehicle's route — the start, the end, or a stop in between.
+ * The place can be typed by name, pinned on the map, or both; `point` is set
+ * only when the owner dropped a pin (so the route can be drawn on a real map).
+ */
+export interface JourneyStop {
+  id: string;
+  /** Free-text place name, e.g. "Vijay Nagar Square". */
+  label: string;
+  /** Pinned coordinate, when the owner placed one on the map. */
+  point?: GeoPoint;
+}
+
+/**
+ * A saved route a vehicle runs: a start, an end, and any stops between them.
+ * A vehicle can hold several (the morning school run, the way back home, an
+ * evening batch); the owner picks which one is active. A return trip is just
+ * another journey with start/end swapped and the stops reversed.
+ */
+export interface VehicleJourney {
+  id: string;
+  /** What the owner calls it, e.g. "Morning route" or "Way back home". */
+  name: string;
+  start: JourneyStop;
+  end: JourneyStop;
+  /** Ordered stops between start and end. */
+  stops: JourneyStop[];
   createdAt: string;
 }
 

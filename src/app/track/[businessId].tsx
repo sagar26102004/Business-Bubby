@@ -12,21 +12,39 @@
  * for a realtime location stream. Same schematic projection as map.tsx, so it
  * runs on web and native without a map SDK.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { LayoutChangeEvent, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Linking, ScrollView, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
-import type { GeoPoint, TrackedItem } from '@/domain/types';
+import type { GeoPoint, TrackedItem, Vehicle } from '@/domain/types';
 import { getVehicleKind } from '@/domain/catalog';
 import type { LiveVehicle } from '@/data/repositories';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
-import { Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
+import RealMap, { type RealMapMarker } from '@/components/RealMap';
+import { Button, Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
-const RADIUS_KM = 5; // area shown around the business
 const RING_KMS = [1, 3, 5];
-const MARKER = 44;
 const POLL_MS = 3000;
+
+/** Open a live position in the phone's own map app (Google/Apple Maps, etc.).
+ *  The universal Google Maps URL hands off to the installed maps app on Android
+ *  and iOS, and opens maps.google.com on web. */
+function openInMaps(point: GeoPoint) {
+  const url = `https://www.google.com/maps/search/?api=1&query=${point.latitude},${point.longitude}`;
+  Linking.openURL(url).catch(() => {});
+}
+
+/** The pinned coordinates of a vehicle's active saved journey (start → stops →
+ *  end), for drawing the highlighted path. Empty unless ≥2 points are pinned. */
+function activeJourneyRoute(v?: Vehicle): { name?: string; points: GeoPoint[] } {
+  const j = v?.journeys?.find((x) => x.id === v.activeJourneyId);
+  if (!j) return { points: [] };
+  const points = [j.start, ...j.stops, j.end]
+    .map((s) => s.point)
+    .filter((p): p is GeoPoint => !!p);
+  return { name: j.name, points: points.length >= 2 ? points : [] };
+}
 
 export default function TrackScreen() {
   // `vehicle` (optional) preselects one vehicle — set when arriving from a
@@ -36,7 +54,6 @@ export default function TrackScreen() {
   const colors = useColors();
   const { currentUser } = useAuth();
 
-  const [size, setSize] = useState({ width: 0, height: 0 });
   const [selectedId, setSelectedId] = useState<string | undefined>(
     typeof vehicle === 'string' ? vehicle : undefined,
   );
@@ -73,29 +90,6 @@ export default function TrackScreen() {
     };
   }, [businessId, repos]);
 
-  const onLayout = (e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    setSize({ width, height });
-  };
-
-  const center = data?.business.location.point;
-
-  // Project a coordinate to an {x, y} pixel within the canvas (see map.tsx).
-  const project = useMemo(() => {
-    if (!center || !size.width || !size.height) return null;
-    const cx = size.width / 2;
-    const cy = size.height / 2;
-    const pad = MARKER;
-    const pxPerKm = (Math.min(size.width, size.height) / 2 - pad) / RADIUS_KM;
-    const kmPerDegLat = 111;
-    const kmPerDegLng = 111 * Math.cos((center.latitude * Math.PI) / 180);
-    return (point: GeoPoint) => {
-      const eastKm = (point.longitude - center.longitude) * kmPerDegLng;
-      const northKm = (point.latitude - center.latitude) * kmPerDegLat;
-      return { x: cx + eastKm * pxPerKm, y: cy - northKm * pxPerKm, pxPerKm, cx, cy };
-    };
-  }, [center, size]);
-
   if (loading) return <LoadingView label="Loading live tracking…" />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" />;
@@ -120,66 +114,50 @@ export default function TrackScreen() {
   const markers = visible.filter((lv) => lv.point);
   const itemsByVehicle = (vehicleId: string) => items.filter((i) => i.vehicleId === vehicleId);
   const selected = visible.find((lv) => lv.vehicle.id === selectedId);
+  const center = business.location.point;
+
+  // Vehicle pins for the real street map, at their live GPS positions.
+  const mapMarkers: RealMapMarker[] = markers.map((lv) => ({
+    id: lv.vehicle.id,
+    point: lv.point!,
+    emoji: getVehicleKind(lv.vehicle.kind).icon,
+    color: lv.vehicle.id === selectedId ? colors.text : colors.accent,
+  }));
+
+  // The route to highlight: the active journey of the vehicle in focus (the
+  // selected one, or the only one when there's just a single bus to watch).
+  const routeVehicle = selected?.vehicle ?? (visible.length === 1 ? visible[0].vehicle : undefined);
+  const journey = activeJourneyRoute(routeVehicle);
 
   return (
     <Screen padded={false}>
       <Stack.Screen options={{ title: `Live · ${business.name}` }} />
 
-      <View style={[styles.canvas, { backgroundColor: colors.surfaceAlt }]} onLayout={onLayout}>
-        {project && center ? (
-          <>
-            {/* Range rings around the business's area */}
-            {RING_KMS.map((km) => {
-              const r = km * project(center).pxPerKm;
-              return (
-                <View
-                  key={km}
-                  pointerEvents="none"
-                  style={[
-                    styles.ring,
-                    {
-                      width: r * 2,
-                      height: r * 2,
-                      borderRadius: r,
-                      left: project(center).cx - r,
-                      top: project(center).cy - r,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                />
-              );
-            })}
-
-            {/* Vehicle markers at their live positions */}
-            {markers.map((lv) => {
-              const p = project(lv.point!);
-              const kind = getVehicleKind(lv.vehicle.kind);
-              const isSel = lv.vehicle.id === selectedId;
-              return (
-                <Pressable
-                  key={lv.vehicle.id}
-                  onPress={() => setSelectedId(lv.vehicle.id)}
-                  style={[
-                    styles.marker,
-                    {
-                      left: p.x - MARKER / 2,
-                      top: p.y - MARKER / 2,
-                      backgroundColor: colors.accent,
-                      borderColor: isSel ? colors.text : colors.surface,
-                      borderWidth: isSel ? 3 : 2,
-                      transform: [{ scale: isSel ? 1.15 : 1 }],
-                    },
-                  ]}
-                >
-                  <Text style={styles.markerEmoji}>{kind.icon}</Text>
-                </Pressable>
-              );
-            })}
-          </>
-        ) : null}
+      <View style={[styles.canvas, { backgroundColor: colors.surfaceAlt }]}>
+        {/* A REAL street map (Leaflet + OpenStreetMap). In live mode the vehicles
+            glide to each new GPS fix without the map reloading. */}
+        {center ? (
+          <RealMap
+            center={center}
+            markers={mapMarkers}
+            ringsKm={RING_KMS}
+            selectedId={selectedId}
+            onMarkerPress={setSelectedId}
+            live
+            follow={!!selectedId}
+            route={journey.points}
+          />
+        ) : (
+          <View style={styles.noCenter}>
+            <Text tone="muted">This business hasn’t set a location, so there’s no map to show.</Text>
+          </View>
+        )}
 
         {/* Legend */}
-        <View style={[styles.legend, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+        <View
+          pointerEvents="none"
+          style={[styles.legend, { backgroundColor: colors.surface, borderColor: colors.border }]}
+        >
           <Text variant="caption" tone="muted">
             {live === null
               ? 'Connecting…'
@@ -189,7 +167,7 @@ export default function TrackScreen() {
           </Text>
         </View>
 
-        {/* Selected vehicle details */}
+        {/* Selected vehicle details + jump-to-maps */}
         {selected ? (
           <View style={styles.sheet}>
             <Card>
@@ -200,6 +178,11 @@ export default function TrackScreen() {
                 {selected.driverName ? `Driver: ${selected.driverName} · ` : ''}
                 {selected.sharing ? `updated ${agoLabel(selected.updatedAt)}` : 'not sharing'}
               </Text>
+              {journey.name && journey.points.length >= 2 ? (
+                <Text variant="caption" tone="brand" style={styles.aboard}>
+                  🧭 On route: {journey.name}
+                </Text>
+              ) : null}
               {itemsByVehicle(selected.vehicle.id).length > 0 ? (
                 <Text variant="caption" tone="muted" style={styles.aboard}>
                   Aboard:{' '}
@@ -207,6 +190,14 @@ export default function TrackScreen() {
                     .map((i) => `${i.kind === 'child' ? '🧒' : '📦'} ${i.label}`)
                     .join(' · ')}
                 </Text>
+              ) : null}
+              {selected.point ? (
+                <Button
+                  title="🧭 Open in Maps"
+                  variant="ghost"
+                  onPress={() => openInMaps(selected.point!)}
+                  style={styles.mapsBtn}
+                />
               ) : null}
             </Card>
           </View>
@@ -331,16 +322,8 @@ function agoLabel(iso?: string): string {
 
 const styles = StyleSheet.create({
   canvas: { flex: 1, overflow: 'hidden' },
-  ring: { position: 'absolute', borderWidth: 1 },
-  marker: {
-    position: 'absolute',
-    width: MARKER,
-    height: MARKER,
-    borderRadius: MARKER / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  markerEmoji: { fontSize: 20 },
+  noCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  mapsBtn: { marginTop: spacing.sm },
   legend: {
     position: 'absolute',
     top: spacing.md,

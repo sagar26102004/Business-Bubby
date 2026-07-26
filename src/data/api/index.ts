@@ -9,6 +9,7 @@
 import type { Repositories } from '@/data/repositories';
 import { createMockRepositories } from '@/data/mock/mockRepositories';
 import { createApiAuth } from './auth';
+import { createApiCatalog } from './catalog';
 import {
   createApiBills,
   createApiBizChat,
@@ -32,6 +33,7 @@ export function createApiRepositories(): Repositories {
   const mock = createMockRepositories();
   return {
     businesses: createApiBusinesses(),
+    catalog: createApiCatalog(),
     employees: createApiEmployees(),
     users: createApiUsers(),
     auth: createApiAuth(),

@@ -234,3 +234,18 @@ model LogEntry {
   @@index([businessId])
   @@map("log_entries")
 }
+
+// catalog_entries — the app's GROWING collection of dishes/services/products/
+// tags (see supabase/migrations/0005_catalog_entries.sql). data = full
+// CatalogEntry; kind+key are scoping columns with a unique(kind, key).
+model CatalogEntry {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind      String
+  key       String
+  data      Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([kind, key])
+  @@index([kind])
+  @@map("catalog_entries")
+}

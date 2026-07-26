@@ -192,5 +192,20 @@ export function createSupabaseCalls(): CallRepository {
       }
       return null;
     },
+
+    async getAudioToken(callId: string): Promise<{ token: string; url: string }> {
+      // The LiveKit API secret must never reach the client, so the token is
+      // minted by an edge function. Its SLUG is `dynamic-responder` (Supabase's
+      // default name, locked at creation — the dashboard display name is
+      // "livekit-token"); source lives in supabase/functions/dynamic-responder.
+      // The Supabase client attaches the caller's JWT, which the function
+      // verifies before authorising them onto this call's room.
+      const { data, error } = await sb().functions.invoke('dynamic-responder', { body: { callId } });
+      if (error) throw new Error(error.message || 'Could not connect the call audio.');
+      const token = (data as { token?: string } | null)?.token;
+      const url = (data as { url?: string } | null)?.url;
+      if (!token || !url) throw new Error('Live audio is not configured yet.');
+      return { token, url };
+    },
   };
 }

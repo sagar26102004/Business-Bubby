@@ -13,6 +13,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Call, CallParticipant } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
+import { useCallAudio, type CallAudioStatus } from '@/features/calls/useCallAudio';
 import { Avatar, Button, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
@@ -67,6 +68,13 @@ export default function CallSessionScreen() {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
+
+  // Real audio (LiveKit) rides on top of the signaling: connect only while this
+  // user is actually joined and the call is still live; `muted` drives the mic.
+  // Hooks run before the early returns, so compute the inputs null-safely here.
+  const meLive = call?.participants.find((p) => p.id === myId);
+  const callLive = call ? call.status === 'ringing' || call.status === 'active' : false;
+  const audioStatus = useCallAudio(callId, meLive?.state === 'joined' && callLive, muted);
 
   if (loadError) return <ErrorView message={loadError} />;
   if (!call) return <LoadingView />;
@@ -160,11 +168,44 @@ export default function CallSessionScreen() {
 
       {isOver ? <Button title="Close" onPress={() => router.back()} style={styles.actionBtn} /> : null}
 
-      <Text variant="caption" tone="muted" style={styles.demoNote}>
-        Demo build: audio is simulated. Real voice (WebRTC) and ringing while the app is closed
-        (VoIP push) arrive with the production backend.
-      </Text>
+      {!isOver && iAmOn ? <AudioStatusNote status={audioStatus} /> : null}
     </Screen>
+  );
+}
+
+/** Small footer that tells the user whether real audio is connected. */
+function AudioStatusNote({ status }: { status: CallAudioStatus }) {
+  const colors = useColors();
+  if (status === 'live') {
+    return (
+      <View style={styles.audioNote}>
+        <View style={[styles.stateDot, { backgroundColor: colors.success }]} />
+        <Text variant="caption" weight="semibold" style={{ color: colors.success }}>
+          Live audio connected
+        </Text>
+      </View>
+    );
+  }
+  if (status === 'connecting') {
+    return (
+      <Text variant="caption" tone="muted" style={styles.demoNote}>
+        Connecting audio…
+      </Text>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <Text variant="caption" style={[styles.demoNote, { color: colors.danger }]}>
+        Couldn’t connect the audio. Check your connection and try again.
+      </Text>
+    );
+  }
+  // 'unavailable' (Expo Go / not configured) or 'off'.
+  return (
+    <Text variant="caption" tone="muted" style={styles.demoNote}>
+      Live audio needs the app’s dev build (or the web app) with LiveKit configured. On Expo Go the
+      call connects but audio stays simulated.
+    </Text>
   );
 }
 
@@ -230,4 +271,11 @@ const styles = StyleSheet.create({
   controls: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
   controlBtn: { flex: 1 },
   demoNote: { textAlign: 'center', marginTop: spacing.lg },
+  audioNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.lg,
+  },
 });

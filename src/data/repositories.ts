@@ -16,6 +16,8 @@ import type {
   Business,
   BusinessLocation,
   Call,
+  CatalogEntry,
+  CatalogEntryKind,
   ChatMessage,
   Employee,
   EmployeeLevel,
@@ -27,6 +29,7 @@ import type {
   MenuItem,
   MonthlySpend,
   OfferingKind,
+  OpeningHours,
   Order,
   OrderFulfillment,
   PartyDetails,
@@ -80,6 +83,13 @@ export interface NewBusinessInput {
   subcategoryId?: string;
   /** Discovery tags — what the business offers (Cafe, Tyres, Video editor…). */
   tags?: string[];
+  /**
+   * Who the listing belongs to. Left unset for ordinary registration (the
+   * signed-in user becomes the owner). A platform SUPER-ADMIN registering on
+   * someone's behalf sets this to that user's id — only super-admins may pass
+   * an id other than their own (enforced by RLS / backend authz).
+   */
+  ownerId?: string;
   location: BusinessLocation;
   phone?: string;
   email?: string;
@@ -88,6 +98,10 @@ export interface NewBusinessInput {
   menu?: MenuItem[];
   services?: ServiceItem[];
   products?: ProductItem[];
+  /** Free-text hours customers can contact the business, e.g. "9 AM – 6 PM". */
+  hours?: string;
+  /** Structured opening hours (per-day open/close) — see domain/hours.ts. */
+  openingHours?: OpeningHours;
   /** Workspace modules the owner opted into (ids from domain/modules.ts). */
   modules?: string[];
   /** Rentals: offered per day, per month, or both. */
@@ -128,6 +142,12 @@ export interface BusinessRepository {
   removeProduct(businessId: string, productId: string, actorId: string): Promise<void>;
   /** Partial update — used by the owner to change call/chat routing, etc. */
   update(id: string, patch: Partial<Business>): Promise<Business>;
+  /**
+   * Hand a business to a different owner. SUPER-ADMIN only (enforced by RLS /
+   * backend authz) — updates both the owner reference and the scoping column
+   * so team-membership checks follow the new owner.
+   */
+  reassignOwner(id: string, newOwnerId: string): Promise<Business>;
 }
 
 export interface EmployeeRepository {
@@ -417,6 +437,12 @@ export interface BillRepository {
  * polling with a realtime signaling channel, WebRTC audio, and a VoIP push so
  * handlers ring even when the app is closed — all behind this same interface.
  */
+/** A LiveKit access token plus the media-server URL to connect it to. */
+export interface CallAudioToken {
+  token: string;
+  url: string;
+}
+
 export interface CallRepository {
   /** Customer starts a call; every eligible handler starts ringing. */
   start(businessId: string, customer: { id: string; name: string }): Promise<Call>;
@@ -436,6 +462,14 @@ export interface CallRepository {
    * VoIP push notification.
    */
   getIncomingForUser(userId: string): Promise<Call | null>;
+  /**
+   * Mint a short-lived access token so a joined participant can connect to the
+   * call's REAL audio room (LiveKit; room = `call_<callId>`, identity = the
+   * user id). Returns the token plus the media-server URL to connect to. The
+   * signing secret stays server-side (Supabase edge function / Express); the
+   * mock throws, since it has no media server.
+   */
+  getAudioToken(callId: string): Promise<CallAudioToken>;
 }
 
 /**
@@ -786,8 +820,45 @@ export interface LogbookRepository {
   addManual(input: NewLogEntryInput): Promise<LogEntry>;
 }
 
+/** One offering (or tag) to record into the growing collection. */
+export interface CaptureEntryInput {
+  kind: CatalogEntryKind;
+  name: string;
+}
+
+/**
+ * The app's own GROWING collection of dishes, services, products and business
+ * tags. The code ships a curated head start (domain/dishes.ts, domain/tags.ts);
+ * this repository lets it grow at runtime — every listing quietly contributes
+ * the offerings the code doesn't know (`capture`), and a super-admin curates it
+ * from the admin screen (`addTag`, `setApproved`, `remove`).
+ *
+ * Entries go live the moment they're captured (the admin hides bad ones after
+ * the fact), so `listApproved` is what the UI merges into its suggestions.
+ */
+export interface CatalogRepository {
+  /** Approved entries, most-used first — merged into search/tag suggestions. */
+  listApproved(kind?: CatalogEntryKind): Promise<CatalogEntry[]>;
+  /** Everything, including hidden entries — the super-admin's moderation view. */
+  listAll(kind?: CatalogEntryKind): Promise<CatalogEntry[]>;
+  /**
+   * Best-effort: record any offerings not already in the code catalog or the
+   * store, bumping the count on ones already seen. Skips names the code catalog
+   * already ships. NEVER throws — capturing is a side effect of listing, and
+   * must never fail the create/update that triggered it.
+   */
+  capture(entries: CaptureEntryInput[], addedBy?: string): Promise<void>;
+  /** Super-admin adds a business tag by hand → an approved, admin-added entry. */
+  addTag(name: string): Promise<CatalogEntry>;
+  /** Super-admin hides (false) or restores (true) an entry. */
+  setApproved(id: string, approved: boolean): Promise<CatalogEntry>;
+  /** Super-admin permanently deletes an entry. */
+  remove(id: string): Promise<void>;
+}
+
 export interface Repositories {
   businesses: BusinessRepository;
+  catalog: CatalogRepository;
   employees: EmployeeRepository;
   users: UserRepository;
   auth: AuthRepository;

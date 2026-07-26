@@ -17,6 +17,16 @@
  */
 import { prisma } from '@/db';
 import { forbidden, notFound } from '@/http/errors';
+import { isSuperAdmin } from '@/lib/superAdmin';
+
+export { isSuperAdmin } from '@/lib/superAdmin';
+
+/** Throw 403 unless the acting user is a platform super-admin. */
+export async function requireSuperAdmin(uid: string | null): Promise<void> {
+  if (!(await isSuperAdmin(uid))) {
+    throw forbidden('Only a platform super-admin can do this.');
+  }
+}
 
 /** Owner or employee of the business. Guests (null) are never members. */
 export async function isBusinessMember(businessId: string, uid: string | null): Promise<boolean> {

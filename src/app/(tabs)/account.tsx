@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { StyleSheet, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { isSuperAdminUser } from '@/domain/superAdmin';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { Avatar, Button, Card, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
@@ -87,11 +88,20 @@ export default function AccountScreen() {
         </View>
       </Card>
 
+      {isSuperAdminUser(currentUser) ? (
+        <Button
+          title="🛡️ Admin"
+          variant="secondary"
+          onPress={() => router.push('/admin')}
+          style={styles.signOut}
+        />
+      ) : null}
+
       <Button
         title="🧪 Dev tools"
         variant="secondary"
         onPress={() => router.push('/dev')}
-        style={styles.signOut}
+        style={isSuperAdminUser(currentUser) ? styles.signOutGhost : styles.signOut}
       />
       <Button title="Sign out" variant="ghost" onPress={() => signOut()} style={styles.signOutGhost} />
     </Screen>

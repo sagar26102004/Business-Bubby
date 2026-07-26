@@ -144,6 +144,34 @@ export const SUGGESTED_TAGS: Record<ListingType, string[]> = {
   ],
 };
 
+/**
+ * Community tags — ones a super-admin added from the admin screen, or that
+ * owners typed while listing. Loaded from approved `CatalogEntry` rows at app
+ * start (see domain/catalogEntries.ts) so the tag typeahead grows without a
+ * code change. Kept separate from the curated `TAG_CATALOG` so both are
+ * distinguishable, but merged for every read via `allBusinessTags`.
+ */
+let communityTags: string[] = [];
+
+/** Replace the community-tag overlay merged into `allBusinessTags`. */
+export function setCommunityTags(tags: string[]): void {
+  communityTags = tags;
+}
+
+/** The full tag vocabulary the UI offers: curated catalog + community tags. */
+export function allBusinessTags(): string[] {
+  if (communityTags.length === 0) return TAG_CATALOG;
+  const seen = new Set(TAG_CATALOG.map((t) => t.toLowerCase()));
+  const extra = communityTags.filter((t) => !seen.has(t.trim().toLowerCase()));
+  return [...TAG_CATALOG, ...extra];
+}
+
+/** Prefer a known tag's canonical casing (catalog or community) over free text. */
+export function canonicalTag(name: string): string {
+  const target = name.trim().toLowerCase();
+  return allBusinessTags().find((t) => t.toLowerCase() === target) ?? name.trim();
+}
+
 /** Case-insensitive "does this business carry this tag". */
 export function hasTag(tags: string[] | undefined, name: string): boolean {
   const target = name.trim().toLowerCase();

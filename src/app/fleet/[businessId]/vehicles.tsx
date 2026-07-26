@@ -7,7 +7,7 @@
  * vehicles can't share a number plate.
  */
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Alert, StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Vehicle, VehicleKind } from '@/domain/types';
 import { VEHICLE_KINDS, getVehicleKind } from '@/domain/catalog';
@@ -24,7 +24,7 @@ import {
   Tag,
   Text,
 } from '@/components/ui';
-import { spacing } from '@/theme/theme';
+import { spacing, useColors } from '@/theme/theme';
 
 /** Number plates, normalised: only letters/digits, upper-cased (see the repo). */
 const canonicalReg = (reg?: string): string => (reg ?? '').replace(/[^a-z0-9]/gi, '').toUpperCase();
@@ -33,16 +33,20 @@ export default function FleetVehiclesScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
+  const colors = useColors();
   const { currentUser } = useAuth();
 
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
-    const [employees, vehicles] = await Promise.all([
+    const [employees, vehicles, live] = await Promise.all([
       repos.employees.listByBusiness(business.id),
       repos.tracking.listVehicles(business.id),
+      repos.tracking.getLiveVehicles(business.id),
     ]);
-    return { business, employees, vehicles };
+    // Whether each vehicle is currently broadcasting its live location.
+    const sharing = new Map(live.map((lv) => [lv.vehicle.id, lv.sharing]));
+    return { business, employees, vehicles, sharing };
   }, [businessId]);
 
   const [vehicleReg, setVehicleReg] = useState('');
@@ -56,7 +60,24 @@ export default function FleetVehiclesScreen() {
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" />;
 
-  const { business, employees, vehicles } = data;
+  const { business, employees, vehicles, sharing } = data;
+
+  const driverOf = (v: Vehicle) => employees.find((e) => e.id === v.driverEmployeeId);
+
+  /** Owner turns a bus's live sharing on/off for customers, on the driver's
+   *  behalf (a vehicle's position IS its driver's share). */
+  const toggleShare = async (v: Vehicle, on: boolean) => {
+    const driver = driverOf(v);
+    if (!driver?.userId) {
+      Alert.alert(
+        'No driver account',
+        'Assign a driver who has a Localo account first — the live location comes from their phone.',
+      );
+      return;
+    }
+    await repos.tracking.setSharing(business.id, driver.userId, on);
+    reload();
+  };
 
   if (currentUser?.id !== business.ownerId) {
     return (
@@ -158,6 +179,31 @@ export default function FleetVehiclesScreen() {
               ⚠️ This driver has no app account, so they can’t share a live location.
             </Text>
           ) : null}
+
+          {/* Owner can broadcast this bus to its customers — the same live share
+              the driver toggles, flipped here on their behalf. */}
+          <View style={[styles.shareRow, { borderColor: colors.border }]}>
+            <View style={styles.flex}>
+              <Text weight="semibold">📡 Share location with customers</Text>
+              <Text variant="caption" tone="muted">
+                {sharing.get(v.id)
+                  ? '● Live — customers with a child/goods on this vehicle can see it move.'
+                  : 'Off — turn on to let its customers track this vehicle live.'}
+              </Text>
+            </View>
+            <Switch
+              value={!!sharing.get(v.id)}
+              onValueChange={(on) => toggleShare(v, on)}
+              disabled={!driverOf(v)?.userId}
+            />
+          </View>
+
+          <Button
+            title="🧭 Journeys & stops"
+            variant="secondary"
+            onPress={() => router.push(`/fleet/${business.id}/journey?vehicle=${v.id}`)}
+            style={styles.trackBtn}
+          />
           <Button
             title="🗺️ Track on map"
             variant="secondary"
@@ -236,6 +282,15 @@ const styles = StyleSheet.create({
   card: { marginBottom: spacing.md },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   noteTop: { marginTop: spacing.sm },
+  flex: { flex: 1 },
+  shareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   trackBtn: { marginTop: spacing.md },
   formTitle: { marginBottom: spacing.md },
   fieldLabel: { marginTop: spacing.md, marginBottom: spacing.xs },
