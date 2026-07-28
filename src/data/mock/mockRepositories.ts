@@ -745,6 +745,22 @@ class MockAuthRepository implements AuthRepository {
     currentUserId = user.id;
     return clone(user);
   }
+
+  async signInGuest(): Promise<User> {
+    await delay(60);
+    const existing = users.find((u) => u.id === currentUserId);
+    if (existing) return clone(existing);
+    // A throwaway anonymous identity, added to the store so its id resolves.
+    const guest: User = {
+      id: nextId('u_guest'),
+      name: 'Guest',
+      isProfilePublic: false,
+      isAnonymous: true,
+    };
+    users.push(guest);
+    currentUserId = guest.id;
+    return clone(guest);
+  }
 }
 
 class MockPlacesRepository implements PlacesRepository {
@@ -1818,8 +1834,17 @@ class MockCallRepository implements CallRepository {
           state: 'ringing',
         }),
       );
-    if (targets.length === 0) {
-      throw new Error('No one at this business can take voice calls right now.');
+    // Never ring the caller themselves (they may be this business's owner or a
+    // call-handler), and dedupe so one person can't appear twice — a duplicate
+    // participant id crashes the session's participant list (React keys).
+    const seen = new Set<string>([customer.id]);
+    const ringTargets = targets.filter((t) => !seen.has(t.id) && seen.add(t.id));
+    if (ringTargets.length === 0) {
+      throw new Error(
+        targets.some((t) => t.id === customer.id)
+          ? "You're set to answer this business's calls yourself — there's no one else to ring."
+          : 'No one at this business can take voice calls right now.',
+      );
     }
 
     const call: Call = {
@@ -1837,7 +1862,7 @@ class MockCallRepository implements CallRepository {
           state: 'joined',
           joinedAt: new Date().toISOString(),
         },
-        ...targets,
+        ...ringTargets,
       ],
       startedAt: new Date().toISOString(),
     };

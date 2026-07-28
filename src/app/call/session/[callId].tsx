@@ -13,7 +13,7 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Call, CallParticipant } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
-import { useCallAudio, type CallAudioStatus } from '@/features/calls/useCallAudio';
+import { useCallAudio, type CallAudioState } from '@/features/calls/useCallAudio';
 import { Avatar, Button, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
@@ -74,16 +74,21 @@ export default function CallSessionScreen() {
   // Hooks run before the early returns, so compute the inputs null-safely here.
   const meLive = call?.participants.find((p) => p.id === myId);
   const callLive = call ? call.status === 'ringing' || call.status === 'active' : false;
-  const audioStatus = useCallAudio(callId, meLive?.state === 'joined' && callLive, muted);
+  const audio = useCallAudio(callId, meLive?.state === 'joined' && callLive, muted);
 
   if (loadError) return <ErrorView message={loadError} />;
   if (!call) return <LoadingView />;
 
-  const me = call.participants.find((p) => p.id === myId);
+  // Dedupe defensively: older calls (created before start() deduped) can carry
+  // the same person twice, which would crash the list with duplicate React keys.
+  const participants = call.participants.filter(
+    (p, i, arr) => arr.findIndex((q) => q.id === p.id) === i,
+  );
+  const me = participants.find((p) => p.id === myId);
   const iAmOn = me?.state === 'joined';
   const canJoin = me?.side === 'business' && me.state === 'ringing';
   const isOver = call.status === 'ended' || call.status === 'missed' || call.status === 'declined';
-  const onCall = call.participants.filter((p) => p.state === 'joined');
+  const onCall = participants.filter((p) => p.state === 'joined');
 
   const act = async (fn: () => Promise<Call>) => {
     setBusy(true);
@@ -126,7 +131,7 @@ export default function CallSessionScreen() {
         {call.status === 'ringing' ? 'RINGING' : `ON THE CALL · ${onCall.length}`}
       </Text>
       <View style={styles.people}>
-        {call.participants.map((p) => (
+        {participants.map((p) => (
           <ParticipantRow key={p.id} participant={p} isMe={p.id === myId} />
         ))}
       </View>
@@ -168,14 +173,15 @@ export default function CallSessionScreen() {
 
       {isOver ? <Button title="Close" onPress={() => router.back()} style={styles.actionBtn} /> : null}
 
-      {!isOver && iAmOn ? <AudioStatusNote status={audioStatus} /> : null}
+      {!isOver && iAmOn ? <AudioStatusNote audio={audio} /> : null}
     </Screen>
   );
 }
 
 /** Small footer that tells the user whether real audio is connected. */
-function AudioStatusNote({ status }: { status: CallAudioStatus }) {
+function AudioStatusNote({ audio }: { audio: CallAudioState }) {
   const colors = useColors();
+  const { status, message } = audio;
   if (status === 'live') {
     return (
       <View style={styles.audioNote}>
@@ -196,7 +202,7 @@ function AudioStatusNote({ status }: { status: CallAudioStatus }) {
   if (status === 'error') {
     return (
       <Text variant="caption" style={[styles.demoNote, { color: colors.danger }]}>
-        Couldn’t connect the audio. Check your connection and try again.
+        Couldn’t connect the audio{message ? ` — ${message}` : '. Please try again.'}
       </Text>
     );
   }

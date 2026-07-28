@@ -254,6 +254,13 @@ export interface AuthRepository {
   signOut(): Promise<void>;
   /** Dev/testing: sign in directly as a specific user id. */
   signInAs(userId: string): Promise<User>;
+  /**
+   * Give a guest a throwaway anonymous identity (a real auth uid + JWT) without
+   * a sign-up form, so identity-scoped actions like placing a voice call work.
+   * The returned user has `isAnonymous: true`; the app keeps treating them as a
+   * guest for gating. If there's already a session, that user is returned as-is.
+   */
+  signInGuest(): Promise<User>;
 }
 
 export interface PlacesRepository {

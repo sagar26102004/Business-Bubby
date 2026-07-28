@@ -3,10 +3,11 @@
  * a caller who is a participant on a Localo voice call can connect to that
  * call's REAL audio room.
  *
- * ⚠️ Supabase SLUG is `dynamic-responder` (the dashboard's default name, which
- * is locked at creation and can't be renamed — the display name is shown as
- * "livekit-token"). The frontend invokes it by that slug, so keep this folder
- * named `dynamic-responder` to match the live endpoint.
+ * ⚠️ Supabase SLUG is `dynamic-responder` (the live endpoint is
+ * /functions/v1/dynamic-responder). The frontend invokes it by that slug
+ * (src/data/supabase/calls.ts), so keep this folder named `dynamic-responder`.
+ * (The "Deploy: ... livekit-token" line below is a stale comment — ignore it;
+ * deploy with `supabase functions deploy dynamic-responder`.)
  *
  * The LiveKit API secret lives ONLY here (as an edge-function secret), never on
  * the client. The frontend (src/data/supabase/calls.ts → getAudioToken) invokes

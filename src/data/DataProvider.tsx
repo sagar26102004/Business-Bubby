@@ -50,6 +50,8 @@ interface DataContextValue {
   signOut: () => Promise<void>;
   /** Dev/testing: impersonate a specific user. */
   signInAs: (userId: string) => Promise<User>;
+  /** Give a guest an anonymous identity so calls (etc.) work without sign-up. */
+  signInGuest: () => Promise<User>;
   /** Dev/testing: restore seed data and sign out. */
   resetData: () => void;
 }
@@ -124,6 +126,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     [repositories],
   );
 
+  const signInGuest = useCallback(async () => {
+    const user = await repositories.auth.signInGuest();
+    setCurrentUserState(user);
+    return user;
+  }, [repositories]);
+
   const resetData = useCallback(() => {
     resetMockData();
     setCurrentUserState(null);
@@ -139,9 +147,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       signUp,
       signOut,
       signInAs,
+      signInGuest,
       resetData,
     }),
-    [repositories, currentUser, authLoading, setCurrentUser, signIn, signUp, signOut, signInAs, resetData],
+    [repositories, currentUser, authLoading, setCurrentUser, signIn, signUp, signOut, signInAs, signInGuest, resetData],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
@@ -158,19 +167,25 @@ export function useRepositories(): Repositories {
   return useData().repositories;
 }
 
-/** Access auth state and helpers. `isGuest` is true when not signed in. */
+/**
+ * Access auth state and helpers. `isGuest` is true when not signed in OR signed
+ * in only anonymously (a throwaway guest identity) — so guest gating (publish,
+ * save Home/Work) still asks for a real account, while `currentUser.id` is a
+ * real uid usable for identity-scoped actions like calls.
+ */
 export function useAuth() {
-  const { currentUser, authLoading, setCurrentUser, signIn, signUp, signOut, signInAs, resetData } =
+  const { currentUser, authLoading, setCurrentUser, signIn, signUp, signOut, signInAs, signInGuest, resetData } =
     useData();
   return {
     currentUser,
-    isGuest: !currentUser,
+    isGuest: !currentUser || !!currentUser.isAnonymous,
     authLoading,
     setCurrentUser,
     signIn,
     signUp,
     signOut,
     signInAs,
+    signInGuest,
     resetData,
   };
 }

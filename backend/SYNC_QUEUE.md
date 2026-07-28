@@ -37,7 +37,7 @@ re-derivation from the Supabase diff is required:
 - **Area:** CallRepository / calls (real WebRTC audio via LiveKit)
 - **Supabase change:** Added `getAudioToken(callId)` to the Supabase CallRepository
   (`src/data/supabase/calls.ts`) — it invokes the edge function at slug `dynamic-responder`
-  (`supabase/functions/dynamic-responder/index.ts`; display name "livekit-token"), which verifies the caller's JWT, confirms
+  (`supabase/functions/dynamic-responder/index.ts`), which verifies the caller's JWT, confirms
   they are a participant on the call, and mints a LiveKit access token for room
   `call_<callId>` (identity = user id), returning `{ token, url }`. `livekit-server-sdk` was
   already `npm install`ed into `backend/` in anticipation of this entry.
@@ -81,5 +81,74 @@ re-derivation from the Supabase diff is required:
 - **DB/migration:** none (jsonb column already holds it).
 - **Verify:** backend `npm run typecheck`/`build` stays green after the type mirror; a
   round-trip PATCH `/tracking/vehicles/:id` with a `journeys` array returns it back intact.
+
+## [SYNC-003] Guest voice calls — anonymous sign-in identity
+
+- **Area:** AuthRepository / auth (let guests place calls without a sign-up form)
+- **Supabase change:** Added `signInGuest()` to the Supabase AuthRepository
+  (`src/data/supabase/auth.ts`): reuses an existing session, else `sb.auth.signInAnonymously()`;
+  returns a `User` with `isAnonymous: true, name: 'Guest'`. `getCurrentUser()` now maps a
+  `session.user.is_anonymous` session to that same guest User (so a reload stays a guest with a
+  real uid). Requires the project's **Anonymous sign-ins** toggle ON (Supabase Auth settings) —
+  no SQL/RLS change: anonymous users are in the `authenticated` role, so `calls_insert`
+  (`customer_id = auth.uid()`) and the token function's `getUser()` already accept them, and the
+  `handle_new_user` trigger creates their profile row (empty name via `coalesce`).
+- **Domain/interface:** DONE (shared) — added `User.isAnonymous?` (`src/domain/types.ts`),
+  `signInGuest()` to `AuthRepository` (`src/data/repositories.ts`), and wired
+  `DataProvider.signInGuest` + `useAuth().isGuest = !currentUser || currentUser.isAnonymous`.
+  Frontend: the call pre-screen (`src/app/call/[businessId].tsx`) calls `signInGuest()` before
+  `calls.start` when there's no `currentUser`. **The api client twin is already done** —
+  `src/data/api/auth.ts` implements `signInGuest()` (same Supabase anonymous sign-in) and marks
+  anonymous sessions in `getCurrentUser()`.
+- **Path B — backend/:** VERIFY-ONLY (auth identity is Supabase in both paths, so no new
+  endpoint). Confirm the Express JWT middleware/`authz.ts` accepts an anonymous Supabase JWT
+  (valid `sub`/uid, `is_anonymous` claim) and does NOT require a non-anonymous profile — i.e. an
+  anonymous caller can `POST /calls` (start) and `POST /calls/:callId/token`. The customer/member
+  guards key on the uid only, so this should already pass; add a test call to be sure.
+- **Path B — src/data/api/:** DONE (see above).
+- **DB/migration:** none. Operational: enable **Anonymous sign-ins** in the Supabase dashboard.
+- **Verify:** backend `npm run typecheck`/`build`; a guest (anonymous JWT) can start a call and
+  fetch an audio token end-to-end.
+
+## [SYNC-004] Voice call — never ring the caller / dedupe participants
+
+- **Area:** CallRepository / calls (`start`)
+- **Supabase change:** In `src/data/supabase/calls.ts` `start()`, after building the business
+  `targets`, exclude any target whose id equals the caller's (`customer.id`) and dedupe by id
+  before composing `participants`. Prevents a person who is the business's owner/handler AND the
+  caller from appearing twice (duplicate participant id → crashes the session list's React keys)
+  and from ringing themselves. If nothing remains after exclusion, throw
+  `"You're set to answer this business's calls yourself — there's no one else to ring."` when the
+  caller was among the targets, else the existing "No one … can take voice calls" message. Same
+  fix already applied to the mock (`src/data/mock/mockRepositories.ts` `start`).
+- **Domain/interface:** none (behaviour only).
+- **Path B — backend/:** Apply the identical guard in `backend/src/services/calls.ts` `start()`:
+  filter the owner/handler targets to exclude `customerId` and dedupe by id before saving
+  participants; mirror the empty-after-exclusion error message.
+- **Path B — src/data/api/:** none (client passes through).
+- **Frontend note (shared, already done):** `src/app/call/session/[callId].tsx` now dedupes
+  `call.participants` before mapping (defensive against calls created before this fix).
+- **DB/migration:** none.
+- **Verify:** backend build/typecheck; a member calling their own business either rings the OTHER
+  members only, or errors clearly — never returns a call with a duplicate participant id.
+
+## [SYNC-005] Incoming-call poll — filter by data.status, not a bare column
+
+- **Area:** CallRepository / calls (`getIncomingForUser`) — THE bug that stopped the receiver ever
+  ringing.
+- **Supabase change:** `src/data/supabase/calls.ts` `getIncomingForUser` was filtering
+  `.in('status', [...])` on a non-existent top-level column (the `calls` table is
+  `{id, business_id, customer_id, data jsonb, …}` — `status` lives in `data`). Postgres returned
+  42703 "column calls.status does not exist" every 2s poll; the gate's `.catch` swallowed it, so no
+  incoming call ever surfaced. Fixed to `.in('data->>status', ['ringing','active'])`.
+- **Domain/interface:** none.
+- **Path B — backend/:** VERIFY `backend/src/services/calls.ts` `getIncomingForUser` does the same
+  correctly — with Prisma the `calls` model is `{ data: Json }`, so filter on the JSON path
+  (`where: { data: { path: ['status'], in: ['ringing','active'] } }`) or load the caller's visible
+  calls and filter in JS by `call.status`. Ensure it does NOT reference a scalar `status` column.
+- **Path B — src/data/api/:** none (client passes through).
+- **DB/migration:** none.
+- **Verify:** a ringing call is returned to a business member's `getIncomingForUser`; the incoming
+  overlay appears on the receiver within the poll interval.
 
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->

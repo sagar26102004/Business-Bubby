@@ -18,9 +18,16 @@ import { prepareNativeAudio, stopNativeAudio } from './livekitNative';
 
 export type CallAudioStatus = 'off' | 'connecting' | 'live' | 'unavailable' | 'error';
 
-export function useCallAudio(callId: string, active: boolean, muted: boolean): CallAudioStatus {
+/** Audio state plus, on 'error'/'unavailable', the real reason to show the user. */
+export interface CallAudioState {
+  status: CallAudioStatus;
+  message?: string;
+}
+
+export function useCallAudio(callId: string, active: boolean, muted: boolean): CallAudioState {
   const repos = useRepositories();
-  const [status, setStatus] = useState<CallAudioStatus>('off');
+  const [state, setState] = useState<CallAudioState>({ status: 'off' });
+  const setStatus = (status: CallAudioStatus, message?: string) => setState({ status, message });
   const roomRef = useRef<Room | null>(null);
 
   useEffect(() => {
@@ -65,7 +72,7 @@ export function useCallAudio(callId: string, active: boolean, muted: boolean): C
           /not configured|needs the|not available|rtcpeerconnection|native|expo go|cannot find/i.test(
             msg,
           );
-        setStatus(soft ? 'unavailable' : 'error');
+        setStatus(soft ? 'unavailable' : 'error', msg);
       }
     })();
 
@@ -84,5 +91,5 @@ export function useCallAudio(callId: string, active: boolean, muted: boolean): C
     roomRef.current?.localParticipant.setMicrophoneEnabled(!muted).catch(() => {});
   }, [muted]);
 
-  return status;
+  return state;
 }

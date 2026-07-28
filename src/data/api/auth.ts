@@ -31,6 +31,9 @@ export function createApiAuth(): AuthRepository {
       const { data } = await sb.auth.getSession();
       const session = data.session;
       if (!session) return null;
+      if (session.user.is_anonymous) {
+        return { id: session.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+      }
       return fetchProfileViaApi(session.user.id, session.user.user_metadata?.name);
     },
 
@@ -93,6 +96,29 @@ export function createApiAuth(): AuthRepository {
       }
       await clearCache();
       return fetchProfileViaApi(data.user.id, data.user.user_metadata?.name);
+    },
+
+    async signInGuest(): Promise<User> {
+      // Identity is Supabase (same as Path A), so a guest gets an anonymous
+      // Supabase session; the app keeps treating them as a guest.
+      const { data: sessionData } = await sb.auth.getSession();
+      const existing = sessionData.session?.user;
+      if (existing) {
+        if (existing.is_anonymous) {
+          return { id: existing.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+        }
+        return fetchProfileViaApi(existing.id, existing.user_metadata?.name);
+      }
+      const { data, error } = await sb.auth.signInAnonymously();
+      if (error || !data.user) {
+        throw new Error(
+          niceAuthError(
+            error?.message ??
+              'Guest access is off. Enable Anonymous sign-ins in Supabase (Auth → Sign In / Providers).',
+          ),
+        );
+      }
+      return { id: data.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
     },
   };
 }

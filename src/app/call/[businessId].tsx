@@ -17,7 +17,7 @@ export default function CallScreen() {
   const repos = useRepositories();
   const colors = useColors();
   const router = useRouter();
-  const { currentUser } = useAuth();
+  const { currentUser, signInGuest } = useAuth();
   const [starting, setStarting] = useState(false);
 
   const { data, loading, error, reload } = useAsync(async () => {
@@ -44,10 +44,11 @@ export default function CallScreen() {
   const startCall = async () => {
     setStarting(true);
     try {
-      const call = await repos.calls.start(business.id, {
-        id: currentUser?.id ?? 'guest',
-        name: currentUser?.name ?? 'Guest',
-      });
+      // A guest needs a real identity (auth uid + JWT) so the call insert and the
+      // audio-token function accept them — an anonymous sign-in provides it
+      // without a sign-up form, while they stay a guest everywhere else.
+      const me = currentUser ?? (await signInGuest());
+      const call = await repos.calls.start(business.id, { id: me.id, name: me.name });
       router.replace(`/call/session/${call.id}`);
     } catch (err) {
       Alert.alert('Could not start the call', err instanceof Error ? err.message : 'Try again.');

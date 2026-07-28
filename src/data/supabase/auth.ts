@@ -26,6 +26,11 @@ export function createSupabaseAuth(): AuthRepository {
       const { data } = await sb.auth.getSession();
       const session = data.session;
       if (!session) return null;
+      // Anonymous sessions (guest voice calls) carry `is_anonymous` — keep the
+      // app treating them as a guest, but with a real uid for identity-scoped work.
+      if (session.user.is_anonymous) {
+        return { id: session.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+      }
       const profile = await fetchProfile(session.user.id);
       return profile ?? fallbackUser(session.user.id, session.user.user_metadata?.name);
     },
@@ -95,6 +100,32 @@ export function createSupabaseAuth(): AuthRepository {
       await clearCache();
       const fresh = await fetchProfile(data.user.id);
       return fresh ?? fallbackUser(data.user.id, data.user.user_metadata?.name);
+    },
+
+    async signInGuest(): Promise<User> {
+      // Reuse an existing session (real or anonymous) rather than spawning a new
+      // anonymous user each time.
+      const { data: sessionData } = await sb.auth.getSession();
+      const existing = sessionData.session?.user;
+      if (existing) {
+        if (existing.is_anonymous) {
+          return { id: existing.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+        }
+        const profile = await fetchProfile(existing.id);
+        return profile ?? fallbackUser(existing.id, existing.user_metadata?.name);
+      }
+      const { data, error } = await sb.auth.signInAnonymously();
+      if (error || !data.user) {
+        // The most common cause is the project's "Anonymous sign-ins" toggle
+        // being off — surface a clear, actionable reason.
+        throw new Error(
+          niceAuthError(
+            error?.message ??
+              'Guest access is off. Enable Anonymous sign-ins in Supabase (Auth → Sign In / Providers).',
+          ),
+        );
+      }
+      return { id: data.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
     },
   };
 }

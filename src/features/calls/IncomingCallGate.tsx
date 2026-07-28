@@ -37,8 +37,16 @@ export function IncomingCallGate() {
     const load = () =>
       repos.calls
         .getIncomingForUser(currentUser.id)
-        .then((c) => active && setCall(c))
-        .catch(() => {});
+        .then((c) => {
+          if (!active) return;
+          // Dev-only: surface what the receiver's poll sees, so a "no ring"
+          // problem (wrong account, RLS) is diagnosable in the browser console.
+          if (__DEV__ && c) console.log('[IncomingCallGate] incoming call for', currentUser.id, '→', c.id, c.status);
+          setCall(c);
+        })
+        .catch((e) => {
+          if (__DEV__) console.warn('[IncomingCallGate] poll failed for', currentUser.id, e);
+        });
     load();
     const timer = setInterval(load, POLL_MS);
     return () => {

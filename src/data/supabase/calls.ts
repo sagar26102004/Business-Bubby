@@ -82,8 +82,17 @@ export function createSupabaseCalls(): CallRepository {
             state: 'ringing',
           }),
         );
-      if (targets.length === 0) {
-        throw new Error('No one at this business can take voice calls right now.');
+      // Never ring the caller themselves (they may be this business's owner or a
+      // call-handler), and dedupe so one person can't appear twice — a duplicate
+      // participant id crashes the session's participant list (React keys).
+      const seen = new Set<string>([customer.id]);
+      const ringTargets = targets.filter((t) => !seen.has(t.id) && seen.add(t.id));
+      if (ringTargets.length === 0) {
+        throw new Error(
+          targets.some((t) => t.id === customer.id)
+            ? "You're set to answer this business's calls yourself — there's no one else to ring."
+            : 'No one at this business can take voice calls right now.',
+        );
       }
 
       const call: Call = {
@@ -95,7 +104,7 @@ export function createSupabaseCalls(): CallRepository {
         status: 'ringing',
         participants: [
           { id: customer.id, name: customer.name, side: 'customer', state: 'joined', joinedAt: nowIso() },
-          ...targets,
+          ...ringTargets,
         ],
         startedAt: nowIso(),
       };
@@ -175,10 +184,13 @@ export function createSupabaseCalls(): CallRepository {
     },
 
     async getIncomingForUser(userId: string): Promise<Call | null> {
+      // `status` lives inside the `data` jsonb (there is no top-level column) —
+      // filter on the jsonb path, not a bare `status` column (that errors 42703
+      // and the poll silently sees no calls, so the receiver never rings).
       const { data, error } = await sb()
         .from('calls')
         .select('data')
-        .in('status', ['ringing', 'active']);
+        .in('data->>status', ['ringing', 'active']);
       if (error) throw error;
       for (const row of data ?? []) {
         const swept = await sweepOne(row.data as Call);
@@ -195,13 +207,31 @@ export function createSupabaseCalls(): CallRepository {
 
     async getAudioToken(callId: string): Promise<{ token: string; url: string }> {
       // The LiveKit API secret must never reach the client, so the token is
-      // minted by an edge function. Its SLUG is `dynamic-responder` (Supabase's
-      // default name, locked at creation — the dashboard display name is
-      // "livekit-token"); source lives in supabase/functions/dynamic-responder.
-      // The Supabase client attaches the caller's JWT, which the function
-      // verifies before authorising them onto this call's room.
+      // minted by an edge function whose SLUG is `dynamic-responder` (must match
+      // the deployed function's URL — /functions/v1/dynamic-responder; the code's
+      // own header comment says "livekit-token" but that is NOT the slug). Source
+      // lives in supabase/functions/dynamic-responder. The Supabase client
+      // attaches the caller's JWT, which the function verifies before authorising
+      // them onto this call's room.
       const { data, error } = await sb().functions.invoke('dynamic-responder', { body: { callId } });
-      if (error) throw new Error(error.message || 'Could not connect the call audio.');
+      if (error) {
+        // supabase-js wraps a non-2xx edge response in FunctionsHttpError whose
+        // `.message` is generic ("Edge Function returned a non-2xx status
+        // code") — which reads like a network fault. The real reason (e.g.
+        // "LIVEKIT_* secrets missing", "Not signed in") lives in the response
+        // body on `.context`; surface THAT so the UI stops blaming the network.
+        let detail = error.message || 'Could not connect the call audio.';
+        const ctx = (error as { context?: unknown }).context;
+        if (ctx instanceof Response) {
+          try {
+            const body = (await ctx.clone().json()) as { error?: string };
+            if (body?.error) detail = body.error;
+          } catch {
+            /* non-JSON body (e.g. function not deployed) — keep the generic message */
+          }
+        }
+        throw new Error(detail);
+      }
       const token = (data as { token?: string } | null)?.token;
       const url = (data as { url?: string } | null)?.url;
       if (!token || !url) throw new Error('Live audio is not configured yet.');

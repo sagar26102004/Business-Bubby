@@ -64,6 +64,14 @@ export interface User {
    * the backends can gate on it. Absent/false for ordinary users.
    */
   isSuperAdmin?: boolean;
+  /**
+   * A throwaway anonymous identity (Supabase anonymous sign-in). Gives a guest a
+   * real auth uid + JWT so identity-scoped actions like placing a voice call
+   * work, while the app still treats them as a guest (`useAuth().isGuest` stays
+   * true) — publishing a business or saving Home/Work still asks for real
+   * sign-up. Absent/false for ordinary accounts.
+   */
+  isAnonymous?: boolean;
 }
 
 /**
