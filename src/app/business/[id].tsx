@@ -10,7 +10,7 @@ import type { Business, Employee, PlaceKind, TrackedItem, User } from '@/domain/
 import { commerceVocab, formatDistance, getSubcategory, getType, offersDineIn, rentalBasisLabel } from '@/domain/catalog';
 import { hasModule } from '@/domain/modules';
 import { isSuperAdminUser } from '@/domain/superAdmin';
-import { openState, weeklySchedule } from '@/domain/hours';
+import { openState, summarizeHours } from '@/domain/hours';
 import { haversineKm } from '@/lib/geo';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -238,28 +238,14 @@ export default function BusinessDetailScreen() {
         );
       })()}
 
-      {/* Full weekly schedule (today highlighted) when structured hours exist. */}
-      {business.openingHours ? (
-        <Card style={styles.scheduleCard}>
-          {weeklySchedule(business.openingHours).map((row) => (
-            <View key={row.label} style={styles.scheduleRow}>
-              <Text weight={row.today ? 'bold' : 'regular'} tone={row.today ? 'brand' : 'default'}>
-                {row.label}
-              </Text>
-              <Text
-                weight={row.today ? 'semibold' : 'regular'}
-                tone={row.text === 'Closed' ? 'muted' : 'default'}
-              >
-                {row.text}
-              </Text>
-            </View>
-          ))}
-          {business.openingHours.note ? (
-            <Text variant="caption" tone="muted" style={styles.scheduleNote}>
-              {business.openingHours.note}
-            </Text>
-          ) : null}
-        </Card>
+      {/* Weekly hours as ONE compact line (Google-Maps style), grouping
+          consecutive days with the same hours — e.g. "Mon–Fri 9 AM–6 PM · Sat
+          10 AM–2 PM · Sun closed". No day-by-day list. */}
+      {business.openingHours && summarizeHours(business.openingHours) ? (
+        <Text tone="muted" style={styles.hoursLine}>
+          🕒 {summarizeHours(business.openingHours)}
+          {business.openingHours.note ? ` · ${business.openingHours.note}` : ''}
+        </Text>
       ) : null}
 
       {/* Location — right with the description, and it respects the owner's
@@ -790,10 +776,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: radius.sm,
   },
-  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  scheduleCard: { marginBottom: spacing.lg, gap: spacing.xs },
-  scheduleRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  scheduleNote: { marginTop: spacing.xs },
+  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
+  hoursLine: { marginBottom: spacing.lg },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   name: { marginBottom: spacing.xs },
   provider: { marginBottom: spacing.xs },
