@@ -24,6 +24,34 @@ export interface CallAudioState {
   message?: string;
 }
 
+const TOKEN_RETRIES = 4; // total attempts
+const TOKEN_RETRY_BASE_MS = 700;
+
+/**
+ * Fetch the LiveKit token, retrying a transient failure (e.g. the token edge
+ * function cold-starting) with a linear backoff. Bails immediately if the call
+ * was torn down (`isCancelled`) and re-throws the last error once attempts run
+ * out, so a genuine/permanent failure still surfaces to the user.
+ */
+async function getTokenWithRetry(
+  fetchToken: () => Promise<{ token: string; url: string }>,
+  isCancelled: () => boolean,
+): Promise<{ token: string; url: string }> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < TOKEN_RETRIES; attempt++) {
+    if (isCancelled()) throw new Error('cancelled');
+    try {
+      return await fetchToken();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < TOKEN_RETRIES - 1) {
+        await new Promise((resolve) => setTimeout(resolve, TOKEN_RETRY_BASE_MS * (attempt + 1)));
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
 export function useCallAudio(callId: string, active: boolean, muted: boolean): CallAudioState {
   const repos = useRepositories();
   const [state, setState] = useState<CallAudioState>({ status: 'off' });
@@ -44,7 +72,18 @@ export function useCallAudio(callId: string, active: boolean, muted: boolean): C
         if (Platform.OS !== 'web') await prepareNativeAudio();
 
         const { Room: RoomCtor, RoomEvent, Track } = await import('livekit-client');
-        const { token, url } = await repos.calls.getAudioToken(callId);
+        // The token comes from an edge function that imports the LiveKit +
+        // Supabase SDKs, so its FIRST invocation can COLD-START and transiently
+        // return a non-2xx. The caller is almost always that first hit (they
+        // request the token the instant the call starts), while the answerer
+        // arrives seconds later on a warm function — which is exactly why the
+        // caller would fail while the answerer connected. Retry a few times with
+        // a short backoff so a cold start (or a brief network blip) recovers
+        // instead of dropping the caller's audio.
+        const { token, url } = await getTokenWithRetry(
+          () => repos.calls.getAudioToken(callId),
+          () => cancelled,
+        );
         if (cancelled) return;
 
         const room = new RoomCtor();
