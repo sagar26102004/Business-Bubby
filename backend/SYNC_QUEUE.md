@@ -205,3 +205,25 @@ re-derivation from the Supabase diff is required:
   Chat tabs render empty instead of throwing.
 
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
+
+---
+
+## [SYNC-007] Robust edge-error extraction in getAudioToken (RN-safe)
+
+- **Area:** CallRepository / calls — `getAudioToken` error surfacing (frontend client only; no server/DB change)
+- **Supabase change:** In `src/data/supabase/calls.ts`, the FunctionsHttpError unwrap no longer
+  uses `ctx instanceof Response` (false on React Native → real error was swallowed, phone only saw
+  the generic "edge function returned a non-2xx status code"). Added a module helper
+  `extractEdgeError(ctx)` that reads the body by CAPABILITY (duck-typed `.json()`, then `.text()`
+  with JSON.parse fallback, then plain-object `.error`, then raw string) and returns '' when
+  nothing usable. `getAudioToken` now does `detail = (await extractEdgeError(error.context)) || error.message || 'Could not connect the call audio.'`.
+- **Domain/interface:** none.
+- **Path B — backend/:** none (the api client talks to Express, not to a Supabase edge function —
+  Express should already return JSON `{ error }` bodies).
+- **Path B — src/data/api/:** IF the api client's `calls.getAudioToken` (or any api-client method)
+  parses fetch error bodies with a web-only `instanceof Response` / assumes `.json()` succeeds,
+  apply the same duck-typed, RN-safe extraction so phone builds surface the real message. If it
+  already reads `res.text()`/`res.json()` defensively, no change needed — just confirm.
+- **DB/migration:** none.
+- **Verify:** app `npx tsc --noEmit` (green). On a phone build, a failing token request shows the
+  real reason instead of the generic non-2xx sentence.

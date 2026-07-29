@@ -10,6 +10,55 @@ import { sb, uuid, nowIso, uuidOrNull, notify } from './shared';
 
 const RING_TIMEOUT_MS = 30_000;
 
+/**
+ * Pull the real `{ error }` message out of a supabase-js FunctionsHttpError
+ * `.context`, by CAPABILITY not by type. The context may be a web `Response`, a
+ * React-Native fetch Response (NOT `instanceof` the web global — this is why the
+ * old `instanceof Response` check silently failed on phones), a plain object, or
+ * a raw string. Returns '' when nothing usable is found so the caller can fall
+ * back to the generic message.
+ */
+async function extractEdgeError(ctx: unknown): Promise<string> {
+  if (!ctx) return '';
+  const pick = (body: unknown): string => {
+    if (body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string') {
+      return (body as { error: string }).error;
+    }
+    return '';
+  };
+  const c = ctx as { json?: () => Promise<unknown>; text?: () => Promise<string>; clone?: () => unknown };
+  // Response-like: prefer json(), then text() (which may itself be JSON).
+  if (typeof c.json === 'function') {
+    try {
+      const src = typeof c.clone === 'function' ? (c.clone() as typeof c) : c;
+      return pick(await src.json!());
+    } catch {
+      /* fall through to text() */
+    }
+  }
+  if (typeof c.text === 'function') {
+    try {
+      const raw = await c.text();
+      try {
+        return pick(JSON.parse(raw)) || raw;
+      } catch {
+        return raw;
+      }
+    } catch {
+      /* fall through */
+    }
+  }
+  // Plain object already carrying { error }, or a raw string body.
+  if (typeof ctx === 'string') {
+    try {
+      return pick(JSON.parse(ctx)) || ctx;
+    } catch {
+      return ctx;
+    }
+  }
+  return pick(ctx);
+}
+
 async function saveCall(call: Call): Promise<void> {
   const { error } = await sb().from('calls').update({ data: call }).eq('id', call.id);
   if (error) throw error;
@@ -218,18 +267,18 @@ export function createSupabaseCalls(): CallRepository {
         // supabase-js wraps a non-2xx edge response in FunctionsHttpError whose
         // `.message` is generic ("Edge Function returned a non-2xx status
         // code") — which reads like a network fault. The real reason (e.g.
-        // "LIVEKIT_* secrets missing", "Not signed in") lives in the response
-        // body on `.context`; surface THAT so the UI stops blaming the network.
-        let detail = error.message || 'Could not connect the call audio.';
-        const ctx = (error as { context?: unknown }).context;
-        if (ctx instanceof Response) {
-          try {
-            const body = (await ctx.clone().json()) as { error?: string };
-            if (body?.error) detail = body.error;
-          } catch {
-            /* non-JSON body (e.g. function not deployed) — keep the generic message */
-          }
-        }
+        // "LIVEKIT_* secrets missing", "Not signed in", "You are not part of
+        // this call") lives in the response body on `.context`; surface THAT so
+        // the UI stops blaming the network.
+        //
+        // ⚠️ Duck-type the body — DON'T use `ctx instanceof Response`. On React
+        // Native the fetch Response isn't the same global as web's `Response`, so
+        // `instanceof` is false there and the real error was being swallowed (the
+        // phone only ever saw the generic message). Read `.json()`/`.text()` by
+        // capability instead so the true reason shows on phone AND web.
+        const detail = (await extractEdgeError((error as { context?: unknown }).context)) ||
+          error.message ||
+          'Could not connect the call audio.';
         throw new Error(detail);
       }
       const token = (data as { token?: string } | null)?.token;
