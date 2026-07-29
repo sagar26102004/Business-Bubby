@@ -6,11 +6,14 @@
  */
 import type { AppNotification } from '@/domain/types';
 import type { NotificationRepository } from '@/data/repositories';
-import { sb } from './shared';
+import { sb, isUuid } from './shared';
 
 export function createSupabaseNotifications(): NotificationRepository {
   return {
     async listForUser(recipientId: string): Promise<AppNotification[]> {
+      // A logged-out viewer is 'guest' — not a uuid, and with no inbox of their
+      // own. Return empty rather than letting the uuid cast error (22P02) bubble.
+      if (!isUuid(recipientId)) return [];
       const { data, error } = await sb()
         .from('notifications')
         .select('data, read')
@@ -21,6 +24,7 @@ export function createSupabaseNotifications(): NotificationRepository {
     },
 
     async unreadCount(recipientId: string): Promise<number> {
+      if (!isUuid(recipientId)) return 0;
       const { count, error } = await sb()
         .from('notifications')
         .select('id', { count: 'exact', head: true })
@@ -36,6 +40,7 @@ export function createSupabaseNotifications(): NotificationRepository {
     },
 
     async markAllRead(recipientId: string): Promise<void> {
+      if (!isUuid(recipientId)) return;
       const { error } = await sb()
         .from('notifications')
         .update({ read: true })

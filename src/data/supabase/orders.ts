@@ -16,7 +16,7 @@ import type {
   TableSeat,
 } from '@/data/repositories';
 import { formatMoney } from '@/lib/money';
-import { sb, uuid, nowIso, uuidOrNull, notify, byNewest } from './shared';
+import { sb, uuid, nowIso, isUuid, uuidOrNull, notify, byNewest } from './shared';
 import { issueBill } from './bills';
 
 const orderSummary = (order: Order): string => {
@@ -173,6 +173,10 @@ export function createSupabaseOrders(): OrderRepository {
     },
 
     async listForCustomer(customerId: string, businessId?: string): Promise<Order[]> {
+      // A logged-out viewer passes the synthetic 'guest' id. `customer_id` is a
+      // uuid column, so querying it with that string errors (22P02) and would
+      // break every screen that asks "what did I order here?". They own nothing.
+      if (!isUuid(customerId)) return [];
       let q = sb().from('orders').select('data').eq('customer_id', customerId);
       if (businessId) q = q.eq('business_id', businessId);
       const { data, error } = await q;

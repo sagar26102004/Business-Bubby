@@ -3,7 +3,7 @@
  */
 import type { Booking, BookingStatus } from '@/domain/types';
 import type { BookingRepository, NewBookingInput } from '@/data/repositories';
-import { sb, uuid, nowIso, uuidOrNull, notify, byNewest } from './shared';
+import { sb, uuid, nowIso, isUuid, uuidOrNull, notify, byNewest } from './shared';
 
 async function businessName(businessId: string): Promise<{ name: string; ownerId: string } | null> {
   const { data } = await sb().from('businesses').select('data').eq('id', businessId).maybeSingle();
@@ -58,6 +58,8 @@ export function createSupabaseBookings(): BookingRepository {
     },
 
     async listForCustomer(customerId: string): Promise<Booking[]> {
+      // 'guest' is not a uuid — a guest has no bookings of their own.
+      if (!isUuid(customerId)) return [];
       const { data, error } = await sb()
         .from('bookings')
         .select('data')

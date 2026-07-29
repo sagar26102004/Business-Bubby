@@ -10,10 +10,11 @@ import type {
   ReviewEligibility,
   ReviewRepository,
 } from '@/data/repositories';
-import { sb, uuid, nowIso, notify, byNewest } from './shared';
+import { sb, uuid, nowIso, isUuid, notify, byNewest } from './shared';
 
 async function eligibilityFor(businessId: string, customerId: string): Promise<ReviewEligibility> {
-  if (!customerId || customerId === 'guest') {
+  // Anything that isn't a real account id (the 'guest' placeholder) can't rate.
+  if (!isUuid(customerId)) {
     return { eligible: false, reason: 'Sign in to rate businesses.' };
   }
   const { data: bizRow } = await sb().from('businesses').select('data').eq('id', businessId).maybeSingle();
@@ -51,6 +52,7 @@ export function createSupabaseReviews(): ReviewRepository {
     },
 
     async getMine(businessId: string, customerId: string): Promise<Review | null> {
+      if (!isUuid(customerId)) return null;
       const { data, error } = await sb()
         .from('reviews')
         .select('data')

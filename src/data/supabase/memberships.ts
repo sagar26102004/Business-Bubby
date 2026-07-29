@@ -12,7 +12,7 @@ import type {
   ReportPaymentInput,
 } from '@/data/repositories';
 import { formatMoney } from '@/lib/money';
-import { sb, uuid, nowIso, uuidOrNull, notify } from './shared';
+import { sb, uuid, nowIso, isUuid, uuidOrNull, notify } from './shared';
 
 function addMonths(iso: string | Date, n: number): Date {
   const d = new Date(iso);
@@ -97,6 +97,8 @@ const hydrateAll = (rows: Membership[]) => Promise.all(rows.map(hydrate));
 export function createSupabaseMemberships(): MembershipRepository {
   return {
     async listForCustomer(customerId: string): Promise<Membership[]> {
+      // 'guest' is not a uuid — a guest holds no plans.
+      if (!isUuid(customerId)) return [];
       const { data, error } = await sb().from('memberships').select('data').eq('customer_id', customerId);
       if (error) throw error;
       const rows = (data ?? [])
@@ -107,6 +109,7 @@ export function createSupabaseMemberships(): MembershipRepository {
     },
 
     async monthlySpend(customerId: string): Promise<MonthlySpend[]> {
+      if (!isUuid(customerId)) return [];
       const { data, error } = await sb().from('memberships').select('data').eq('customer_id', customerId);
       if (error) throw error;
       const rows = (data ?? [])

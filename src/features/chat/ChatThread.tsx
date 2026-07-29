@@ -29,6 +29,13 @@ export interface ChatThreadProps {
   participantId: string;
   /** Who I am when I send. */
   me: ChatAuthor;
+  /**
+   * Resolved just before sending, when who-I-am can only be settled at that
+   * moment — a logged-out guest gains an anonymous identity on their first
+   * message so the thread is really theirs (and the backend accepts it).
+   * Defaults to the `participantId`/`me` props.
+   */
+  ensureIdentity?: () => Promise<{ participantId: string; me: ChatAuthor }>;
   /** Label shown above a bubble; return undefined for none. */
   labelFor?: (message: ChatMessage, mine: boolean) => string | undefined;
   placeholder?: string;
@@ -38,6 +45,7 @@ export function ChatThread({
   businessId,
   participantId,
   me,
+  ensureIdentity,
   labelFor,
   placeholder = 'Type a message…',
 }: ChatThreadProps) {
@@ -48,13 +56,21 @@ export function ChatThread({
   const [thread, setThread] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
   useEffect(() => {
     let active = true;
-    repos.chat.listThread(businessId, participantId).then((msgs) => {
-      if (active) setThread(msgs);
-    });
+    repos.chat
+      .listThread(businessId, participantId)
+      .then((msgs) => {
+        if (active) setThread(msgs);
+      })
+      .catch(() => {
+        // A thread you can't read yet (e.g. a guest before their first message)
+        // is simply an empty one — never an error screen.
+        if (active) setThread([]);
+      });
     return () => {
       active = false;
     };
@@ -65,10 +81,18 @@ export function ChatThread({
     if (!body || sending) return;
     setDraft('');
     setSending(true);
+    setSendError(null);
     try {
-      const updated = await repos.chat.send(businessId, participantId, body, me);
+      // Who I am is settled here, not at render: a guest becomes an anonymous
+      // identity on their first message so the thread belongs to someone.
+      const who = ensureIdentity ? await ensureIdentity() : { participantId, me };
+      const updated = await repos.chat.send(businessId, who.participantId, body, who.me);
       setThread(updated);
       requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    } catch (err) {
+      // Put the message back in the box so nothing is lost.
+      setDraft(body);
+      setSendError(err instanceof Error ? err.message : 'Could not send that message.');
     } finally {
       setSending(false);
     }
@@ -145,6 +169,14 @@ export function ChatThread({
         }}
       />
 
+      {sendError ? (
+        <View style={[styles.errorBar, { backgroundColor: colors.surfaceAlt }]}>
+          <Text variant="caption" tone="danger">
+            {sendError}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface }]}>
         <TextInput
           value={draft}
@@ -186,6 +218,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  errorBar: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -105,6 +105,11 @@ export function phoneToEmail(phoneOrEmail: string): string {
 export function niceAuthError(message: string): string {
   const m = message.toLowerCase();
   if (m.includes('invalid login')) return 'Wrong phone number or password.';
+  // Guest calls and guest chat both mint an anonymous identity. When the
+  // project toggle is off, Supabase just says "Anonymous sign-ins are disabled",
+  // which reads like a dead end — say where to turn it on instead.
+  if (m.includes('anonymous'))
+    return 'Guest access is off for this project. Turn on Supabase → Authentication → Sign In / Providers → “Allow anonymous sign-ins”, or sign in to continue.';
   if (m.includes('already registered') || m.includes('already been registered'))
     return 'An account with this phone number already exists. Sign in instead.';
   if (m.includes('password')) return message;

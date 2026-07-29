@@ -5,7 +5,7 @@
  * routing settings) and starts the call.
  */
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -19,6 +19,9 @@ export default function CallScreen() {
   const router = useRouter();
   const { currentUser, signInGuest } = useAuth();
   const [starting, setStarting] = useState(false);
+  // Shown inline rather than through Alert.alert — Alert is a no-op on web, so
+  // a failed start (e.g. guest access switched off) would look like a dead button.
+  const [startError, setStartError] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
@@ -43,6 +46,7 @@ export default function CallScreen() {
 
   const startCall = async () => {
     setStarting(true);
+    setStartError(null);
     try {
       // A guest needs a real identity (auth uid + JWT) so the call insert and the
       // audio-token function accept them — an anonymous sign-in provides it
@@ -51,7 +55,7 @@ export default function CallScreen() {
       const call = await repos.calls.start(business.id, { id: me.id, name: me.name });
       router.replace(`/call/session/${call.id}`);
     } catch (err) {
-      Alert.alert('Could not start the call', err instanceof Error ? err.message : 'Try again.');
+      setStartError(err instanceof Error ? err.message : 'Could not start the call. Try again.');
       setStarting(false);
     }
   };
@@ -99,6 +103,11 @@ export default function CallScreen() {
       {!reachable ? (
         <Text variant="caption" tone="muted" style={styles.unreachable}>
           No one at this business can take voice calls right now. Try the chat instead.
+        </Text>
+      ) : null}
+      {startError ? (
+        <Text variant="caption" tone="danger" style={styles.unreachable}>
+          {startError}
         </Text>
       ) : null}
       <Button title="Cancel" variant="ghost" onPress={() => router.back()} />

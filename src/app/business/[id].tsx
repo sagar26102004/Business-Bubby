@@ -45,7 +45,10 @@ export default function BusinessDetailScreen() {
   const repos = useRepositories();
   const colors = useColors();
   const router = useRouter();
-  const { currentUser } = useAuth();
+  // `isGuest` covers both a logged-out viewer and one browsing on a throwaway
+  // anonymous identity (gained by calling or chatting) — neither can own a
+  // rating or a membership, so both are sent to sign-in for those.
+  const { currentUser, isGuest } = useAuth();
 
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(id);
@@ -506,7 +509,7 @@ export default function BusinessDetailScreen() {
             title={myReview ? '✏️ Edit your rating' : '⭐ Rate this business'}
             variant="secondary"
             onPress={() =>
-              currentUser ? router.push(`/review/${business.id}`) : router.push('/sign-in')
+              isGuest ? router.push('/sign-in') : router.push(`/review/${business.id}`)
             }
             style={styles.reviewBtn}
           />
@@ -530,7 +533,7 @@ export default function BusinessDetailScreen() {
           <Button
             title={membershipAction}
             onPress={() =>
-              currentUser ? router.push(`/enroll/${business.id}`) : router.push('/sign-in')
+              isGuest ? router.push('/sign-in') : router.push(`/enroll/${business.id}`)
             }
             style={styles.bookBtn}
           />

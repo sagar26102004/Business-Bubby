@@ -89,10 +89,18 @@ export function createSupabaseChat(): ChatRepository {
         const m = r.data as ChatMessage;
         const cur = byPid.get(pid);
         if (!cur) {
+          // Anonymous guests have a real id but an empty profile name — never
+          // show a blank row or a raw uuid in the inbox.
+          const profileName = names.get(pid)?.trim();
           byPid.set(pid, {
             businessId,
             participantId: pid,
-            participantName: pid === 'guest' ? 'Guest' : names.get(pid) ?? pid,
+            participantName:
+              pid === 'guest'
+                ? 'Guest'
+                : profileName ||
+                  (m.authorType === 'customer' ? m.authorName?.trim() : '') ||
+                  'Guest',
             lastBody: m.body,
             lastAt: m.createdAt,
             lastAuthorType: m.authorType,

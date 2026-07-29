@@ -22,7 +22,7 @@ import type {
   TrackingRepository,
 } from '@/data/repositories';
 import { haversineKm } from '@/lib/geo';
-import { sb, uuid, nowIso } from './shared';
+import { sb, uuid, nowIso, isUuid } from './shared';
 
 const FALLBACK_POINT: GeoPoint = { latitude: 22.7196, longitude: 75.8577 };
 const SIM_SPEED_KMH = 120;
@@ -135,6 +135,8 @@ export function createSupabaseTracking(): TrackingRepository {
     },
 
     async listItemsForCustomer(customerId: string, businessId?: string): Promise<TrackedItem[]> {
+      // 'guest' is not a uuid — nothing is tracked for a logged-out viewer.
+      if (!isUuid(customerId)) return [];
       let q = sb().from('tracked_items').select('data').eq('customer_id', customerId);
       if (businessId) q = q.eq('business_id', businessId);
       const { data, error } = await q;

@@ -26,10 +26,13 @@ export default function InboxConversationScreen() {
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
+    // A guest who chatted while logged out has an anonymous account: a real id
+    // but no name on their profile. Fall back to "Guest" rather than showing a
+    // blank header or a raw uuid.
     let participantName = 'Guest';
     if (participantId !== 'guest') {
       const user = await repos.users.getById(participantId);
-      participantName = user?.name ?? participantId;
+      participantName = user?.name?.trim() || 'Guest';
     }
     return { business, participantName };
   }, [businessId, participantId]);

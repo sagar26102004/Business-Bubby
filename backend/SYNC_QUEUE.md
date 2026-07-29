@@ -151,4 +151,57 @@ re-derivation from the Supabase diff is required:
 - **Verify:** a ringing call is returned to a business member's `getIncomingForUser`; the incoming
   overlay appears on the receiver within the poll interval.
 
+## [SYNC-006] Guest access — synthetic ids must never hit uuid columns; guests can chat
+
+- **Area:** OrderRepository, BillRepository, BookingRepository, MembershipRepository,
+  NotificationRepository, TrackingRepository, ReviewRepository, ChatRepository — everything a
+  LOGGED-OUT viewer touches.
+- **Supabase change (two parts):**
+  1. **Synthetic-id guard.** A logged-out viewer is passed to repositories as the literal
+     `'guest'` (see the `?? 'guest'` callers: `app/business/[id].tsx`, `app/(tabs)/orders.tsx`,
+     `app/(tabs)/chats.tsx`, `app/orders/[businessId].tsx`, `app/cart/[businessId].tsx`,
+     `app/order/new/[businessId].tsx`). Those ids were being sent straight into **uuid** scoping
+     columns, so PostgREST returned `22P02 invalid input syntax for type uuid: "guest"` — which
+     threw and made the whole **business page fail to load for logged-out users**. Every
+     customer-scoped read now early-returns empty when the id isn't a uuid (`isUuid` from
+     `src/data/supabase/shared.ts`): `orders.listForCustomer` → `[]`, `bills.listForCustomer` →
+     `[]`, `bookings.listForCustomer` → `[]`, `memberships.listForCustomer`/`monthlySpend` →
+     `[]`, `tracking.listItemsForCustomer` → `[]`, `notifications.listForUser` → `[]` /
+     `unreadCount` → `0` / `markAllRead` → no-op, `reviews.getMine` → `null`, and
+     `reviews` eligibility now rejects any non-uuid id (was an explicit `=== 'guest'` check).
+  2. **Guest chat identity.** `chat_messages` RLS is
+     `participant_id = auth.uid()::text or is_business_member(...)`, so a logged-out guest could
+     neither read nor insert with `participant_id = 'guest'`. The customer chat screen now
+     resolves identity at SEND time via `signInGuest()` (anonymous Supabase auth — the same
+     mechanism voice calls already use), so the message is stored under the guest's real anon
+     uid. Also: `chat.listBusinessThreads` falls back to the message's `authorName` (then
+     `'Guest'`) when the participant's profile name is blank — anonymous profiles are created by
+     the `handle_new_user` trigger with `name: ''`, which was rendering blank inbox rows.
+- **Domain/interface:** none (no interface or type changes).
+- **Path B — backend/:** the same two problems exist there.
+  1. In `backend/src/services/` — `orders.ts`, `bills.ts`, `bookings.ts`, `memberships.ts`,
+     `notifications.ts`, `tracking.ts`, `reviews.ts` — guard every customer/recipient-scoped
+     query the same way: if the id is not a uuid, return the empty result instead of passing it
+     to Prisma (Prisma throws on an invalid uuid for a `String @db.Uuid` column). Add a shared
+     `isUuid()` helper (e.g. `backend/src/util/ids.ts`) rather than repeating the regex.
+     Mirror `reviews` eligibility: a non-uuid customer id → `{ eligible: false, reason: 'Sign in
+     to rate businesses.' }`.
+  2. `backend/src/authz.ts` chat guards: a chat thread's `participantId` must be allowed when it
+     equals the authenticated user's id (including an anonymous Supabase uid — the JWT verifies
+     the same way, `is_anonymous` is just a claim), or the caller is a business member. No
+     special-casing of the string `'guest'` on writes — guests always arrive with a real uid now.
+  3. `backend/src/services/chat.ts` `listBusinessThreads`: fall back to the message's
+     `authorName`, then `'Guest'`, when the participant profile's name is blank.
+- **Path B — src/data/api/:** none — the client passes ids straight through; the guards belong on
+  the server. (The shared frontend changes are already done and apply to both backends:
+  `src/features/chat/ChatThread.tsx` gained an optional `ensureIdentity()` prop resolved just
+  before sending plus an inline send-error bar; `src/app/chat/[businessId]/index.tsx` supplies it
+  with `signInGuest()`; `src/app/inbox/[businessId]/[participantId].tsx` and
+  `src/app/business/[id].tsx` handle blank anon names / gate rating+enrol on `isGuest`.)
+- **DB/migration:** none. Requires Supabase **Auth → Anonymous sign-ins = ON** (already needed by
+  voice calls). Path B relies on the same Supabase Auth for identity, so nothing extra.
+- **Verify:** logged out, a business page loads fully (no error screen); 📞 Call and 💬 Chat both
+  work and the guest's message appears in the business inbox under "Guest"; the Orders, Subs and
+  Chat tabs render empty instead of throwing.
+
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->

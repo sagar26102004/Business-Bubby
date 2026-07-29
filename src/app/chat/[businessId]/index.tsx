@@ -2,10 +2,17 @@
  * Customer chat with a business — a single conversation. The customer just
  * drops a message; whoever the owner has given chat access replies, and each
  * reply is attributed as "‹member› from ‹business›".
+ *
+ * A logged-out guest can chat too: their first message quietly gains them an
+ * anonymous identity (exactly like starting a voice call), so the thread is
+ * genuinely theirs and the business's replies come back to them — no sign-up
+ * form in the way of "is this open on Sunday?".
  */
+import { useCallback } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import type { ChatMessage } from '@/domain/types';
+import type { ChatAuthor } from '@/data/repositories';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Avatar, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
@@ -17,10 +24,20 @@ export default function CustomerChatScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const colors = useColors();
-  const { currentUser } = useAuth();
+  const { currentUser, signInGuest } = useAuth();
 
   const participantId = currentUser?.id ?? 'guest';
   const authorName = currentUser?.name ?? 'Guest';
+
+  // Settled on the first send, not on render: a guest needs a real identity
+  // (auth uid + JWT) before the message can be stored against them.
+  const ensureIdentity = useCallback(async () => {
+    const me = currentUser ?? (await signInGuest());
+    return {
+      participantId: me.id,
+      me: { type: 'customer', name: me.name } as ChatAuthor,
+    };
+  }, [currentUser, signInGuest]);
 
   const { data, loading, error, reload } = useAsync(
     () => repos.businesses.getById(businessId),
@@ -55,6 +72,7 @@ export default function CustomerChatScreen() {
         businessId={businessId}
         participantId={participantId}
         me={{ type: 'customer', name: authorName }}
+        ensureIdentity={ensureIdentity}
         labelFor={labelFor}
         placeholder={`Message ${business.name}…`}
       />

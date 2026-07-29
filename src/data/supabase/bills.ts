@@ -6,7 +6,7 @@
 import type { Bill, BillLine, Business, PaymentStatus } from '@/domain/types';
 import type { BillRepository, NewBillInput } from '@/data/repositories';
 import { formatMoney, parsePrice } from '@/lib/money';
-import { sb, uuid, nowIso, uuidOrNull, notify, byNewest } from './shared';
+import { sb, uuid, nowIso, isUuid, uuidOrNull, notify, byNewest } from './shared';
 
 /** Compute line amounts + total and insert the bill. Shared by both flows. */
 export async function issueBill(input: NewBillInput): Promise<Bill> {
@@ -73,6 +73,9 @@ export function createSupabaseBills(): BillRepository {
     },
 
     async listForCustomer(customerId: string, businessId?: string): Promise<Bill[]> {
+      // Synthetic ids ('guest', 'walkin:…') aren't uuids — a guest has no bills
+      // of their own, and querying the uuid column with one errors (22P02).
+      if (!isUuid(customerId)) return [];
       let q = sb().from('bills').select('data').eq('customer_id', customerId);
       if (businessId) q = q.eq('business_id', businessId);
       const { data, error } = await q;
