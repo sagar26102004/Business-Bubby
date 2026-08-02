@@ -1,6 +1,7 @@
 /** Gold star rating with an optional numeric value and review count. */
 import { StyleSheet, View } from 'react-native';
 import { useColors } from '@/theme/theme';
+import { Icon } from './Icon';
 import { Text } from './Text';
 
 export interface StarsProps {
@@ -9,18 +10,27 @@ export interface StarsProps {
   size?: number;
 }
 
-export function Stars({ rating, count, size = 13 }: StarsProps) {
+export function Stars({ rating, count, size = 14 }: StarsProps) {
   const colors = useColors();
   if (typeof rating !== 'number') return null;
 
   const rounded = Math.round(rating);
-  const stars = Array.from({ length: 5 }, (_, i) => (i < rounded ? '★' : '☆'));
 
   return (
     <View style={styles.row}>
-      <Text style={{ color: colors.star, fontSize: size, letterSpacing: 1 }}>
-        {stars.join('')}
-      </Text>
+      {/* Drawn stars rather than ★/☆ glyphs, which render at different weights
+          and baselines on every platform. */}
+      <View style={styles.stars}>
+        {Array.from({ length: 5 }, (_, i) => (
+          <Icon
+            key={i}
+            name="star"
+            size={size}
+            color={i < rounded ? colors.star : colors.border}
+            filled
+          />
+        ))}
+      </View>
       <Text variant="caption" weight="semibold" style={styles.value}>
         {rating.toFixed(1)}
       </Text>
@@ -34,6 +44,7 @@ export function Stars({ rating, count, size = 13 }: StarsProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  value: { marginLeft: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  stars: { flexDirection: 'row', gap: 1 },
+  value: { marginLeft: 1 },
 });

@@ -5,13 +5,26 @@
  */
 import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
-import { ColorValue, Text } from 'react-native';
+import type { ColorValue } from 'react-native';
+import { Icon, type IconName } from '@/components/ui';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useColors } from '@/theme/theme';
 
-/** Emoji tab icon — swap for a proper icon set later without touching screens. */
-function TabIcon({ emoji, color }: { emoji: string; color: ColorValue }) {
-  return <Text style={{ fontSize: 20, color }}>{emoji}</Text>;
+/**
+ * Tab icon — stroked when idle, solid when active, so the current tab reads
+ * without relying on color alone.
+ */
+function TabIcon({
+  name,
+  color,
+  focused,
+}: {
+  name: IconName;
+  color: ColorValue;
+  focused: boolean;
+}) {
+  // The navigator types the tint as ColorValue; ours are always plain strings.
+  return <Icon name={name} size={23} color={color as string} filled={focused} />;
 }
 
 /** Polls the unread notification count for the signed-in viewer. */
@@ -54,9 +67,18 @@ export default function TabsLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.brand,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: { backgroundColor: colors.surface, borderTopColor: colors.border },
+        // No top border: the white bar already separates itself from the warm
+        // paper background, and the borderless edge is what makes it feel light.
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopWidth: 0,
+          elevation: 0,
+          paddingTop: 8,
+        },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         headerStyle: { backgroundColor: colors.surface },
-        headerTitleStyle: { color: colors.text },
+        headerTitleStyle: { color: colors.text, fontWeight: '700' },
+        headerShadowVisible: false,
         headerTitleAlign: 'center',
       }}
     >
@@ -65,7 +87,9 @@ export default function TabsLayout() {
         options={{
           title: 'Home',
           headerShown: false,
-          tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="home" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -89,7 +113,9 @@ export default function TabsLayout() {
         options={{
           title: 'My Subscriptions',
           tabBarLabel: 'Subs',
-          tabBarIcon: ({ color }) => <TabIcon emoji="🎫" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="ticket" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -97,7 +123,9 @@ export default function TabsLayout() {
         options={{
           title: 'My Orders',
           tabBarLabel: 'Orders',
-          tabBarIcon: ({ color }) => <TabIcon emoji="🛒" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="cart" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -105,7 +133,9 @@ export default function TabsLayout() {
         options={{
           title: 'Chat',
           tabBarLabel: 'Chat',
-          tabBarIcon: ({ color }) => <TabIcon emoji="💬" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="chat" color={color} focused={focused} />
+          ),
           tabBarBadge: unread > 0 ? unread : undefined,
         }}
       />
@@ -113,7 +143,9 @@ export default function TabsLayout() {
         name="account"
         options={{
           title: 'Account',
-          tabBarIcon: ({ color }) => <TabIcon emoji="👤" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="user" color={color} focused={focused} />
+          ),
         }}
       />
     </Tabs>

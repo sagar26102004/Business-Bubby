@@ -1,7 +1,8 @@
 /**
- * Rich business card used in the browse list, modeled on the reference design:
- * a colored thumbnail header (favorite + open/distance badges) over a body with
- * name, price level, provider type, rating, location, and tag chips.
+ * Business card used in the browse list, in the neighborhood style: a bold
+ * name, one quiet meta line, and soft-tinted status chips — no saturated
+ * badges competing with the content. Icons carry the meaning that emoji used
+ * to, so every row lines up on the same baseline.
  */
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -12,9 +13,10 @@ import { formatDistance, priceLevelLabel, rentalBasisLabel } from '@/domain/cata
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { haversineKm } from '@/lib/geo';
-import { Card, Stars, Tag, Text } from '@/components/ui';
+import { Card, Icon, Stars, Tag, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { locationSummary } from './location';
+import { StatusChip } from './StatusChip';
 
 const PLACE_ICONS: Record<PlaceKind, string> = {
   current: '🧭',
@@ -73,77 +75,64 @@ export function BusinessCard({ business }: { business: Business }) {
       {/* Body */}
       <View style={styles.body}>
         <View style={styles.titleRow}>
-          <Text variant="subheading" weight="semibold" style={styles.name} numberOfLines={1}>
+          <Text variant="subheading" weight="bold" style={styles.name} numberOfLines={1}>
             {business.name}
           </Text>
-          <Pressable
-            onPress={() => setFavorite((f) => !f)}
-            hitSlop={8}
-            style={styles.heart}
-          >
-            <Text style={{ fontSize: 17, color: favorite ? colors.danger : colors.textMuted }}>
-              {favorite ? '♥' : '♡'}
-            </Text>
-          </Pressable>
           {price ? (
             <Text variant="label" weight="semibold" tone="muted">
               {price}
             </Text>
           ) : null}
-        </View>
-
-        {/* Status · distance · hours — moved off the removed thumbnail */}
-        <View style={styles.badgeRow}>
-          {business.rentalStatus ? (
-            <View
-              style={[
-                styles.statusPill,
-                {
-                  backgroundColor:
-                    business.rentalStatus === 'available' ? colors.success : colors.danger,
-                },
-              ]}
-            >
-              <Text variant="caption" weight="semibold" tone="inverse">
-                {business.rentalStatus === 'available' ? 'Available' : 'Rented'}
-              </Text>
-            </View>
-          ) : typeof status.open === 'boolean' ? (
-            <View
-              style={[
-                styles.statusPill,
-                { backgroundColor: status.open ? colors.success : colors.textMuted },
-              ]}
-            >
-              <Text variant="caption" weight="semibold" tone="inverse">
-                {status.open ? 'Open Now' : 'Closed'}
-              </Text>
-            </View>
-          ) : null}
-          {hoursLabel ? (
-            <Text variant="caption" tone="muted">
-              🕒 {hoursLabel}
-            </Text>
-          ) : null}
-          {distance ? (
-            <Text variant="caption" weight="semibold" tone="muted">
-              📍 {distance}
-            </Text>
-          ) : null}
+          <Pressable onPress={() => setFavorite((f) => !f)} hitSlop={10} style={styles.heart}>
+            <Icon
+              name="heart"
+              size={19}
+              color={favorite ? colors.danger : colors.textMuted}
+              filled={favorite}
+            />
+          </Pressable>
         </View>
 
         {providerLine ? (
-          <Text variant="caption" tone="muted" style={styles.provider}>
+          <Text variant="label" tone="muted" style={styles.provider} numberOfLines={1}>
             {providerLine}
           </Text>
         ) : null}
+
+        {/* Status · hours · distance — soft chips, not saturated badges. */}
+        <View style={styles.badgeRow}>
+          {business.rentalStatus ? (
+            <StatusChip
+              label={business.rentalStatus === 'available' ? 'Available' : 'Rented'}
+              positive={business.rentalStatus === 'available'}
+            />
+          ) : typeof status.open === 'boolean' ? (
+            <StatusChip label={status.open ? 'Open now' : 'Closed'} positive={status.open} />
+          ) : null}
+          {hoursLabel ? (
+            <View style={styles.metaItem}>
+              <Icon name="clock" size={13} color={colors.textMuted} strokeWidth={2.2} />
+              <Text variant="caption" tone="muted">
+                {hoursLabel}
+              </Text>
+            </View>
+          ) : null}
+          {distance ? (
+            <View style={styles.metaItem}>
+              <Icon name="pin" size={13} color={colors.textMuted} strokeWidth={2.2} />
+              <Text variant="caption" weight="semibold" tone="muted">
+                {distance}
+              </Text>
+            </View>
+          ) : null}
+        </View>
 
         <View style={styles.ratingRow}>
           <Stars rating={business.ratingAvg} count={business.ratingCount} />
         </View>
 
         <Text variant="caption" tone="muted" style={styles.location} numberOfLines={1}>
-          📍 {locationSummary(business.location)}
+          {locationSummary(business.location)}
         </Text>
 
         {placeDistances.length > 0 ? (
@@ -160,7 +149,7 @@ export function BusinessCard({ business }: { business: Business }) {
           <View style={styles.stallItems}>
             {stallItems.slice(0, 3).map((p, i) => (
               <Text key={`${p.name}-${i}`} variant="caption" tone="muted" numberOfLines={1}>
-                🏷️ {p.name}
+                •  {p.name}
                 {p.price ? ` · ${p.price}` : ''}
               </Text>
             ))}
@@ -190,20 +179,18 @@ const styles = StyleSheet.create({
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
+    flexWrap: 'wrap',
+    columnGap: spacing.md,
+    rowGap: spacing.xs,
+    marginTop: spacing.md,
   },
-  statusPill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   body: {},
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   name: { flex: 1 },
-  provider: { marginTop: 2 },
-  ratingRow: { marginTop: spacing.sm },
-  location: { marginTop: spacing.sm },
+  provider: { marginTop: 3 },
+  ratingRow: { marginTop: spacing.md },
+  location: { marginTop: spacing.xs },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
   stallItems: { marginTop: spacing.sm, gap: 2 },
   distances: {

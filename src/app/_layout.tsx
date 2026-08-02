@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Text as RNText, View } from 'react-native';
 import { Stack, useNavigation, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Icon } from '@/components/ui';
 import { DataProvider } from '@/data/DataProvider';
 import { IncomingCallGate } from '@/features/calls/IncomingCallGate';
 import { CartProvider } from '@/features/orders/CartContext';
@@ -33,12 +34,10 @@ function HeaderBack() {
       hitSlop={12}
       style={({ pressed }) => ({
         marginLeft: spacing.md,
-        width: 36,
-        height: 36,
-        borderRadius: 18,
+        width: 38,
+        height: 38,
+        borderRadius: 19,
         backgroundColor: colors.surfaceAlt,
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor: colors.border,
         alignItems: 'center',
         justifyContent: 'center',
         opacity: pressed ? 0.6 : 1,
@@ -46,9 +45,7 @@ function HeaderBack() {
       accessibilityRole="button"
       accessibilityLabel="Go back"
     >
-      <RNText style={{ color: colors.brand, fontSize: 22, fontWeight: '700', marginTop: -2 }}>
-        ‹
-      </RNText>
+      <Icon name="arrowLeft" size={20} color={colors.text} />
     </Pressable>
   );
 }
@@ -73,10 +70,10 @@ function AppHeader({ title, headerRight }: { title: string; headerRight?: Header
         borderBottomColor: colors.border,
       }}
     >
-      <View style={{ height: 52, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ height: 56, alignItems: 'center', justifyContent: 'center' }}>
         <RNText
           numberOfLines={1}
-          style={{ color: colors.text, fontSize: 17, fontWeight: '600', maxWidth: '65%' }}
+          style={{ color: colors.text, fontSize: 17, fontWeight: '700', maxWidth: '65%' }}
         >
           {title}
         </RNText>

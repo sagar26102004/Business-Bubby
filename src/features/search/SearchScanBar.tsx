@@ -5,7 +5,7 @@
  */
 import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ScanIcon, SearchIcon, Text } from '@/components/ui';
+import { Icon, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
@@ -18,13 +18,13 @@ export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
         onPress={() => router.push('/search')}
         style={({ pressed }) => [
           styles.bar,
-          { backgroundColor: colors.surface, borderColor: colors.border },
-          pressed && { opacity: 0.8 },
+          { backgroundColor: colors.surfaceAlt },
+          pressed && { opacity: 0.7 },
         ]}
         accessibilityRole="button"
         accessibilityLabel="Search businesses and services"
       >
-        <SearchIcon size={18} />
+        <Icon name="search" size={18} color={colors.textMuted} />
         <Text tone="muted" style={styles.placeholder}>
           Search businesses, services…
         </Text>
@@ -32,11 +32,15 @@ export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
       <Pressable
         onPress={() => router.push('/scan')}
         hitSlop={10}
-        style={({ pressed }) => [styles.scanBtn, pressed && { opacity: 0.6 }]}
+        style={({ pressed }) => [
+          styles.scanBtn,
+          { backgroundColor: colors.surfaceAlt },
+          pressed && { opacity: 0.6 },
+        ]}
         accessibilityRole="button"
         accessibilityLabel="Scan a business QR code"
       >
-        <ScanIcon size={22} color={colors.brandText} />
+        <Icon name="scan" size={20} color={colors.text} />
       </Pressable>
     </View>
   );
@@ -44,16 +48,23 @@ export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Filled rather than outlined: on the white header sheet a tinted field reads
+  // as an input, where a white-on-white bordered pill nearly disappears.
   bar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    height: 46,
+    height: 48,
     borderRadius: radius.pill,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
   },
   placeholder: { flex: 1, fontSize: 15 },
-  scanBtn: { paddingHorizontal: spacing.xs },
+  scanBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

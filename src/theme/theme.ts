@@ -2,36 +2,56 @@
  * Design tokens. All colors, spacing, radii, and type sizes live here so a
  * restyle touches one file. Components read colors through `useColors()`.
  *
- * Look & feel: light background, deep-navy primary actions, blue accents, and
- * a gold rating star — matching the reference directory design. A dark scheme
- * is kept for later; flip `FOLLOW_SYSTEM_THEME` to re-enable auto switching.
+ * TWO looks live side by side, picked by `DESIGN` below:
+ *  - 'neighborhood' (current) — Nextdoor-inspired: warm paper background, one
+ *    deep forest-green brand color, near-black text, soft rounded surfaces.
+ *  - 'classic' — the original deep-navy + blue-accent directory look.
+ *
+ * To go back to the old colors, change ONE word: DESIGN = 'classic'.
+ * (The full pre-redesign UI, including layouts, is the git tag
+ * `design-before-nextdoor` — see the redesign notes in docs/.)
+ *
+ * A dark scheme is kept for later; flip `FOLLOW_SYSTEM_THEME` to re-enable it.
  */
 import { useColorScheme } from 'react-native';
+
+export type DesignName = 'neighborhood' | 'classic';
+
+/** Which visual identity the app wears. Flip to 'classic' to revert colors. */
+export const DESIGN = 'neighborhood' as DesignName;
 
 /** When false, always use the light theme regardless of OS setting. */
 const FOLLOW_SYSTEM_THEME = false;
 
 export const palette = {
-  // Navy primary (buttons, selected pills, headers)
+  // — Neighborhood (current): forest green on warm paper —
+  green: '#19975D', // brand: buttons, active states, links
+  greenDark: '#0F7245', // pressed / emphasis
+  greenSoft: '#E4F2EA', // tinted chips and fills
+  paper: '#F4F3EF', // app background (warm, not blue-gray)
+  line: '#E5E2DA', // hairline borders on paper
+  sand: '#EFEDE6', // secondary button / chip fill
+  charcoal: '#1A1A18', // primary text
+  stone: '#6B6862', // secondary text
+
+  // — Classic (previous look) —
   navy: '#1B2A4A',
   navyDark: '#131F38',
   navySoft: '#EEF1F8',
-
-  // Blue accent (links, highlights, hero)
   accent: '#2E6BE6',
   accentSoft: '#E1ECFF',
-
-  // Light neutrals
-  white: '#FFFFFF',
   bg: '#F6F7F9',
   neutral50: '#F1F3F6',
   neutral100: '#EBEEF2',
   neutral200: '#E4E7EC',
-  ink: '#111827', // primary text
-  inkMuted: '#6B7280', // secondary text
+  ink: '#111827',
+  inkMuted: '#6B7280',
+
+  // Shared
+  white: '#FFFFFF',
 
   // Status
-  star: '#F59E0B',
+  star: '#F0A500',
   success: '#16A34A',
   successSoft: '#DCFCE7',
   warning: '#D97706',
@@ -67,7 +87,30 @@ export interface ColorScheme {
   danger: string;
 }
 
-const light: ColorScheme = {
+/** Nextdoor-inspired: one green, warm paper, near-black ink. */
+const neighborhood: ColorScheme = {
+  background: palette.paper,
+  surface: palette.white,
+  surfaceAlt: palette.sand,
+  border: palette.line,
+  text: palette.charcoal,
+  textMuted: palette.stone,
+  textInverse: palette.white,
+  brand: palette.green,
+  brandSoft: palette.greenSoft,
+  brandText: palette.greenDark,
+  // One brand color does the work of the old navy+blue pair, so links and
+  // highlights read as the same family rather than a second identity.
+  accent: palette.green,
+  accentSoft: palette.greenSoft,
+  star: palette.star,
+  success: palette.success,
+  successSoft: palette.successSoft,
+  danger: palette.danger,
+};
+
+/** The original navy/blue directory look. */
+const classic: ColorScheme = {
   background: palette.bg,
   surface: palette.white,
   surfaceAlt: palette.neutral50,
@@ -85,6 +128,8 @@ const light: ColorScheme = {
   successSoft: palette.successSoft,
   danger: palette.danger,
 };
+
+const light: ColorScheme = DESIGN === 'classic' ? classic : neighborhood;
 
 const dark: ColorScheme = {
   background: palette.black,
@@ -114,11 +159,12 @@ export const spacing = {
   xxl: 32,
 } as const;
 
+/** Softer, rounder surfaces than the classic look — the neighborhood feel. */
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 20,
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
   pill: 999,
 } as const;
 

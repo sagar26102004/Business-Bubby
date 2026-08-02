@@ -19,6 +19,7 @@ import {
   Card,
   EmptyView,
   ErrorView,
+  Icon,
   LoadingView,
   Screen,
   Stars,
@@ -30,6 +31,7 @@ import { CatalogAccordion } from '@/features/businesses/CatalogAccordion';
 import { ProductTile } from '@/features/businesses/ProductTile';
 import { PortfolioGallery } from '@/features/businesses/PortfolioGallery';
 import { OwnerPicker } from '@/features/businesses/OwnerPicker';
+import { StatusChip } from '@/features/businesses/StatusChip';
 import { canShowPreciseLocation, hasShowableCoordinates, locationSummary } from '@/features/businesses/location';
 import { radius, spacing, useColors } from '@/theme/theme';
 
@@ -205,35 +207,18 @@ export default function BusinessDetailScreen() {
         return (
           <View style={styles.statusRow}>
             {business.rentalStatus ? (
-              <View
-                style={[
-                  styles.statusPill,
-                  {
-                    backgroundColor:
-                      business.rentalStatus === 'available' ? colors.success : colors.danger,
-                  },
-                ]}
-              >
-                <Text variant="caption" weight="semibold" tone="inverse">
-                  {business.rentalStatus === 'available' ? 'Available' : 'Rented'}
-                </Text>
-              </View>
+              <StatusChip
+                label={business.rentalStatus === 'available' ? 'Available' : 'Rented'}
+                positive={business.rentalStatus === 'available'}
+              />
             ) : typeof status.open === 'boolean' ? (
-              <View
-                style={[
-                  styles.statusPill,
-                  { backgroundColor: status.open ? colors.success : colors.textMuted },
-                ]}
-              >
-                <Text variant="caption" weight="semibold" tone="inverse">
-                  {status.open ? 'Open Now' : 'Closed'}
-                </Text>
-              </View>
+              <StatusChip label={status.open ? 'Open now' : 'Closed'} positive={status.open} />
             ) : null}
             {todayLabel ? (
-              <View style={[styles.statusPill, { backgroundColor: colors.surfaceAlt }]}>
+              <View style={styles.hoursRow}>
+                <Icon name="clock" size={13} color={colors.textMuted} strokeWidth={2.2} />
                 <Text variant="caption" weight="semibold" tone="muted">
-                  🕒 {todayLabel}
+                  {todayLabel}
                 </Text>
               </View>
             ) : null}
@@ -774,12 +759,14 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 const styles = StyleSheet.create({
-  statusPill: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
+  hoursRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+    marginBottom: spacing.sm,
   },
-  statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
   hoursLine: { marginBottom: spacing.lg },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   name: { marginBottom: spacing.xs },

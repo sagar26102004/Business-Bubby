@@ -9,14 +9,13 @@
  */
 import { useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tabs, useRouter } from 'expo-router';
 import { formatDistance, getSubcategory } from '@/domain/catalog';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { useResponsive } from '@/lib/useResponsive';
-import { EmptyView, ErrorView, LoadingView, Text } from '@/components/ui';
+import { EmptyView, ErrorView, Icon, LoadingView, Text } from '@/components/ui';
 import { ProductTile, type StallProduct } from '@/features/businesses/ProductTile';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { ModePills } from '@/features/shell/ModePills';
@@ -64,24 +63,30 @@ export default function StallsScreen() {
 
   const header = (
     <View>
-      <LinearGradient
-        colors={[colors.accent, colors.accentSoft, colors.background]}
-        locations={[0, 0.62, 1]}
-        style={[styles.sheet, { paddingTop: insets.top + spacing.lg }]}
+      <View
+        style={[
+          styles.sheet,
+          {
+            paddingTop: insets.top + spacing.md,
+            backgroundColor: colors.surface,
+            borderBottomColor: colors.border,
+          },
+        ]}
       >
         <ModePills active="stalls" />
         <View style={styles.searchRow}>
           <SearchScanBar />
         </View>
-      </LinearGradient>
+      </View>
 
       <View style={styles.titleRow}>
-        <Text variant="subheading" weight="bold">
-          🏷️ On sale near you
+        <Text variant="heading" weight="bold">
+          On sale near you
         </Text>
-        <Pressable onPress={() => router.push('/register?type=item')}>
-          <Text variant="label" weight="semibold" tone="accent">
-            ＋ Sell something
+        <Pressable onPress={() => router.push('/register?type=item')} style={styles.sellBtn}>
+          <Icon name="plus" size={15} color={colors.brand} strokeWidth={2.5} />
+          <Text variant="label" weight="bold" tone="brand">
+            Sell something
           </Text>
         </Pressable>
       </View>
@@ -121,18 +126,20 @@ export default function StallsScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
-  // The gradient bleeds to the screen edges and adds its own padding back.
+  // The header sheet bleeds to the screen edges and adds its own padding back.
   sheet: {
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
+    borderBottomWidth: 1,
   },
-  searchRow: { marginTop: spacing.md },
+  searchRow: { marginTop: spacing.lg },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
   },
+  sellBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   column: { gap: spacing.md, marginTop: spacing.md },
 });
