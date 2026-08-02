@@ -27,9 +27,15 @@ function TabIcon({
 }) {
   const colors = useColors();
   return (
-    <View style={[styles.iconSlot, focused && { backgroundColor: colors.brandSoft }]}>
-      {/* The navigator types the tint as ColorValue; ours are plain strings. */}
-      <Icon name={name} size={22} color={color as string} filled={focused} />
+    <View style={[styles.iconSlot, focused && { backgroundColor: colors.brand }]}>
+      {/* Solid brand pill on the tinted bar — a soft tint would disappear into
+          it. The navigator types the tint as ColorValue; ours are strings. */}
+      <Icon
+        name={name}
+        size={22}
+        color={focused ? colors.textInverse : (color as string)}
+        filled={focused}
+      />
     </View>
   );
 }
@@ -87,10 +93,12 @@ export default function TabsLayout() {
         tabBarInactiveTintColor: colors.textMuted,
         // No top border: the white bar already separates itself from the warm
         // paper background, and the borderless edge is what makes it feel light.
+        // Same warm tone as the home header sheet, so the app is bookended by
+        // color top and bottom with the content sitting quietly between them.
         // The taller bar has to make room for the safe area itself once a
         // height is set, otherwise it clips on phones with a home indicator.
         tabBarStyle: {
-          backgroundColor: colors.surface,
+          backgroundColor: colors.headerTint,
           borderTopWidth: 0,
           elevation: 0,
           paddingTop: 8,

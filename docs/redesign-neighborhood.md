@@ -23,8 +23,10 @@ Taken from Nextdoor's own store listing (the app isn't distributed in India, so
 the store screenshots are the source):
 
 - A **warm off-white** background — not blue-gray — with pure white cards on top.
-- **One** brand color: a deep forest green (~`#19975D`), used for actions,
-  active states and links. No second accent color competing with it.
+- **One** brand color for actions, active states and links, with no second
+  accent competing with it. Nextdoor's own is a forest green; **Localo uses a
+  warm orange** (`#F2681F`) with a peach companion tone (`#FFE2CC`) — Sagar's
+  call, and it suits an Indian local marketplace better than the green did.
 - Cards separated by a **thin warm border**, not drop shadows.
 - **Pill-shaped** buttons and chips; generously rounded corners throughout.
 - A quiet, **flat top bar** — location on the left, small icons on the right.
@@ -34,7 +36,8 @@ the store screenshots are the source):
 ## What changed here
 
 **Tokens** (`src/theme/theme.ts`)
-- New `neighborhood` color scheme (green on warm paper); old scheme kept as `classic`.
+- New `neighborhood` color scheme (orange on warm paper); old navy/blue scheme
+  kept as `classic`.
 - Radii bumped (`sm` 8→10, `md` 12→14, `lg` 16→18, `xl` 20→24).
 
 **New: `src/components/ui/Icon.tsx`**
@@ -48,7 +51,7 @@ the store screenshots are the source):
 **Primitives**
 - `Button` — pill-shaped, borderless, slightly taller, bold label.
 - `Card` — full 1px warm border instead of a hairline.
-- `Tag` — selected chips go solid brand green; unselected are white with a border.
+- `Tag` — selected chips go solid brand orange; unselected are white with a border.
 - `Stars` — drawn stars instead of ★/☆ glyphs.
 
 **Chrome**
@@ -59,7 +62,7 @@ the store screenshots are the source):
 - Home / Stalls / My Business — the blue **gradient sheet is gone**, replaced by
   a flat white header closed with a hairline. All three share it, so the top of
   the app is consistent.
-- `ModePills` — one segmented control (sand track, green active segment) rather
+- `ModePills` — one segmented control (white track, orange active segment) rather
   than three floating translucent pills that needed a colored backdrop to read.
 - `BusinessCard` — bold name, one muted meta line, soft status chip, icon-led
   metadata.
@@ -71,16 +74,21 @@ the store screenshots are the source):
 The first pass was too white — a calm palette read as an unfinished one. Color
 is deliberately concentrated in three places rather than sprinkled everywhere:
 
-- **The home header sheet** (`colors.headerTint`, a soft green wash) on Home,
-  Stalls and My Business. The mode-pill track and the search field go white on
-  top of it so they still read as controls.
+- **The home header sheet AND the bottom tab bar**, both `colors.headerTint`
+  (the peach companion tone). Using the same color top and bottom bookends the
+  app and leaves the content quiet in between. The mode-pill track and the
+  search field go white on top of it so they still read as controls.
 - **The category strip**, where every category wears its **own** color from
   `domain/intents.ts` — Food red, Groceries green, Health blue, and so on — as a
   tinted tile, a ring when active, and a matching underline. This is the most
   colorful thing on the page, which is right: it's also the most tappable.
-- **The active bottom tab**, whose icon sits in a green pill.
+- **The active bottom tab**, whose icon sits in a solid orange pill (a soft
+  tint would vanish into the peach bar behind it).
 
 Everything else (cards, body, chrome) stays quiet so those three read clearly.
+The one deliberate exception is `StatusChip`, which stays **green** for
+open/available — that's the one place the color should mean the conventional
+thing rather than carry the brand.
 
 ## Known gaps
 

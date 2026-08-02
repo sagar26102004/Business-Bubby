@@ -24,16 +24,16 @@ export const DESIGN = 'neighborhood' as DesignName;
 const FOLLOW_SYSTEM_THEME = false;
 
 export const palette = {
-  // — Neighborhood (current): forest green on warm paper —
-  green: '#19975D', // brand: buttons, active states, links
-  greenDark: '#0F7245', // pressed / emphasis
-  greenSoft: '#E4F2EA', // tinted chips and fills
-  greenWash: '#E7F3EC', // the header sheet — colored, but quiet enough to read on
-  paper: '#F4F3EF', // app background (warm, not blue-gray)
-  line: '#E5E2DA', // hairline borders on paper
-  sand: '#EFEDE6', // secondary button / chip fill
-  charcoal: '#1A1A18', // primary text
-  stone: '#6B6862', // secondary text
+  // — Neighborhood (current): warm orange on warm paper —
+  orange: '#F2681F', // brand: buttons, active states, links
+  orangeDark: '#C2490F', // text weight on light backgrounds, pressed states
+  orangeSoft: '#FDE7D8', // tinted chips and fills
+  peachWash: '#FFE2CC', // header sheet + tab bar — orange's companion tone
+  paper: '#F7F4F0', // app background (warm, not blue-gray)
+  line: '#E7E2DA', // hairline borders on paper
+  sand: '#F0ECE4', // secondary button / chip fill
+  charcoal: '#1F1B18', // primary text
+  stone: '#6E6862', // secondary text
 
   // — Classic (previous look) —
   navy: '#1B2A4A',
@@ -54,6 +54,7 @@ export const palette = {
   // Status
   star: '#F0A500',
   success: '#16A34A',
+  successDark: '#15803D', // readable green text on successSoft
   successSoft: '#DCFCE7',
   warning: '#D97706',
   danger: '#DC2626',
@@ -90,7 +91,7 @@ export interface ColorScheme {
   danger: string;
 }
 
-/** Nextdoor-inspired: one green, warm paper, near-black ink. */
+/** Nextdoor-inspired structure, warm orange identity, near-black ink. */
 const neighborhood: ColorScheme = {
   background: palette.paper,
   surface: palette.white,
@@ -99,14 +100,14 @@ const neighborhood: ColorScheme = {
   text: palette.charcoal,
   textMuted: palette.stone,
   textInverse: palette.white,
-  brand: palette.green,
-  brandSoft: palette.greenSoft,
-  brandText: palette.greenDark,
+  brand: palette.orange,
+  brandSoft: palette.orangeSoft,
+  brandText: palette.orangeDark,
   // One brand color does the work of the old navy+blue pair, so links and
   // highlights read as the same family rather than a second identity.
-  accent: palette.green,
-  accentSoft: palette.greenSoft,
-  headerTint: palette.greenWash,
+  accent: palette.orange,
+  accentSoft: palette.orangeSoft,
+  headerTint: palette.peachWash,
   star: palette.star,
   success: palette.success,
   successSoft: palette.successSoft,
