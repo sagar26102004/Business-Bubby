@@ -169,7 +169,7 @@ export default function BrowseScreen() {
             styles.sheet,
             {
               paddingTop: insets.top + spacing.md,
-              backgroundColor: colors.surface,
+              backgroundColor: colors.headerTint,
               borderBottomColor: colors.border,
             },
           ]}
@@ -244,38 +244,45 @@ export default function BrowseScreen() {
             style={styles.stripScroll}
             contentContainerStyle={styles.stripRow}
           >
-            {[{ id: null as string | null, label: 'For You', icon: '✨' }, ...INTENT_CATEGORIES].map(
-              (c) => {
-                const active = selectedId === c.id;
-                return (
-                  <Pressable key={c.id ?? 'foryou'} onPress={() => setSelectedId(c.id)} style={styles.stripItem}>
-                    <View
-                      style={[
-                        styles.stripIconBox,
-                        { backgroundColor: active ? colors.brandSoft : colors.surfaceAlt },
-                      ]}
-                    >
-                      <Text style={styles.stripEmoji}>{c.icon}</Text>
-                    </View>
-                    <Text
-                      variant="caption"
-                      weight={active ? 'semibold' : 'regular'}
-                      tone={active ? 'brand' : 'default'}
-                      numberOfLines={1}
-                      style={styles.stripLabel}
-                    >
-                      {c.label}
-                    </Text>
-                    <View
-                      style={[
-                        styles.stripUnderline,
-                        { backgroundColor: colors.brand, opacity: active ? 1 : 0 },
-                      ]}
-                    />
-                  </Pressable>
-                );
-              },
-            )}
+            {[
+              { id: null as string | null, label: 'For You', icon: '✨', color: colors.brand },
+              ...INTENT_CATEGORIES,
+            ].map((c) => {
+              const active = selectedId === c.id;
+              return (
+                <Pressable
+                  key={c.id ?? 'foryou'}
+                  onPress={() => setSelectedId(c.id)}
+                  style={styles.stripItem}
+                >
+                  {/* Each category owns a color (domain/intents.ts) — the tile
+                      wears it, so the strip is the colorful part of the page. */}
+                  <View
+                    style={[
+                      styles.stripIconBox,
+                      { backgroundColor: c.color + (active ? '3D' : '1F') },
+                      active && { borderColor: c.color, borderWidth: 2 },
+                    ]}
+                  >
+                    <Text style={styles.stripEmoji}>{c.icon}</Text>
+                  </View>
+                  <Text
+                    variant="caption"
+                    weight={active ? 'bold' : 'medium'}
+                    numberOfLines={1}
+                    style={[styles.stripLabel, active && { color: c.color }]}
+                  >
+                    {c.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.stripUnderline,
+                      { backgroundColor: c.color, opacity: active ? 1 : 0 },
+                    ]}
+                  />
+                </Pressable>
+              );
+            })}
           </ScrollView>
         </View>
 

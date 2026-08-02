@@ -18,7 +18,7 @@ export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
         onPress={() => router.push('/search')}
         style={({ pressed }) => [
           styles.bar,
-          { backgroundColor: colors.surfaceAlt },
+          { backgroundColor: colors.surface, borderColor: colors.border },
           pressed && { opacity: 0.7 },
         ]}
         accessibilityRole="button"
@@ -34,7 +34,7 @@ export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
         hitSlop={10}
         style={({ pressed }) => [
           styles.scanBtn,
-          { backgroundColor: colors.surfaceAlt },
+          { backgroundColor: colors.surface, borderColor: colors.border },
           pressed && { opacity: 0.6 },
         ]}
         accessibilityRole="button"
@@ -48,8 +48,8 @@ export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // Filled rather than outlined: on the white header sheet a tinted field reads
-  // as an input, where a white-on-white bordered pill nearly disappears.
+  // White with a hairline border: reads as an input both on the tinted header
+  // sheet and on the plain paper background of the category pages.
   bar: {
     flex: 1,
     flexDirection: 'row',
@@ -57,6 +57,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     height: 48,
     borderRadius: radius.pill,
+    borderWidth: 1,
     paddingHorizontal: spacing.lg,
   },
   placeholder: { flex: 1, fontSize: 15 },
@@ -64,6 +65,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: radius.pill,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

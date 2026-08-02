@@ -28,7 +28,7 @@ export function ModePills({ active }: { active: Mode }) {
   const colors = useColors();
 
   return (
-    <View style={[styles.track, { backgroundColor: colors.surfaceAlt }]}>
+    <View style={[styles.track, { backgroundColor: colors.surface }]}>
       {MODES.map((m) => {
         const isActive = m.id === active;
         const tint = isActive ? colors.textInverse : colors.textMuted;

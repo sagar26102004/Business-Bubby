@@ -59,7 +59,7 @@ export default function MyBusinessScreen() {
         styles.sheet,
         {
           paddingTop: insets.top + spacing.md,
-          backgroundColor: colors.surface,
+          backgroundColor: colors.headerTint,
           borderBottomColor: colors.border,
         },
       ]}

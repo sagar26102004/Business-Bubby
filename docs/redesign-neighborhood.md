@@ -66,6 +66,22 @@ the store screenshots are the source):
 - New `features/businesses/StatusChip.tsx` — shared by the card and the business
   page so "Open now" looks the same in both.
 
+## Where the color lives
+
+The first pass was too white — a calm palette read as an unfinished one. Color
+is deliberately concentrated in three places rather than sprinkled everywhere:
+
+- **The home header sheet** (`colors.headerTint`, a soft green wash) on Home,
+  Stalls and My Business. The mode-pill track and the search field go white on
+  top of it so they still read as controls.
+- **The category strip**, where every category wears its **own** color from
+  `domain/intents.ts` — Food red, Groceries green, Health blue, and so on — as a
+  tinted tile, a ring when active, and a matching underline. This is the most
+  colorful thing on the page, which is right: it's also the most tappable.
+- **The active bottom tab**, whose icon sits in a green pill.
+
+Everything else (cards, body, chrome) stays quiet so those three read clearly.
+
 ## Known gaps
 
 - **Emoji still appear in action labels and section headings** on the deeper

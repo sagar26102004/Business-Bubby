@@ -28,6 +28,7 @@ export const palette = {
   green: '#19975D', // brand: buttons, active states, links
   greenDark: '#0F7245', // pressed / emphasis
   greenSoft: '#E4F2EA', // tinted chips and fills
+  greenWash: '#E7F3EC', // the header sheet — colored, but quiet enough to read on
   paper: '#F4F3EF', // app background (warm, not blue-gray)
   line: '#E5E2DA', // hairline borders on paper
   sand: '#EFEDE6', // secondary button / chip fill
@@ -81,6 +82,8 @@ export interface ColorScheme {
   /** Blue accent for links and highlights. */
   accent: string;
   accentSoft: string;
+  /** Background for the home screens' top sheet — colored, not white. */
+  headerTint: string;
   star: string;
   success: string;
   successSoft: string;
@@ -103,6 +106,7 @@ const neighborhood: ColorScheme = {
   // highlights read as the same family rather than a second identity.
   accent: palette.green,
   accentSoft: palette.greenSoft,
+  headerTint: palette.greenWash,
   star: palette.star,
   success: palette.success,
   successSoft: palette.successSoft,
@@ -123,6 +127,7 @@ const classic: ColorScheme = {
   brandText: palette.navy,
   accent: palette.accent,
   accentSoft: palette.accentSoft,
+  headerTint: palette.navySoft,
   star: palette.star,
   success: palette.success,
   successSoft: palette.successSoft,
@@ -144,6 +149,7 @@ const dark: ColorScheme = {
   brandText: '#BFDBFE',
   accent: '#60A5FA',
   accentSoft: '#1E3A8A',
+  headerTint: palette.gray800,
   star: palette.star,
   success: '#4ADE80',
   successSoft: '#14532D',

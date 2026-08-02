@@ -68,7 +68,7 @@ export default function StallsScreen() {
           styles.sheet,
           {
             paddingTop: insets.top + spacing.md,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.headerTint,
             borderBottomColor: colors.border,
           },
         ]}
