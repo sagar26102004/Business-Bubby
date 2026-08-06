@@ -41,6 +41,7 @@ import {
 } from '@/domain/catalog';
 import { COUNTRIES, STATE_NAMES, citiesForState, stateForCity } from '@/domain/geoCatalog';
 import { SUGGESTED_BUSINESS_TAGS, hasTag, isFoodShop } from '@/domain/tags';
+import { RENTAL_SECTIONS, SERVICE_SECTIONS } from '@/domain/offeringSections';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import {
   AVAILABLE_MODULES,
@@ -721,13 +722,13 @@ export default function RegisterScreen() {
         return {
           title: 'Do you offer services?',
           subtitle:
-            'A tyre shop fits tyres; an electronics shop repairs — list each with a price so customers can book and order.',
+            'Pick a ready-made section — Repairs, Cleaning, Classes — and list what you do under it with a price, so customers browse instead of scrolling.',
         };
       case 'rent':
         return {
           title: 'Do you rent anything out?',
           subtitle:
-            'Flats, vehicles, equipment, costumes — list each thing with its price, per day or per month.',
+            'Flats, vehicles, equipment, costumes — file each one under a ready-made section and give it a price, per day or per month.',
         };
       case 'modules':
         return {
@@ -934,6 +935,8 @@ export default function RegisterScreen() {
                 onChange={setServices}
                 namePlaceholder="Service (e.g. Wheel alignment)"
                 addLabel="Add service"
+                sections={SERVICE_SECTIONS}
+                sectionsLabel="What kind of service is it?"
                 withDescription
                 descriptionPlaceholder="What's included (optional)"
               />
@@ -983,8 +986,8 @@ export default function RegisterScreen() {
                   onChange={setRentalItems}
                   namePlaceholder="e.g. 2BHK flat, Activa 6G, DSLR kit"
                   addLabel="Add rental"
-                  categoryOptions={getType('rental')?.subcategories}
-                  categoryOptionsLabel="What kind of thing is it?"
+                  sections={RENTAL_SECTIONS}
+                  sectionsLabel="What kind of thing is it?"
                 />
               </>
             ) : null}

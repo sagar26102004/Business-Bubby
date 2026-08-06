@@ -325,6 +325,15 @@ export interface RentalItem {
   description?: string;
   /** Rental subcategory id from the catalog (flats, cars, bikes, …). */
   subcategoryId?: string;
+  /**
+   * Section it groups under on the business page, e.g. "Cars" — picked from
+   * RENTAL_SECTIONS (domain/offeringSections.ts), which is finer than the
+   * browse catalog above. Items listed before the library only carry
+   * `subcategoryId`; `rentalCategory()` falls back to it.
+   */
+  category?: string;
+  /** Group inside the section, e.g. "SUV". */
+  subcategory?: string;
 }
 
 /** What a line on an order or bill refers to. */

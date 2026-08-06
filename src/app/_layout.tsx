@@ -73,7 +73,14 @@ function AppHeader({ title, headerRight }: { title: string; headerRight?: Header
       <View style={{ height: 56, alignItems: 'center', justifyContent: 'center' }}>
         <RNText
           numberOfLines={1}
-          style={{ color: colors.text, fontSize: 17, fontWeight: '700', maxWidth: '65%' }}
+          // Action buttons on the right eat into the centered title's room —
+          // give it less width there so a long name can't slide under them.
+          style={{
+            color: colors.text,
+            fontSize: 17,
+            fontWeight: '700',
+            maxWidth: headerRight ? '45%' : '65%',
+          }}
         >
           {title}
         </RNText>

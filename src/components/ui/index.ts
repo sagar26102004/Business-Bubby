@@ -8,6 +8,7 @@ export { AutocompleteInput } from './AutocompleteInput';
 export { Tag } from './Tag';
 export { Avatar } from './Avatar';
 export { Stars } from './Stars';
+export { AutoCarousel } from './AutoCarousel';
 export { Icon, type IconName } from './Icon';
 export { SearchIcon } from './SearchIcon';
 export { ScanIcon } from './ScanIcon';

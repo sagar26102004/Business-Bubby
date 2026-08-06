@@ -3,8 +3,9 @@
  * restyle touches one file. Components read colors through `useColors()`.
  *
  * TWO looks live side by side, picked by `DESIGN` below:
- *  - 'neighborhood' (current) — Nextdoor-inspired: warm paper background, one
- *    deep forest-green brand color, near-black text, soft rounded surfaces.
+ *  - 'neighborhood' (current) — Nextdoor structure in a neutral monochrome:
+ *    near-black as the one brand color, a grey ramp between white and black for
+ *    tints/sheets, near-black text, soft rounded surfaces.
  *  - 'classic' — the original deep-navy + blue-accent directory look.
  *
  * To go back to the old colors, change ONE word: DESIGN = 'classic'.
@@ -24,16 +25,19 @@ export const DESIGN = 'neighborhood' as DesignName;
 const FOLLOW_SYSTEM_THEME = false;
 
 export const palette = {
-  // — Neighborhood (current): warm orange on warm paper —
-  orange: '#F2681F', // brand: buttons, active states, links
-  orangeDark: '#C2490F', // text weight on light backgrounds, pressed states
-  orangeSoft: '#FDE7D8', // tinted chips and fills
-  peachWash: '#FFE2CC', // header sheet + tab bar — orange's companion tone
-  paper: '#F7F4F0', // app background (warm, not blue-gray)
-  line: '#E7E2DA', // hairline borders on paper
-  sand: '#F0ECE4', // secondary button / chip fill
-  charcoal: '#1F1B18', // primary text
-  stone: '#6E6862', // secondary text
+  // — Neighborhood (current): black brand on a neutral grey ramp —
+  // Every step below is a pure neutral, so nothing tints warm or cool. The
+  // ramp runs surface(#FFF) → paper → mist → greySoft → greyWash → noir, and
+  // text is only ever placed on the light half (or white on noir).
+  noir: '#141414', // brand: buttons, active states, links
+  noirDeep: '#000000', // text weight on light backgrounds, pressed states
+  greySoft: '#E8E8E8', // tinted chips and fills (the old light-orange slot)
+  greyWash: '#E3E3E3', // header sheet + tab bar — black's companion tone
+  paper: '#F6F6F6', // app background (neutral off-white)
+  line: '#E2E2E2', // hairline borders on paper
+  mist: '#EFEFEF', // secondary button / chip fill
+  charcoal: '#161616', // primary text
+  stone: '#6B6B6B', // secondary text — ≥4:1 on every light step above
 
   // — Classic (previous look) —
   navy: '#1B2A4A',
@@ -91,23 +95,25 @@ export interface ColorScheme {
   danger: string;
 }
 
-/** Nextdoor-inspired structure, warm orange identity, near-black ink. */
+/** Nextdoor-inspired structure, monochrome identity: black on a grey ramp. */
 const neighborhood: ColorScheme = {
   background: palette.paper,
   surface: palette.white,
-  surfaceAlt: palette.sand,
+  surfaceAlt: palette.mist,
   border: palette.line,
   text: palette.charcoal,
   textMuted: palette.stone,
   textInverse: palette.white,
-  brand: palette.orange,
-  brandSoft: palette.orangeSoft,
-  brandText: palette.orangeDark,
+  // Solid-brand surfaces (buttons, the active tab pill, sent chat bubbles)
+  // always pair with `textInverse`, so black filled + white text stays legible.
+  brand: palette.noir,
+  brandSoft: palette.greySoft,
+  brandText: palette.noirDeep,
   // One brand color does the work of the old navy+blue pair, so links and
   // highlights read as the same family rather than a second identity.
-  accent: palette.orange,
-  accentSoft: palette.orangeSoft,
-  headerTint: palette.peachWash,
+  accent: palette.noir,
+  accentSoft: palette.greySoft,
+  headerTint: palette.greyWash,
   star: palette.star,
   success: palette.success,
   successSoft: palette.successSoft,

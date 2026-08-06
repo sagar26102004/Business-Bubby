@@ -81,9 +81,12 @@ export function PhotosField({
 
   return (
     <View style={styles.wrap}>
-      <Text variant="label" weight="medium" style={styles.label}>
-        {label}
-      </Text>
+      {/* An empty label means the caller already wrote its own heading. */}
+      {label ? (
+        <Text variant="label" weight="medium" style={styles.label}>
+          {label}
+        </Text>
+      ) : null}
 
       {value.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.strip}>
