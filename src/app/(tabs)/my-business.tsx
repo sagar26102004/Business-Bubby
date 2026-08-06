@@ -5,13 +5,12 @@
  */
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tabs, useFocusEffect, useRouter } from 'expo-router';
 import type { Business } from '@/domain/types';
 import { getType } from '@/domain/catalog';
 import { useAuth, useRepositories } from '@/data/DataProvider';
-import { Button, Card, LoadingView, Screen, Tag, Text } from '@/components/ui';
+import { Button, Card, Icon, LoadingView, Screen, Tag, Text } from '@/components/ui';
 import { ModePills } from '@/features/shell/ModePills';
 import { radius, spacing, useColors } from '@/theme/theme';
 
@@ -48,29 +47,37 @@ export default function MyBusinessScreen() {
   useFocusEffect(useCallback(() => load(), [load]));
 
   // No navigator header — this is the business side's HOME, so it carries
-  // the same gradient sheet + Flipkart-style product pills as Explore.
+  // the same header sheet + product pills as Explore.
   // The customer tab bar is hidden too: the business side is its own world.
   const headerAction = (
     <Tabs.Screen options={{ headerShown: false, tabBarStyle: { display: 'none' } }} />
   );
 
   const topBar = (
-    <LinearGradient
-      colors={[colors.accent, colors.accentSoft, colors.background]}
-      locations={[0, 0.62, 1]}
-      style={[styles.sheet, { paddingTop: insets.top + spacing.lg }]}
+    <View
+      style={[
+        styles.sheet,
+        {
+          paddingTop: insets.top + spacing.md,
+          backgroundColor: colors.headerTint,
+          borderBottomColor: colors.border,
+        },
+      ]}
     >
       <ModePills active="business" />
 
       {/* No "My Business" heading — the active pill above already says it. */}
       {!isGuest && (businesses?.length ?? 0) > 0 ? (
         <View style={styles.registerRow}>
-          <Text tone="accent" weight="semibold" onPress={() => router.push('/register')}>
-            ＋ Register
-          </Text>
+          <Pressable onPress={() => router.push('/register')} style={styles.registerBtn}>
+            <Icon name="plus" size={15} color={colors.brand} strokeWidth={2.5} />
+            <Text tone="brand" weight="bold" variant="label">
+              Register
+            </Text>
+          </Pressable>
         </View>
       ) : null}
-    </LinearGradient>
+    </View>
   );
 
   /**
@@ -86,7 +93,7 @@ export default function MyBusinessScreen() {
         { backgroundColor: colors.brand, bottom: insets.bottom + spacing.xl },
       ]}
     >
-      <Text style={styles.b2bIcon}>💬</Text>
+      <Icon name="chat" size={24} color={colors.textInverse} />
     </Pressable>
   );
 
@@ -189,14 +196,15 @@ export default function MyBusinessScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  // Bleed the gradient to the screen edges (Screen adds lg padding on all
-  // sides, including top — cancel it so the gradient starts at the very top).
+  // Bleed the header sheet to the screen edges (Screen adds lg padding on all
+  // sides, including top — cancel it so the sheet starts at the very top).
   sheet: {
     marginTop: -spacing.lg,
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
-    marginBottom: spacing.md,
+    marginBottom: spacing.lg,
+    borderBottomWidth: 1,
   },
   // Floats above the scrolling list — always one tap from a supplier chat.
   b2bFab: {
@@ -215,6 +223,7 @@ const styles = StyleSheet.create({
   },
   b2bIcon: { fontSize: 24 },
   registerRow: { alignItems: 'flex-end', marginTop: spacing.md },
+  registerBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   headerAction: { marginRight: spacing.lg },
   card: { marginBottom: spacing.md },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xs },

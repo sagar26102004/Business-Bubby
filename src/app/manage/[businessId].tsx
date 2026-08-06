@@ -13,12 +13,14 @@ import type {
   PartyPackage,
   ProductItem,
   RentalBasis,
+  RentalItem,
   RentalStatus,
   ServiceItem,
 } from '@/domain/types';
 import { RENTAL_BASES, offersDineIn } from '@/domain/catalog';
 import { AVAILABLE_MODULES, COMING_SOON_MODULES, enabledModules } from '@/domain/modules';
 import { isFoodShop, SUGGESTED_BUSINESS_TAGS } from '@/domain/tags';
+import { RENTAL_SECTIONS, SERVICE_SECTIONS } from '@/domain/offeringSections';
 import { summarizeHours, type OpeningHours } from '@/domain/hours';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -26,6 +28,7 @@ import { FoodMenuEditor } from '@/features/businesses/FoodMenuEditor';
 import { OfferingsEditor } from '@/features/businesses/OfferingsEditor';
 import { OpeningHoursField } from '@/features/businesses/OpeningHoursField';
 import { TagPicker } from '@/features/businesses/TagPicker';
+import { PhotosField } from '@/features/media/PhotosField';
 import {
   Button,
   Card,
@@ -64,6 +67,7 @@ export default function ManageScreen() {
   const [products, setProducts] = useState<ProductItem[]>([]);
   const [menu, setMenu] = useState<MenuItem[]>([]);
   const [services, setServices] = useState<ServiceItem[]>([]);
+  const [rentals, setRentals] = useState<RentalItem[]>([]);
   const [partyPackages, setPartyPackages] = useState<PartyPackage[]>([]);
   const [tableCount, setTableCount] = useState('');
   const [stallName, setStallName] = useState('');
@@ -75,6 +79,9 @@ export default function ManageScreen() {
   const [description, setDescription] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [openingHours, setOpeningHours] = useState<OpeningHours | undefined>();
+  // The display picture behind the top of the business page. Kept as a list of
+  // one so it can reuse the same picker sellers use for their items.
+  const [cover, setCover] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -91,6 +98,7 @@ export default function ManageScreen() {
     setProducts(data.business.products ?? []);
     setMenu(data.business.menu ?? []);
     setServices(data.business.services ?? []);
+    setRentals(data.business.rentals ?? []);
     setPartyPackages(data.business.partyPackages ?? []);
     setTableCount(data.business.tableCount != null ? String(data.business.tableCount) : '');
     setStallName(data.business.name);
@@ -101,6 +109,7 @@ export default function ManageScreen() {
     setDescription(data.business.description ?? '');
     setTags(data.business.tags ?? []);
     setOpeningHours(data.business.openingHours);
+    setCover(data.business.coverImageUrl ? [data.business.coverImageUrl] : []);
   }, [data]);
 
   if (loading) return <LoadingView />;
@@ -150,6 +159,7 @@ export default function ManageScreen() {
         products: products.length > 0 ? products : undefined,
         menu: menu.length > 0 ? menu : undefined,
         services: services.length > 0 ? services : undefined,
+        rentals: rentals.length > 0 ? rentals : undefined,
         partyPackages: partyPackages.length > 0 ? partyPackages : undefined,
         // Dine-in seating: how many tables to seat orders at (blank = no tables).
         ...(offersDineIn(data.business) ? { tableCount: parsedTableCount } : {}),
@@ -162,6 +172,7 @@ export default function ManageScreen() {
               ...(name.trim() ? { name: name.trim() } : {}),
               tagline: tagline.trim() || undefined,
               description: description.trim() || undefined,
+              coverImageUrl: cover[0],
               tags: tags.length > 0 ? tags : undefined,
               openingHours,
               hours: summarizeHours(openingHours),
@@ -222,6 +233,22 @@ export default function ManageScreen() {
             onChangeText={setDescription}
             multiline
             style={styles.multiline}
+          />
+
+          {/* Display picture — the photo behind your name at the top of the
+              page. One only: the shopfront, the room, or your logo. */}
+          <Text variant="label" weight="semibold" style={styles.catalogLabel}>
+            Display picture
+          </Text>
+          <Text variant="caption" tone="muted" style={styles.subtitle}>
+            Optional. Shown as the background behind your name — a photo of the
+            place itself works best.
+          </Text>
+          <PhotosField
+            label=""
+            value={cover}
+            onChange={setCover}
+            max={1}
           />
 
           <Text variant="label" weight="semibold" style={styles.catalogLabel}>
@@ -488,11 +515,30 @@ export default function ManageScreen() {
             onChange={setServices}
             namePlaceholder="Service (e.g. Wheel alignment)"
             addLabel="Add service"
-            withGroups
-            categoryPlaceholder="e.g. Repairs, Installation"
-            subcategoryPlaceholder="e.g. AC, Fridge"
+            sections={SERVICE_SECTIONS}
+            sectionsLabel="What kind of service is it?"
             withDescription
             descriptionPlaceholder="What's included (optional)"
+          />
+        </>
+      ) : null}
+
+      {/* Things for rent — a rental listing always, and any other business that
+          already rents something out (a shop renting equipment on the side). */}
+      {isRental || rentals.length > 0 ? (
+        <>
+          <Text variant="label" weight="semibold" style={styles.catalogLabel}>
+            🔑 For rent
+          </Text>
+          <OfferingsEditor
+            value={rentals}
+            onChange={setRentals}
+            namePlaceholder="e.g. 2BHK flat, Activa 6G, DSLR kit"
+            addLabel="Add rental"
+            sections={RENTAL_SECTIONS}
+            sectionsLabel="What kind of thing is it?"
+            withDescription
+            descriptionPlaceholder="Condition, deposit, what's included (optional)"
           />
         </>
       ) : null}

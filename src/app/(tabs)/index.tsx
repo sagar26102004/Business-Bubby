@@ -1,14 +1,18 @@
 /**
- * Home (no app-bar) — Flipkart-style layout:
- *  - The product pills on top: 🛍️ Explore (this side) ⇄ 🏷️ Stalls ⇄ 🏢 My Business.
+ * Home (no app-bar) — a quiet, flat top sheet in the neighborhood style:
+ *  - The product pills on top: Explore (this side) ⇄ Stalls ⇄ My Business.
  *  - Location row (saved-place dropdown + Map), then the search bar.
  *  - A CATEGORY STRIP (For You + every intent from domain/intents.ts) that
  *    filters this same screen inline — no navigation. The active category is
- *    underlined, Flipkart-style.
+ *    underlined.
  *  - Picking a category swaps the "ad" (deals carousel, filtered to that
  *    category), reveals its SUBCATEGORY TILES (the category's tags as emoji
  *    tiles → tap opens /browse/[intent]?sub=Tag), and filters the nearby
  *    business list below.
+ *
+ * The header used to be a blue gradient block. It's now a plain white sheet
+ * closed by a hairline: the content below (photos, deals, cards) supplies the
+ * color, and the chrome stays out of its way.
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -20,7 +24,6 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import type { ListingType, PlaceKind, SavedPlace } from '@/domain/types';
@@ -29,7 +32,7 @@ import { INTENT_CATEGORIES, intentMatches, tagEmoji, type IntentCategory } from 
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { useResponsive } from '@/lib/useResponsive';
-import { Card, EmptyView, ErrorView, LoadingView, Text } from '@/components/ui';
+import { Card, EmptyView, ErrorView, Icon, LoadingView, Text } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { DealsCarousel, type DealCardItem } from '@/features/businesses/DealsCarousel';
@@ -161,31 +164,40 @@ export default function BrowseScreen() {
   const header = useMemo(
     () => (
       <View>
-        <LinearGradient
-          colors={[colors.accent, colors.accentSoft, colors.background]}
-          locations={[0, 0.62, 1]}
-          style={[styles.sheet, { paddingTop: insets.top + spacing.lg }]}
+        <View
+          style={[
+            styles.sheet,
+            {
+              paddingTop: insets.top + spacing.md,
+              backgroundColor: colors.headerTint,
+              borderBottomColor: colors.border,
+            },
+          ]}
         >
-          {/* Three products, one app — Flipkart-style top pills. */}
+          {/* Three products, one app — the top switcher. */}
           <ModePills active="explore" />
 
-          {/* Location row — like the delivery-address bar. */}
+          {/* Location row — the place you're browsing, stated plainly. */}
           <View style={styles.locationRow}>
             <Pressable
               onPress={() => setPlacesOpen((v) => !v)}
-              style={[styles.locationPill, { backgroundColor: colors.surface, borderColor: colors.border }]}
+              style={styles.locationBtn}
+              hitSlop={6}
             >
-              <Text variant="label" weight="medium" numberOfLines={1} style={styles.locationText}>
-                {activePlace ? `${placeIcon(activePlace.kind)}  Near ${activePlace.label}` : '📍  Near you'}
+              <Icon name="pin" size={17} color={colors.brand} filled />
+              <Text variant="subheading" weight="bold" numberOfLines={1} style={styles.locationText}>
+                {activePlace ? activePlace.label : 'Near you'}
               </Text>
-              <Text tone="muted" style={styles.chev}>
-                {placesOpen ? '▲' : '▼'}
-              </Text>
+              <View style={placesOpen ? styles.chevOpen : undefined}>
+                <Icon name="chevronDown" size={17} color={colors.textMuted} />
+              </View>
             </Pressable>
-            <Pressable onPress={() => router.push('/map')} style={[styles.mapBtn, { backgroundColor: colors.brand }]}>
-              <Text variant="label" weight="semibold" tone="inverse">
-                🗺️ Map
-              </Text>
+            <Pressable
+              onPress={() => router.push('/map')}
+              style={[styles.iconBtn, { backgroundColor: colors.surfaceAlt }]}
+              hitSlop={6}
+            >
+              <Icon name="map" size={19} color={colors.text} />
             </Pressable>
           </View>
 
@@ -232,40 +244,47 @@ export default function BrowseScreen() {
             style={styles.stripScroll}
             contentContainerStyle={styles.stripRow}
           >
-            {[{ id: null as string | null, label: 'For You', icon: '✨' }, ...INTENT_CATEGORIES].map(
-              (c) => {
-                const active = selectedId === c.id;
-                return (
-                  <Pressable key={c.id ?? 'foryou'} onPress={() => setSelectedId(c.id)} style={styles.stripItem}>
-                    <View
-                      style={[
-                        styles.stripIconBox,
-                        { backgroundColor: active ? colors.brandSoft : colors.surface + 'B0' },
-                      ]}
-                    >
-                      <Text style={styles.stripEmoji}>{c.icon}</Text>
-                    </View>
-                    <Text
-                      variant="caption"
-                      weight={active ? 'semibold' : 'regular'}
-                      tone={active ? 'brand' : 'default'}
-                      numberOfLines={1}
-                      style={styles.stripLabel}
-                    >
-                      {c.label}
-                    </Text>
-                    <View
-                      style={[
-                        styles.stripUnderline,
-                        { backgroundColor: colors.brand, opacity: active ? 1 : 0 },
-                      ]}
-                    />
-                  </Pressable>
-                );
-              },
-            )}
+            {[
+              { id: null as string | null, label: 'For You', icon: '✨', color: colors.brand },
+              ...INTENT_CATEGORIES,
+            ].map((c) => {
+              const active = selectedId === c.id;
+              return (
+                <Pressable
+                  key={c.id ?? 'foryou'}
+                  onPress={() => setSelectedId(c.id)}
+                  style={styles.stripItem}
+                >
+                  {/* Each category owns a color (domain/intents.ts) — the tile
+                      wears it, so the strip is the colorful part of the page. */}
+                  <View
+                    style={[
+                      styles.stripIconBox,
+                      { backgroundColor: c.color + (active ? '3D' : '1F') },
+                      active && { borderColor: c.color, borderWidth: 2 },
+                    ]}
+                  >
+                    <Text style={styles.stripEmoji}>{c.icon}</Text>
+                  </View>
+                  <Text
+                    variant="caption"
+                    weight={active ? 'bold' : 'medium'}
+                    numberOfLines={1}
+                    style={[styles.stripLabel, active && { color: c.color }]}
+                  >
+                    {c.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.stripUnderline,
+                      { backgroundColor: c.color, opacity: active ? 1 : 0 },
+                    ]}
+                  />
+                </Pressable>
+              );
+            })}
           </ScrollView>
-        </LinearGradient>
+        </View>
 
         {/* Subcategory tiles — one row, right under the strip, above the ad */}
         {selected && subTiles.length > 0 ? (
@@ -374,30 +393,28 @@ const styles = StyleSheet.create({
   // Multi-column nearby grid on wide screens.
   column: { gap: spacing.md },
   gridItem: { flex: 1 },
-  // The gradient sheet bleeds to the screen edges and adds its own padding.
+  // The header sheet bleeds to the screen edges and adds its own padding.
   sheet: {
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-    marginBottom: spacing.md,
+    paddingBottom: spacing.md,
+    marginBottom: spacing.lg,
+    borderBottomWidth: 1,
   },
-  locationRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  locationPill: {
-    flex: 1,
+  locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    height: 40,
+    gap: spacing.sm,
+    marginTop: spacing.lg,
   },
-  locationText: { flex: 1 },
-  chev: { fontSize: 10, marginLeft: spacing.sm },
-  mapBtn: {
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.lg,
+  // Borderless: the location is a heading you can tap, not a form control.
+  locationBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  locationText: { flexShrink: 1 },
+  chevOpen: { transform: [{ rotate: '180deg' }] },
+  iconBtn: {
+    width: 40,
     height: 40,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },

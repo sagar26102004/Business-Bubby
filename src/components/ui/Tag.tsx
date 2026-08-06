@@ -15,15 +15,17 @@ export interface TagProps {
 export function Tag({ label, icon, selected, onPress, tone = 'default', style }: TagProps) {
   const colors = useColors();
 
+  // Selected chips go solid brand rather than tinted — filter state should be
+  // unmistakable at a glance, and it gives the green somewhere to land.
   const active = selected || tone === 'brand';
   const containerStyle: ViewStyle = {
-    backgroundColor: active ? colors.brandSoft : colors.surfaceAlt,
+    backgroundColor: active ? colors.brand : colors.surface,
     borderColor: active ? colors.brand : colors.border,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
   };
 
   const content = (
-    <Text variant="caption" weight="medium" tone={active ? 'brand' : 'default'}>
+    <Text variant="caption" weight={active ? 'bold' : 'medium'} tone={active ? 'inverse' : 'muted'}>
       {icon ? `${icon} ` : ''}
       {label}
     </Text>
@@ -44,8 +46,8 @@ export function Tag({ label, icon, selected, onPress, tone = 'default', style }:
 
 const styles = StyleSheet.create({
   pill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs + 2,
+    paddingHorizontal: spacing.md + 2,
+    paddingVertical: spacing.xs + 3,
     borderRadius: radius.pill,
     alignSelf: 'flex-start',
   },

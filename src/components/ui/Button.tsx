@@ -29,7 +29,6 @@ export function Button({
     ghost: 'transparent',
   }[variant];
 
-  const borderColor = variant === 'secondary' ? colors.border : 'transparent';
   const textTone = variant === 'primary' ? 'inverse' : variant === 'ghost' ? 'brand' : 'default';
 
   return (
@@ -38,7 +37,7 @@ export function Button({
       disabled={isDisabled}
       style={({ pressed }) => [
         styles.base,
-        { backgroundColor: bg, borderColor, borderWidth: variant === 'secondary' ? 1 : 0 },
+        { backgroundColor: bg },
         pressed && !isDisabled && styles.pressed,
         isDisabled && styles.disabled,
         style,
@@ -47,7 +46,7 @@ export function Button({
       {loading ? (
         <ActivityIndicator color={variant === 'primary' ? colors.textInverse : colors.brand} />
       ) : (
-        <Text variant="label" tone={textTone} weight="semibold">
+        <Text variant="label" tone={textTone} weight="bold" style={styles.label}>
           {title}
         </Text>
       )}
@@ -56,14 +55,17 @@ export function Button({
 }
 
 const styles = StyleSheet.create({
+  // Fully rounded, borderless, a touch taller — the neighborhood look leans on
+  // shape and fill rather than outlines to separate primary from secondary.
   base: {
-    minHeight: 48,
-    borderRadius: radius.md,
+    minHeight: 50,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.xl,
     flexDirection: 'row',
   },
-  pressed: { opacity: 0.8 },
-  disabled: { opacity: 0.5 },
+  label: { fontSize: 15 },
+  pressed: { opacity: 0.75 },
+  disabled: { opacity: 0.45 },
 });

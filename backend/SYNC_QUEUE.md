@@ -227,3 +227,25 @@ re-derivation from the Supabase diff is required:
 - **DB/migration:** none.
 - **Verify:** app `npx tsc --noEmit` (green). On a phone build, a failing token request shows the
   real reason instead of the generic non-2xx sentence.
+
+---
+
+## [SYNC-008] Prebuilt category libraries for services & rentals
+
+- **Area:** BusinessRepository / businesses — `Business.services[]` and `Business.rentals[]`
+  now carry section grouping. No repository METHOD changes: both live inside the business
+  document (`data jsonb`), so Supabase needed no code change and Path B needs none either.
+- **Supabase change:** none (nested fields ride along in the existing business document).
+- **Domain/interface:** DONE (shared) — `RentalItem` in `src/domain/types.ts` gained optional
+  `category?` / `subcategory?` (it already had `subcategoryId`). `ServiceItem` already had
+  both fields. New frontend-only module `src/domain/offeringSections.ts` holds
+  `SERVICE_SECTIONS` / `RENTAL_SECTIONS` (prebuilt libraries), `findSection`, `sortBySection`
+  and `rentalCategory` (falls back to the browse `subcategoryId` for pre-library rentals).
+- **Path B — backend/:** mirror the two optional fields on `RentalItem` in
+  `backend/src/domain/types.ts` so the backend's copy of the domain stays type-identical.
+  Nothing else — no service, router, authz or validation change; the fields are stored and
+  returned as part of the business document exactly as before.
+- **Path B — src/data/api/:** none (business objects pass straight through).
+- **DB/migration:** none — document model, no new columns.
+- **Verify:** backend `npm run typecheck` green; a business created through Path B with
+  services/rentals round-trips `category`/`subcategory` unchanged.
