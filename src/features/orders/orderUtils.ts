@@ -64,6 +64,17 @@ export const isOrderOpen = (order: Order): boolean =>
   !order.billId &&
   (order.status === 'requested' || order.status === 'proposed' || order.status === 'accepted');
 
+/** True when an ISO timestamp falls on the viewer's current calendar day. */
+export const isToday = (iso: string): boolean => {
+  const d = new Date(iso);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+};
+
 /** How each fulfillment choice is shown, on both sides of the counter. */
 export const FULFILLMENT_META: Record<OrderFulfillment, { icon: string; label: string }> = {
   dine_in: { icon: '🍽️', label: 'Dine-in' },

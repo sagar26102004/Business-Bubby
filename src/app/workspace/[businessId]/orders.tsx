@@ -16,6 +16,7 @@ import {
   FULFILLMENT_META,
   ORDER_STATUS_META,
   includedLines,
+  isToday,
   totalLabel,
   totalOf,
 } from '@/features/orders/orderUtils';
@@ -76,6 +77,9 @@ export default function WorkspaceOrdersScreen() {
   const pendingOrders = orders.filter((o) => o.status === 'requested');
   const openProposals = orders.filter((o) => o.status === 'proposed');
   const openTabs = orders.filter((o) => o.status === 'accepted' && !o.billId);
+  // The desk cares about the shift it's working, so the history link below is
+  // scoped to today — the full history is one tap further, on that screen.
+  const todaysOrders = orders.filter((o) => isToday(o.createdAt));
 
   return (
     <Screen scroll>
@@ -173,9 +177,9 @@ export default function WorkspaceOrdersScreen() {
         />
       ) : (
         <Button
-          title={`📦 All ${vocab.requestNoun}s · ${orders.length}`}
+          title={`📦 All ${vocab.requestNoun}s today · ${todaysOrders.length}`}
           variant="secondary"
-          onPress={() => router.push(`/orders/${business.id}`)}
+          onPress={() => router.push(`/orders/${business.id}?range=today`)}
           style={styles.allBtn}
         />
       )}

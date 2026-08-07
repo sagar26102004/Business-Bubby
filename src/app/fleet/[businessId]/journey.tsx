@@ -1,8 +1,13 @@
 /**
  * Fleet & tracking › Vehicle journeys (owner only).
  *
- * A vehicle's saved routes: the owner builds a journey by giving a start and an
- * end — typed by name OR pinned on a real map — then adds the stops in between.
+ * A vehicle's saved routes. There are TWO ways to build one, because owners
+ * differ: **mark it on the map** (the easy way — a guided pin drop for the
+ * start, the end and each stop, with the road route drawn in blue) or **type
+ * the coordinates** of every point when they already have them. Both write the
+ * same `JourneyStop`s, so a journey started on the map can be fine-tuned by
+ * hand and vice versa.
+ *
  * A vehicle can hold several journeys (morning run, way back home, evening
  * batch); one is marked active. A return trip is one tap: it clones the journey
  * with start/end swapped and stops reversed.
@@ -18,7 +23,7 @@ import type { GeoPoint, JourneyStop, Vehicle, VehicleJourney } from '@/domain/ty
 import { getVehicleKind } from '@/domain/catalog';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
-import { LocationPicker } from '@/features/businesses/LocationPicker';
+import { RouteBuilder, type BuiltRoute } from '@/features/fleet/RouteBuilder';
 import RouteMap from '@/components/RouteMap';
 import {
   Button,
@@ -38,8 +43,11 @@ const genId = () => `j_${Date.now().toString(36)}_${Math.random().toString(36).s
 /** A blank stop draft (used for start, end and each in-between stop). */
 const blankStop = (): JourneyStop => ({ id: genId(), label: '' });
 
-/** Which field's map picker is open. */
-type PickerTarget = 'start' | 'end' | string | null;
+/** How the owner is entering this journey's points. */
+type BuildMode = 'map' | 'coords';
+
+/** Typed lat/lng text, kept raw so half-typed numbers don't wipe the field. */
+type CoordText = { lat: string; lng: string };
 
 export default function VehicleJourneyScreen() {
   const { businessId, vehicle: vehicleId } = useLocalSearchParams<{
@@ -64,7 +72,9 @@ export default function VehicleJourneyScreen() {
   const [start, setStart] = useState<JourneyStop>(blankStop());
   const [end, setEnd] = useState<JourneyStop>(blankStop());
   const [stops, setStops] = useState<JourneyStop[]>([]);
-  const [pickerFor, setPickerFor] = useState<PickerTarget>(null);
+  const [mode, setMode] = useState<BuildMode>('map');
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [coordText, setCoordText] = useState<Record<string, CoordText>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -77,7 +87,9 @@ export default function VehicleJourneyScreen() {
     setStart(blankStop());
     setEnd(blankStop());
     setStops([]);
-    setPickerFor(null);
+    setMode('map');
+    setBuilderOpen(false);
+    setCoordText({});
     setFormError(null);
     setShowForm(false);
   };
@@ -119,7 +131,10 @@ export default function VehicleJourneyScreen() {
     setStart({ ...j.start });
     setEnd({ ...j.end });
     setStops(j.stops.map((s) => ({ ...s })));
-    setPickerFor(null);
+    // A journey that was pinned reopens on the map; a typed one reopens typed.
+    setMode(j.start.point && j.end.point ? 'map' : 'coords');
+    setBuilderOpen(false);
+    setCoordText({});
     setFormError(null);
     setShowForm(true);
   };
@@ -129,23 +144,23 @@ export default function VehicleJourneyScreen() {
       setFormError('Give the journey a name, e.g. “Morning route”.');
       return;
     }
-    if (!start.label.trim()) {
-      setFormError('Set the starting point (type it or pin it on the map).');
+    if (!start.label.trim() && !start.point) {
+      setFormError('Set the starting point — mark it on the map or type its coordinates.');
       return;
     }
-    if (!end.label.trim()) {
-      setFormError('Set the ending point (type it or pin it on the map).');
+    if (!end.label.trim() && !end.point) {
+      setFormError('Set the ending point — mark it on the map or type its coordinates.');
       return;
     }
     // Drop empty in-between stops.
     const cleanStops = stops
       .filter((s) => s.label.trim() || s.point)
-      .map((s) => ({ ...s, label: s.label.trim() || 'Stop' }));
+      .map((s, i) => ({ ...s, label: s.label.trim() || `Stop ${i + 1}` }));
     const journey: VehicleJourney = {
       id: editingId ?? genId(),
       name: name.trim(),
-      start: { ...start, label: start.label.trim() },
-      end: { ...end, label: end.label.trim() },
+      start: { ...start, label: start.label.trim() || 'Start' },
+      end: { ...end, label: end.label.trim() || 'End' },
       stops: cleanStops,
       createdAt:
         (editingId && journeys.find((j) => j.id === editingId)?.createdAt) || new Date().toISOString(),
@@ -191,16 +206,52 @@ export default function VehicleJourneyScreen() {
 
   const addStop = () => setStops((s) => [...s, blankStop()]);
   const removeStop = (id: string) => setStops((s) => s.filter((x) => x.id !== id));
-  const setStopLabel = (id: string, label: string) =>
-    setStops((s) => s.map((x) => (x.id === id ? { ...x, label } : x)));
 
-  // Route a pin pick to whichever field opened the picker.
-  const applyPick = (point: GeoPoint) => {
-    if (pickerFor === 'start') setStart((s) => ({ ...s, point }));
-    else if (pickerFor === 'end') setEnd((e) => ({ ...e, point }));
-    else if (typeof pickerFor === 'string')
-      setStops((s) => s.map((x) => (x.id === pickerFor ? { ...x, point } : x)));
+  /** Apply a patch to whichever of start / end / a stop owns this id. */
+  const patchStop = (id: string, patch: Partial<JourneyStop>) => {
+    if (id === start.id) setStart((s) => ({ ...s, ...patch }));
+    else if (id === end.id) setEnd((e) => ({ ...e, ...patch }));
+    else setStops((list) => list.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   };
+
+  /** Raw text for a point's lat/lng boxes — typed text wins over the pin. */
+  const textFor = (s: JourneyStop): CoordText =>
+    coordText[s.id] ?? {
+      lat: s.point ? String(s.point.latitude) : '',
+      lng: s.point ? String(s.point.longitude) : '',
+    };
+
+  /** Typing coordinates sets the point only once BOTH boxes hold a valid number. */
+  const updateCoord = (s: JourneyStop, field: keyof CoordText, value: string) => {
+    const next = { ...textFor(s), [field]: value };
+    setCoordText((t) => ({ ...t, [s.id]: next }));
+    const lat = Number(next.lat.trim());
+    const lng = Number(next.lng.trim());
+    const ok =
+      next.lat.trim() !== '' &&
+      next.lng.trim() !== '' &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lng) &&
+      Math.abs(lat) <= 90 &&
+      Math.abs(lng) <= 180;
+    patchStop(s.id, { point: ok ? { latitude: lat, longitude: lng } : undefined });
+  };
+
+  /** Pins marked on the map replace the whole route in one go. */
+  const applyBuiltRoute = (r: BuiltRoute) => {
+    const s = r.start ? { id: genId(), label: r.start.label, point: r.start.point } : start;
+    const e = r.end ? { id: genId(), label: r.end.label, point: r.end.point } : end;
+    setStart(s);
+    setEnd(e);
+    setStops(r.stops.map((x) => ({ id: genId(), label: x.label, point: x.point })));
+    setCoordText({});
+    setBuilderOpen(false);
+    setFormError(null);
+    // Name it after the route if the owner hasn't named it yet.
+    if (!name.trim() && r.start && r.end) setName(`${r.start.label} → ${r.end.label}`);
+  };
+
+  const markedCount = (start.point ? 1 : 0) + (end.point ? 1 : 0) + stops.filter((s) => s.point).length;
 
   return (
     <Screen scroll>
@@ -299,49 +350,95 @@ export default function VehicleJourneyScreen() {
             onChangeText={setName}
           />
 
-          <LocationField
-            label="Starting point"
-            emoji="🟢"
-            stop={start}
-            open={pickerFor === 'start'}
-            onLabel={(t) => setStart((s) => ({ ...s, label: t }))}
-            onTogglePin={() => setPickerFor(pickerFor === 'start' ? null : 'start')}
-            onPick={applyPick}
-          />
-
-          {/* Stops between start and end */}
+          {/* How do you want to set the route? */}
           <Text variant="label" weight="medium" style={styles.fieldLabel}>
-            Stops in between
+            How do you want to set the route?
           </Text>
-          {stops.length === 0 ? (
-            <Text variant="caption" tone="muted" style={styles.pinHint}>
-              Add each stop the vehicle makes along the way (optional).
-            </Text>
-          ) : null}
-          {stops.map((s, i) => (
-            <LocationField
-              key={s.id}
-              label={`Stop ${i + 1}`}
-              emoji={String(i + 1)}
-              stop={s}
-              open={pickerFor === s.id}
-              onLabel={(t) => setStopLabel(s.id, t)}
-              onTogglePin={() => setPickerFor(pickerFor === s.id ? null : s.id)}
-              onPick={applyPick}
-              onRemove={() => removeStop(s.id)}
+          <View style={styles.modeRow}>
+            <Tag
+              label="🗺️ Mark on the map"
+              selected={mode === 'map'}
+              onPress={() => setMode('map')}
             />
-          ))}
-          <Button title="＋ Add a stop" variant="secondary" onPress={addStop} style={styles.addStop} />
+            <Tag
+              label="⌨️ Type coordinates"
+              selected={mode === 'coords'}
+              onPress={() => setMode('coords')}
+            />
+          </View>
 
-          <LocationField
-            label="Ending point"
-            emoji="🔴"
-            stop={end}
-            open={pickerFor === 'end'}
-            onLabel={(t) => setEnd((e) => ({ ...e, label: t }))}
-            onTogglePin={() => setPickerFor(pickerFor === 'end' ? null : 'end')}
-            onPick={applyPick}
-          />
+          {mode === 'map' ? (
+            <View style={styles.mapMode}>
+              <Text variant="caption" tone="muted">
+                The map asks you for the starting point first, then the ending point, then stop 1,
+                2, 3… — drop a pin, move it if it's off, and confirm. The blue road route is drawn
+                through every stop.
+              </Text>
+              {markedCount > 0 ? (
+                <View style={styles.pinList}>
+                  <RouteLine badge="S" color="#16a34a" stop={start} />
+                  {stops.map((s, i) => (
+                    <RouteLine key={s.id} badge={String(i + 1)} color="#f59e0b" stop={s} />
+                  ))}
+                  <RouteLine badge="E" color="#dc2626" stop={end} />
+                </View>
+              ) : null}
+              <Button
+                title={markedCount > 0 ? '🗺️ Edit the pins on the map' : '🗺️ Open the map & mark pins'}
+                onPress={() => setBuilderOpen(true)}
+              />
+            </View>
+          ) : (
+            <View>
+              <CoordField
+                label="Starting point"
+                badge="S"
+                color="#16a34a"
+                stop={start}
+                text={textFor(start)}
+                onLabel={(t) => setStart((s) => ({ ...s, label: t }))}
+                onCoord={(f, v) => updateCoord(start, f, v)}
+              />
+
+              <Text variant="label" weight="medium" style={styles.fieldLabel}>
+                Stops in between
+              </Text>
+              {stops.length === 0 ? (
+                <Text variant="caption" tone="muted" style={styles.pinHint}>
+                  Add each stop the vehicle makes along the way (optional).
+                </Text>
+              ) : null}
+              {stops.map((s, i) => (
+                <CoordField
+                  key={s.id}
+                  label={`Stop ${i + 1}`}
+                  badge={String(i + 1)}
+                  color="#f59e0b"
+                  stop={s}
+                  text={textFor(s)}
+                  onLabel={(t) => patchStop(s.id, { label: t })}
+                  onCoord={(f, v) => updateCoord(s, f, v)}
+                  onRemove={() => removeStop(s.id)}
+                />
+              ))}
+              <Button
+                title="＋ Add a stop"
+                variant="secondary"
+                onPress={addStop}
+                style={styles.addStop}
+              />
+
+              <CoordField
+                label="Ending point"
+                badge="E"
+                color="#dc2626"
+                stop={end}
+                text={textFor(end)}
+                onLabel={(t) => setEnd((e) => ({ ...e, label: t }))}
+                onCoord={(f, v) => updateCoord(end, f, v)}
+              />
+            </View>
+          )}
 
           {formError ? (
             <Text variant="caption" tone="danger" style={styles.fieldLabel}>
@@ -363,6 +460,21 @@ export default function VehicleJourneyScreen() {
           style={styles.newBtn}
         />
       )}
+
+      {builderOpen ? (
+        <RouteBuilder
+          center={business.location.point}
+          initial={{
+            start: start.point ? { label: start.label, point: start.point } : undefined,
+            end: end.point ? { label: end.label, point: end.point } : undefined,
+            stops: stops
+              .filter((s) => s.point)
+              .map((s) => ({ label: s.label, point: s.point! })),
+          }}
+          onCancel={() => setBuilderOpen(false)}
+          onDone={applyBuiltRoute}
+        />
+      ) : null}
     </Screen>
   );
 }
@@ -372,57 +484,98 @@ function journeyPoints(j: VehicleJourney): { mid: GeoPoint[] } {
   return { mid: j.stops.map((s) => s.point).filter((p): p is GeoPoint => !!p) };
 }
 
-/** A single place field: a text input, a "pin on map" toggle, and (when open)
- *  an inline map picker. Text OR pin — either is enough. */
-function LocationField({
+/** One line of the marked-route summary shown under the map option. */
+function RouteLine({ badge, color, stop }: { badge: string; color: string; stop: JourneyStop }) {
+  return (
+    <View style={styles.pinRow}>
+      <View style={[styles.badge, { backgroundColor: color }]}>
+        <Text variant="caption" weight="bold" tone="inverse">
+          {badge}
+        </Text>
+      </View>
+      <View style={styles.flex}>
+        <Text variant="caption" numberOfLines={1}>
+          {stop.label || (stop.point ? 'Pinned location' : 'Not marked yet')}
+        </Text>
+        {stop.point ? (
+          <Text variant="caption" tone="muted">
+            {stop.point.latitude.toFixed(5)}, {stop.point.longitude.toFixed(5)}
+          </Text>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/** A place typed by hand: its name plus the exact latitude and longitude. */
+function CoordField({
   label,
-  emoji,
+  badge,
+  color,
   stop,
-  open,
+  text,
   onLabel,
-  onTogglePin,
-  onPick,
+  onCoord,
   onRemove,
 }: {
   label: string;
-  emoji: string;
+  badge: string;
+  color: string;
   stop: JourneyStop;
-  open: boolean;
+  text: CoordText;
   onLabel: (t: string) => void;
-  onTogglePin: () => void;
-  onPick: (p: GeoPoint) => void;
+  onCoord: (field: keyof CoordText, value: string) => void;
   onRemove?: () => void;
 }) {
-  const colors = useColors();
+  const half = (text.lat.trim() === '') !== (text.lng.trim() === '');
   return (
     <View style={styles.field}>
       <View style={styles.fieldHead}>
-        <Text variant="label" weight="medium">
-          {emoji} {label}
-        </Text>
+        <View style={styles.pinRow}>
+          <View style={[styles.badge, { backgroundColor: color }]}>
+            <Text variant="caption" weight="bold" tone="inverse">
+              {badge}
+            </Text>
+          </View>
+          <Text variant="label" weight="medium">
+            {label}
+          </Text>
+        </View>
         {onRemove ? (
           <Text variant="caption" tone="danger" weight="semibold" onPress={onRemove}>
             Remove
           </Text>
         ) : null}
       </View>
-      <Input placeholder="Type a place name" value={stop.label} onChangeText={onLabel} />
-      <View style={styles.fieldRow}>
-        <Tag
-          label={stop.point ? '📍 Pinned · edit' : '📍 Pin on map'}
-          selected={!!stop.point}
-          onPress={onTogglePin}
-        />
-        {stop.point ? (
-          <Text variant="caption" tone="success">
-            ✓ Location set
-          </Text>
-        ) : null}
-      </View>
-      {open ? (
-        <View style={[styles.picker, { borderColor: colors.border }]}>
-          <LocationPicker value={stop.point} onChange={onPick} />
+      <Input placeholder="Place name, e.g. Vijay Nagar Square" value={stop.label} onChangeText={onLabel} />
+      <View style={styles.coordRow}>
+        <View style={styles.flex}>
+          <Input
+            label="Latitude"
+            placeholder="22.75213"
+            keyboardType="numbers-and-punctuation"
+            value={text.lat}
+            onChangeText={(v) => onCoord('lat', v)}
+          />
         </View>
+        <View style={styles.flex}>
+          <Input
+            label="Longitude"
+            placeholder="75.89321"
+            keyboardType="numbers-and-punctuation"
+            value={text.lng}
+            onChangeText={(v) => onCoord('lng', v)}
+          />
+        </View>
+      </View>
+      {half ? (
+        <Text variant="caption" tone="danger">
+          Enter both latitude and longitude to place this point on the map.
+        </Text>
+      ) : stop.point ? (
+        <Text variant="caption" tone="success">
+          ✓ Coordinates set
+        </Text>
       ) : null}
     </View>
   );
@@ -446,9 +599,13 @@ const styles = StyleSheet.create({
   formTitle: { marginBottom: spacing.md },
   field: { marginTop: spacing.md },
   fieldHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.xs },
-  fieldRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
   fieldLabel: { marginTop: spacing.lg, marginBottom: spacing.xs },
-  picker: { marginTop: spacing.md, borderRadius: radius.lg, borderWidth: 1, padding: spacing.sm },
+  modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  mapMode: { gap: spacing.md },
+  pinList: { gap: spacing.sm },
+  pinRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  badge: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  coordRow: { flexDirection: 'row', gap: spacing.sm },
   addStop: { marginTop: spacing.md },
   formBtns: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   newBtn: { marginTop: spacing.sm },

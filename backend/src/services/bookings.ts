@@ -3,7 +3,7 @@ import type { Booking, BookingStatus, Business } from '@/domain/types';
 import type { NewBookingInput } from '@/domain/contracts';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
-import { asData, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
+import { asData, isUuid, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
 import { notFound } from '@/http/errors';
 import { notify } from './notify';
 
@@ -57,6 +57,8 @@ export const bookingService = {
   },
 
   async listForCustomer(customerId: string): Promise<Booking[]> {
+    // A logged-out viewer arrives as the literal 'guest' — never a real account.
+    if (!isUuid(customerId)) return [];
     const rows = await prisma.booking.findMany({
       where: { data: jsonEquals('customerId', customerId) },
       orderBy: { createdAt: 'desc' },

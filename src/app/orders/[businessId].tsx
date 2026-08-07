@@ -11,11 +11,13 @@ import type { Order, PaymentStatus } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Button, Card, EmptyView, ErrorView, LoadingView, Screen, Tag, Text } from '@/components/ui';
-import { FULFILLMENT_META, ORDER_STATUS_META, includedLines, totalLabel, totalOf } from '@/features/orders/orderUtils';
+import { FULFILLMENT_META, ORDER_STATUS_META, includedLines, isToday, totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { spacing } from '@/theme/theme';
 
 export default function OrdersScreen() {
-  const { businessId } = useLocalSearchParams<{ businessId: string }>();
+  // `range=today` (how the workspace orders desk links here) narrows the list
+  // to the current day; anything else is the full history.
+  const { businessId, range } = useLocalSearchParams<{ businessId: string; range?: string }>();
   const repos = useRepositories();
   const router = useRouter();
   const { currentUser } = useAuth();
@@ -44,31 +46,41 @@ export default function OrdersScreen() {
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" />;
 
-  const { business, isMember, orders, paidByBillId } = data;
+  const { business, isMember, orders: allOrders, paidByBillId } = data;
+  const todayOnly = range === 'today';
+  const orders = todayOnly ? allOrders.filter((o) => isToday(o.createdAt)) : allOrders;
   const pending = orders.filter((o) => o.status === 'requested').length;
   const hasMenu = (business.menu?.length ?? 0) > 0;
 
   return (
     <Screen scroll>
-      <Stack.Screen options={{ title: 'Orders' }} />
+      <Stack.Screen options={{ title: todayOnly ? 'Orders today' : 'Orders' }} />
 
       <Text variant="title" weight="bold">
-        {isMember ? `Orders · ${business.name}` : `My orders with ${business.name}`}
+        {isMember
+          ? todayOnly
+            ? `Today · ${business.name}`
+            : `Orders · ${business.name}`
+          : `My orders with ${business.name}`}
       </Text>
       <Text tone="muted" style={styles.subtitle}>
         {isMember
           ? pending > 0
             ? `${pending} order${pending === 1 ? '' : 's'} waiting for a response.`
-            : 'Every order this business received, newest first.'
+            : todayOnly
+              ? 'Every order this business received today, newest first.'
+              : 'Every order this business received, newest first.'
           : 'Everything you ever ordered here and how it went.'}
       </Text>
 
       {orders.length === 0 ? (
         <EmptyView
-          title="No orders yet"
+          title={todayOnly ? 'No orders today' : 'No orders yet'}
           subtitle={
             isMember
-              ? 'Orders customers place from your page show up here.'
+              ? todayOnly
+                ? 'Orders placed today show up here.'
+                : 'Orders customers place from your page show up here.'
               : 'Order products or services from the business page.'
           }
         />
@@ -117,6 +129,15 @@ export default function OrdersScreen() {
           );
         })
       )}
+
+      {todayOnly ? (
+        <Button
+          title={`🗂️ Show all orders · ${allOrders.length}`}
+          variant="secondary"
+          onPress={() => router.setParams({ range: 'all' })}
+          style={styles.newBtn}
+        />
+      ) : null}
 
       {!isMember ? (
         <Button

@@ -43,3 +43,8 @@ callsRouter.post('/:id/leave', requireAuth, route(async (req) => {
   requireSelf(userId(req), req.body.participantId);
   return callService.leave(req.params.id, req.body.participantId);
 }));
+
+// Live audio: the service checks the caller is a participant before minting.
+callsRouter.post('/:id/token', requireAuth, route(async (req) =>
+  callService.getAudioToken(req.params.id, userId(req)),
+));

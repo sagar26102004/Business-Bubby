@@ -1,9 +1,11 @@
 /** Voice calls — ports MockCallRepository (ring state machine + missed sweep). */
-import type { Business, Call, CallParticipant, Employee, User } from '@/domain/types';
+import { AccessToken } from 'livekit-server-sdk';
+import type { Business, Call, CallAudioToken, CallParticipant, Employee, User } from '@/domain/types';
 import { prisma } from '@/db';
+import { config, isLivekitConfigured } from '@/config';
 import { newUuid } from '@/lib/ids';
 import { asData, rowsData, toJson, uuidOrNull } from '@/lib/data';
-import { notFound } from '@/http/errors';
+import { forbidden, HttpError, notFound } from '@/http/errors';
 import { notify } from './notify';
 
 const RING_TIMEOUT_MS = 30_000;
@@ -88,8 +90,17 @@ export const callService = {
           state: 'ringing',
         }),
       );
-    if (targets.length === 0) {
-      throw new Error('No one at this business can take voice calls right now.');
+    // Never ring the caller themselves (they may be this business's owner or a
+    // call-handler), and dedupe so one person can't appear twice — a duplicate
+    // participant id crashes the session's participant list (React keys).
+    const seen = new Set<string>([customer.id]);
+    const ringTargets = targets.filter((t) => !seen.has(t.id) && seen.add(t.id));
+    if (ringTargets.length === 0) {
+      throw new Error(
+        targets.some((t) => t.id === customer.id)
+          ? "You're set to answer this business's calls yourself — there's no one else to ring."
+          : 'No one at this business can take voice calls right now.',
+      );
     }
 
     const now = new Date().toISOString();
@@ -102,7 +113,7 @@ export const callService = {
       status: 'ringing',
       participants: [
         { id: customer.id, name: customer.name, side: 'customer', state: 'joined', joinedAt: now },
-        ...targets,
+        ...ringTargets,
       ],
       startedAt: now,
     };
@@ -182,6 +193,34 @@ export const callService = {
     }
     await saveCall(call);
     return call;
+  },
+
+  /**
+   * Mint a LiveKit access token so this participant can join the call's audio
+   * room. Mirrors the Supabase edge function (`dynamic-responder`): the caller
+   * must already be a participant on the call, the room is `call_<callId>` and
+   * the LiveKit identity is the user id.
+   */
+  async getAudioToken(callId: string, userId: string): Promise<CallAudioToken> {
+    if (!isLivekitConfigured()) {
+      throw new HttpError(501, 'Live audio is not configured.');
+    }
+    const call = await mustFind(callId);
+    const me = call.participants.find((p) => p.id === userId);
+    if (!me) throw forbidden('You are not part of this call.');
+
+    const at = new AccessToken(config.livekitApiKey, config.livekitApiSecret, {
+      identity: userId,
+      name: me.name,
+      ttl: '2h',
+    });
+    at.addGrant({
+      room: `call_${callId}`,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+    });
+    return { token: await at.toJwt(), url: config.livekitUrl };
   },
 
   async getIncomingForUser(userId: string): Promise<Call | null> {

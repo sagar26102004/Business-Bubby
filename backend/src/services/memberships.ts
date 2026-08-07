@@ -8,7 +8,7 @@ import type {
 } from '@/domain/contracts';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
-import { asData, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
+import { asData, isUuid, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
 import { formatMoney } from '@/lib/money';
 import { notFound } from '@/http/errors';
 import { notify } from './notify';
@@ -94,6 +94,8 @@ async function saveMembership(m: Membership): Promise<Membership> {
 
 export const membershipService = {
   async listForCustomer(customerId: string): Promise<Membership[]> {
+    // A logged-out viewer arrives as the literal 'guest' — never a real account.
+    if (!isUuid(customerId)) return [];
     const rows = await prisma.membership.findMany({
       where: { data: jsonEquals('customerId', customerId) },
     });
@@ -103,6 +105,8 @@ export const membershipService = {
   },
 
   async monthlySpend(customerId: string): Promise<MonthlySpend[]> {
+    // A logged-out viewer arrives as the literal 'guest' — never a real account.
+    if (!isUuid(customerId)) return [];
     const rows = await prisma.membership.findMany({
       where: { data: jsonEquals('customerId', customerId) },
     });

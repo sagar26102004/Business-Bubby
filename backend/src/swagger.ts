@@ -99,6 +99,7 @@ const ROUTES: Record<string, RouteDef[]> = {
     ['post', '/calls/{id}/join', 'Join/answer'],
     ['post', '/calls/{id}/decline', 'Decline'],
     ['post', '/calls/{id}/leave', 'Hang up'],
+    ['post', '/calls/{id}/token', 'Mint a LiveKit token for the call audio room'],
   ],
   Tracking: [
     ['get', '/tracking/business/{businessId}/vehicles', 'Fleet (member)'],

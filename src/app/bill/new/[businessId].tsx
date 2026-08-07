@@ -1,27 +1,45 @@
 /**
- * Create a bill (business members only). The member picks the customer — a
- * known one from past chats/orders, or a walk-in typed by name — then builds
- * the lines: quick-add from the business's own catalog, or custom lines with
- * a price. The bill can then be shared in chat or through any other app.
+ * Create a bill (business members only) — the counter-side twin of placing an
+ * order. The member picks WHO the bill is for (anyone with an app account, not
+ * just people who've dealt with this business before, or a plain name with no
+ * account at all), then builds it from the same catalog picker a customer uses
+ * to order: collapsible category groups with quantity steppers, plus custom
+ * off-catalog lines. The bill can then be shared in chat or through any app.
  */
 import { useMemo, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import type { User } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
-import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Tag, Text } from '@/components/ui';
+import {
+  Avatar,
+  Button,
+  Card,
+  EmptyView,
+  ErrorView,
+  Input,
+  LoadingView,
+  Screen,
+  Tag,
+  Text,
+} from '@/components/ui';
 import { formatMoney, parsePrice } from '@/lib/money';
 import { totalLabel, totalOf } from '@/features/orders/orderUtils';
+import { OfferingGroup, StepBtn, keyOf, type Offering } from '@/features/orders/OfferingPicker';
 import { spacing, useColors } from '@/theme/theme';
 
-interface DraftLine {
+/** A line the member typed by hand (not on the catalog). */
+interface CustomLine {
   name: string;
   price?: string;
   quantity: number;
 }
 
-interface KnownCustomer {
-  id: string;
+/** Who the bill is for: an app account, or a name with no account behind it. */
+interface BillCustomer {
+  /** Set only when the customer has an app account. */
+  id?: string;
   name: string;
 }
 
@@ -32,9 +50,12 @@ export default function NewBillScreen() {
   const colors = useColors();
   const { currentUser } = useAuth();
 
-  const [customer, setCustomer] = useState<KnownCustomer | null>(null);
-  const [walkInName, setWalkInName] = useState('');
-  const [lines, setLines] = useState<DraftLine[]>([]);
+  const [customer, setCustomer] = useState<BillCustomer | null>(null);
+  const [term, setTerm] = useState('');
+  const [results, setResults] = useState<User[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [customLines, setCustomLines] = useState<CustomLine[]>([]);
   const [customName, setCustomName] = useState('');
   const [customPrice, setCustomPrice] = useState('');
   const [note, setNote] = useState('');
@@ -48,17 +69,23 @@ export default function NewBillScreen() {
       repos.chat.listBusinessThreads(business.id),
       repos.orders.listForBusiness(business.id),
     ]);
-    // Customers this business already knows — from chats and past orders.
-    const known = new Map<string, KnownCustomer>();
+    // Customers this business already knows — from chats and past orders. These
+    // are a shortcut only; the search below reaches every account.
+    const known = new Map<string, BillCustomer>();
     threads.forEach((t) => known.set(t.participantId, { id: t.participantId, name: t.participantName }));
     orders.forEach((o) => known.set(o.customerId, { id: o.customerId, name: o.customerName }));
     return { business, employees, knownCustomers: Array.from(known.values()) };
   }, [businessId]);
 
-  const catalog = useMemo(() => {
+  // The billable catalog, shaped exactly like the order screen's.
+  const offerings = useMemo((): Offering[] => {
     const b = data?.business;
     if (!b) return [];
-    return [...(b.products ?? []), ...(b.menu ?? []), ...(b.services ?? [])];
+    return [
+      ...(b.products ?? []).map((p): Offering => ({ ...p, kind: 'product' })),
+      ...(b.menu ?? []).map((m): Offering => ({ ...m, kind: 'product' })),
+      ...(b.services ?? []).map((s): Offering => ({ ...s, kind: 'service' })),
+    ];
   }, [data?.business]);
 
   if (loading) return <LoadingView />;
@@ -79,38 +106,76 @@ export default function NewBillScreen() {
     );
   }
 
-  const addLine = (name: string, price?: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    setLines((prev) => {
-      const existing = prev.findIndex((l) => l.name === trimmed && l.price === price);
-      if (existing >= 0) {
-        return prev.map((l, i) => (i === existing ? { ...l, quantity: l.quantity + 1 } : l));
-      }
-      return [...prev, { name: trimmed, price, quantity: 1 }];
+  const products = offerings.filter((o) => o.kind === 'product');
+  const services = offerings.filter((o) => o.kind === 'service');
+
+  const bump = (o: Offering, delta: number) =>
+    setQuantities((prev) => {
+      const next = Math.max(0, (prev[keyOf(o)] ?? 0) + delta);
+      return { ...prev, [keyOf(o)]: next };
     });
+
+  const runSearch = async (next: string) => {
+    setTerm(next);
+    if (next.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    setSearching(true);
+    try {
+      setResults(await repos.users.search(next));
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const pick = (c: BillCustomer | null) => {
+    setCustomer(c);
+    setTerm('');
+    setResults([]);
   };
 
   const addCustom = () => {
-    addLine(customName, customPrice.trim() || undefined);
+    const name = customName.trim();
+    if (!name) return;
+    const price = customPrice.trim() || undefined;
+    setCustomLines((prev) => {
+      const existing = prev.findIndex((l) => l.name === name && l.price === price);
+      if (existing >= 0) {
+        return prev.map((l, i) => (i === existing ? { ...l, quantity: l.quantity + 1 } : l));
+      }
+      return [...prev, { name, price, quantity: 1 }];
+    });
     setCustomName('');
     setCustomPrice('');
   };
 
-  const removeLine = (index: number) => setLines((prev) => prev.filter((_, i) => i !== index));
+  const bumpCustom = (index: number, delta: number) =>
+    setCustomLines((prev) =>
+      prev
+        .map((l, i) => (i === index ? { ...l, quantity: l.quantity + delta } : l))
+        .filter((l) => l.quantity > 0),
+    );
 
-  const customerName = customer?.name ?? walkInName.trim();
+  // Everything on the bill: catalog picks first, then the typed-in lines.
+  const lines = [
+    ...offerings
+      .map((o) => ({ name: o.name, price: o.price, quantity: quantities[keyOf(o)] ?? 0 }))
+      .filter((l) => l.quantity > 0),
+    ...customLines,
+  ];
+  const itemCount = lines.reduce((n, l) => n + l.quantity, 0);
   const total = totalOf(lines);
-  const canSubmit = !!customerName && lines.length > 0 && !submitting;
+  const canSubmit = !!customer && lines.length > 0 && !submitting;
 
   const submit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || !customer) return;
     setSubmitting(true);
     try {
       const bill = await repos.bills.create({
         businessId: business.id,
-        customerId: customer?.id,
-        customerName,
+        customerId: customer.id,
+        customerName: customer.name,
         lines,
         note: note.trim() || undefined,
         issuedByName: currentUser?.name ?? 'Owner',
@@ -123,85 +188,128 @@ export default function NewBillScreen() {
     }
   };
 
+  const typed = term.trim();
+  const alreadyListed = (id: string) => knownCustomers.some((c) => c.id === id);
+
   return (
     <Screen scroll>
       <Stack.Screen options={{ title: 'New bill' }} />
 
-      <Text variant="title" weight="bold">
-        Bill a customer
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        Build the bill, then share it in their chat or through any app.
-      </Text>
-
-      {/* Who is being billed */}
+      {/* Who is being billed — any account, or a name with no account. */}
       <Label>Customer</Label>
-      {knownCustomers.length > 0 ? (
-        <View style={styles.pillRow}>
-          {knownCustomers.map((c) => (
-            <Tag
-              key={c.id}
-              label={c.name}
-              selected={customer?.id === c.id}
-              onPress={() => {
-                setCustomer((prev) => (prev?.id === c.id ? null : c));
-                setWalkInName('');
-              }}
-            />
-          ))}
-        </View>
-      ) : null}
-      {!customer ? (
-        <Input
-          placeholder="Or type a walk-in customer's name"
-          value={walkInName}
-          onChangeText={setWalkInName}
-        />
+      {customer ? (
+        <Card style={[styles.selected, { borderColor: colors.brand }]}>
+          <View style={styles.selectedRow}>
+            <Avatar name={customer.name} size={36} />
+            <View style={styles.flex}>
+              <Text weight="semibold">{customer.name}</Text>
+              <Text variant="caption" tone="muted">
+                {customer.id
+                  ? 'Has an app account — you can send this bill in their chat.'
+                  : 'No app account — share the bill from the next screen.'}
+              </Text>
+            </View>
+            <Text tone="brand" weight="semibold" onPress={() => pick(null)}>
+              Change
+            </Text>
+          </View>
+        </Card>
       ) : (
-        <Text variant="caption" tone="muted" style={styles.customerHint}>
-          {customer.name} has an app account — you’ll be able to send this bill in their chat.
-        </Text>
+        <>
+          {knownCustomers.length > 0 ? (
+            <View style={styles.pillRow}>
+              {knownCustomers.map((c) => (
+                <Tag key={c.id} label={c.name} onPress={() => pick(c)} />
+              ))}
+            </View>
+          ) : null}
+          <Input
+            placeholder="Search everyone by name, or type a new one"
+            value={term}
+            onChangeText={runSearch}
+          />
+          {searching ? (
+            <Text variant="caption" tone="muted" style={styles.hint}>
+              Searching…
+            </Text>
+          ) : null}
+          {results.length > 0 ? (
+            <Card style={styles.results}>
+              {results.map((u, i) => (
+                <Pressable
+                  key={u.id}
+                  onPress={() => pick({ id: u.id, name: u.name })}
+                  style={[
+                    styles.resultRow,
+                    i < results.length - 1 && {
+                      borderBottomColor: colors.border,
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                    },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Bill ${u.name}`}
+                >
+                  <Avatar name={u.name} size={32} />
+                  <View style={styles.flex}>
+                    <Text weight="medium">{u.name}</Text>
+                    <Text variant="caption" tone="muted">
+                      {alreadyListed(u.id) ? 'Existing customer' : 'App account'}
+                    </Text>
+                  </View>
+                </Pressable>
+              ))}
+            </Card>
+          ) : null}
+          {typed.length >= 2 ? (
+            <Button
+              title={`＋ Bill “${typed}” without an account`}
+              variant="secondary"
+              onPress={() => pick({ name: typed })}
+              style={styles.walkIn}
+            />
+          ) : (
+            <Text variant="caption" tone="muted" style={styles.hint}>
+              Type at least 2 letters to find an account — or bill a walk-in by name.
+            </Text>
+          )}
+        </>
       )}
 
-      {/* Line items */}
-      <Label>Items</Label>
-      {catalog.length > 0 ? (
-        <>
-          <Text variant="caption" tone="muted" style={styles.hint}>
-            Tap to add from your listed products & services (tap again for +1):
-          </Text>
-          <View style={styles.pillRow}>
-            {catalog.map((item, i) => (
-              <Tag
-                key={`${item.name}-${i}`}
-                label={item.price ? `${item.name} · ${item.price}` : item.name}
-                onPress={() => addLine(item.name, item.price)}
-              />
-            ))}
-          </View>
-        </>
+      {/* Items — the same picker a customer orders from. */}
+      {products.length > 0 ? (
+        <OfferingGroup
+          title={business.type === 'item' ? '🏷️ Items' : '🛍️ Products'}
+          offerings={products}
+          quantities={quantities}
+          onBump={bump}
+        />
+      ) : null}
+      {services.length > 0 ? (
+        <OfferingGroup title="🛠️ Services" offerings={services} quantities={quantities} onBump={bump} />
       ) : null}
 
+      {/* Anything not on the catalog. */}
+      <Label>Something else</Label>
       <View style={styles.customRow}>
         <View style={styles.flex}>
           <Input placeholder="Custom item" value={customName} onChangeText={setCustomName} onSubmitEditing={addCustom} />
         </View>
         <View style={styles.priceField}>
-          <Input placeholder="$" value={customPrice} onChangeText={setCustomPrice} onSubmitEditing={addCustom} />
+          <Input placeholder="₹" value={customPrice} onChangeText={setCustomPrice} onSubmitEditing={addCustom} />
         </View>
       </View>
       <Button title="Add item" variant="secondary" onPress={addCustom} disabled={!customName.trim()} />
 
-      {lines.length > 0 ? (
-        <Card style={styles.lines}>
-          {lines.map((line, i) => {
+      {customLines.length > 0 ? (
+        <Card style={styles.customList}>
+          {customLines.map((line, i) => {
             const unit = parsePrice(line.price);
             return (
               <View
                 key={`${line.name}-${i}`}
                 style={[
                   styles.lineRow,
-                  i < lines.length - 1 && {
+                  i < customLines.length - 1 && {
                     borderBottomColor: colors.border,
                     borderBottomWidth: StyleSheet.hairlineWidth,
                   },
@@ -209,25 +317,20 @@ export default function NewBillScreen() {
               >
                 <View style={styles.flex}>
                   <Text weight="medium">{line.name}</Text>
-                  <Text variant="caption" tone="muted">
-                    {line.quantity} × {line.price ?? 'TBC'}
+                  <Text variant="caption" weight="semibold" tone="brand">
+                    {unit !== undefined ? formatMoney(unit * line.quantity) : 'Price on request'}
                   </Text>
                 </View>
-                <Text weight="semibold" tone="brand">
-                  {unit !== undefined ? formatMoney(unit * line.quantity) : 'TBC'}
-                </Text>
-                <Text tone="danger" weight="semibold" onPress={() => removeLine(i)}>
-                  ✕
-                </Text>
+                <View style={styles.stepper}>
+                  <StepBtn label="−" onPress={() => bumpCustom(i, -1)} />
+                  <Text weight="semibold" style={styles.qty}>
+                    {line.quantity}
+                  </Text>
+                  <StepBtn label="+" onPress={() => bumpCustom(i, 1)} />
+                </View>
               </View>
             );
           })}
-          <View style={[styles.totalRow, { borderTopColor: colors.border }]}>
-            <Text weight="semibold">Total</Text>
-            <Text weight="bold" tone="brand">
-              {totalLabel(total)}
-            </Text>
-          </View>
         </Card>
       ) : null}
 
@@ -236,7 +339,24 @@ export default function NewBillScreen() {
         placeholder="e.g. Payable on pickup"
         value={note}
         onChangeText={setNote}
+        style={styles.note}
       />
+
+      <Card style={styles.summary}>
+        <View style={styles.summaryRow}>
+          <Text weight="semibold">
+            {itemCount} item{itemCount === 1 ? '' : 's'} on this bill
+          </Text>
+          <Text weight="bold" tone="brand">
+            {itemCount > 0 ? totalLabel(total) : '—'}
+          </Text>
+        </View>
+        {!customer && lines.length > 0 ? (
+          <Text variant="caption" tone="muted">
+            Pick who this bill is for to issue it.
+          </Text>
+        ) : null}
+      </Card>
 
       <Button
         title="🧾 Create bill"
@@ -259,27 +379,33 @@ function Label({ children }: { children: React.ReactNode }) {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   label: { marginTop: spacing.lg, marginBottom: spacing.sm },
   pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
-  customerHint: { marginBottom: spacing.sm },
-  hint: { marginBottom: spacing.sm },
+  hint: { marginTop: spacing.xs },
+  selected: { borderWidth: 1.5 },
+  selectedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  results: { marginTop: spacing.sm, padding: 0, overflow: 'hidden' },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  walkIn: { marginTop: spacing.sm },
   customRow: { flexDirection: 'row', gap: spacing.md },
   priceField: { width: 90 },
-  lines: { marginTop: spacing.md },
+  customList: { marginTop: spacing.md },
   lineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
     paddingVertical: spacing.sm,
   },
-  totalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: spacing.md,
-    marginTop: spacing.xs,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  qty: { minWidth: 22, textAlign: 'center' },
+  note: { marginTop: spacing.lg },
+  summary: { marginTop: spacing.md },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   submit: { marginTop: spacing.lg },
 });

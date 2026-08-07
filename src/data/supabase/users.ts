@@ -30,12 +30,16 @@ export function createSupabaseUsers(): UserRepository {
     async search(term: string): Promise<User[]> {
       const q = term.trim().toLowerCase();
       if (!q) return [];
-      // Small directory — fetch and filter by name in JS (public profiles only).
+      // Small directory — fetch and filter by name in JS. Every named account
+      // is findable (matching the mock): search is how a business links a
+      // teammate or bills a customer, so a private profile — which only hides
+      // someone's tappable employee page — must still be reachable here.
+      // Anonymous guests have no name, so they never match.
       const { data, error } = await sb.from('profiles').select('data');
       if (error) throw error;
       return (data ?? [])
         .map((r) => r.data as User)
-        .filter((u) => u.isProfilePublic && u.name.toLowerCase().includes(q));
+        .filter((u) => !!u.name && u.name.toLowerCase().includes(q));
     },
 
     async create(input: NewUserInput): Promise<User> {

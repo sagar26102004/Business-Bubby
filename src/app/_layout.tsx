@@ -179,10 +179,11 @@ export default function RootLayout() {
           <Stack.Screen name="customers/[businessId]" options={{ title: 'Customers' }} />
           <Stack.Screen name="manage/[businessId]" options={{ title: 'Manage' }} />
           <Stack.Screen name="stall/[businessId]" options={{ title: 'Manage stall' }} />
-          <Stack.Screen name="fleet/[businessId]" options={{ title: 'Fleet & tracking' }} />
           <Stack.Screen name="fleet/[businessId]/vehicles" options={{ title: 'Vehicles' }} />
           <Stack.Screen name="fleet/[businessId]/journey" options={{ title: 'Journeys' }} />
           <Stack.Screen name="fleet/[businessId]/items" options={{ title: 'Tracked items' }} />
+          <Stack.Screen name="fleet/[businessId]/assign" options={{ title: 'Assign to vehicle' }} />
+          <Stack.Screen name="fleet/[businessId]/item/[itemId]" options={{ title: 'Tracked item' }} />
           <Stack.Screen name="track/[businessId]" options={{ title: 'Live tracking' }} />
           <Stack.Screen name="workspace/[businessId]" options={{ title: 'Workspace' }} />
           <Stack.Screen name="workspace/[businessId]/orders" options={{ title: 'Orders' }} />

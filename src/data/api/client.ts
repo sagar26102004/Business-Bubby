@@ -45,10 +45,22 @@ async function request<T>(method: string, path: string, body?: unknown, query?: 
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
+  // Parse defensively: an error body isn't always JSON (a proxy's 502 page, or
+  // Express's default HTML error page), and on React Native a JSON.parse throw
+  // here would hide the real reason behind "Unexpected token <".
   const text = await res.text();
-  const payload = text ? JSON.parse(text) : null;
+  let payload: unknown = null;
+  try {
+    payload = text ? JSON.parse(text) : null;
+  } catch {
+    payload = null;
+  }
   if (!res.ok) {
-    const message = payload?.error ?? `Request failed (${res.status}).`;
+    const fromJson = (payload as { error?: unknown } | null)?.error;
+    const message =
+      (typeof fromJson === 'string' && fromJson) ||
+      text.trim().slice(0, 300) ||
+      `Request failed (${res.status}).`;
     throw new Error(message);
   }
   return payload as T;

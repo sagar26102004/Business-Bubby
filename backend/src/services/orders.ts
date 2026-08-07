@@ -3,7 +3,7 @@ import type { Business, Order } from '@/domain/types';
 import type { NewOrderInput, NewOrderLineInput, TableSeat } from '@/domain/contracts';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
-import { asData, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
+import { asData, isUuid, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
 import { formatMoney } from '@/lib/money';
 import { notFound } from '@/http/errors';
 import { notify } from './notify';
@@ -161,6 +161,8 @@ export const orderService = {
   },
 
   async listForCustomer(customerId: string, businessId?: string): Promise<Order[]> {
+    // A logged-out viewer arrives as the literal 'guest' — never a real account.
+    if (!isUuid(customerId)) return [];
     const rows = await prisma.order.findMany({
       where: {
         AND: [

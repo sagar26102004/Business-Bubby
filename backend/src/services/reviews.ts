@@ -3,7 +3,7 @@ import type { Bill, Booking, Business, Order, Review } from '@/domain/types';
 import type { NewReviewInput, ReviewEligibility } from '@/domain/contracts';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
-import { asData, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
+import { asData, isUuid, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
 import { notFound } from '@/http/errors';
 import { notify } from './notify';
 
@@ -13,7 +13,9 @@ async function findBusiness(id: string): Promise<Business | null> {
 }
 
 async function eligibility(businessId: string, customerId: string): Promise<ReviewEligibility> {
-  if (!customerId || customerId === 'guest') {
+  // Any synthetic id (the literal 'guest', `walkin:…`, `standalone:…`) is not a
+  // signed-in account — and `reviews.customer_id` is a uuid column besides.
+  if (!isUuid(customerId)) {
     return { eligible: false, reason: 'Sign in to rate businesses.' };
   }
   const business = await findBusiness(businessId);
@@ -47,6 +49,7 @@ export const reviewService = {
   },
 
   async getMine(businessId: string, customerId: string): Promise<Review | null> {
+    if (!isUuid(customerId)) return null;
     const row = await prisma.review.findUnique({
       where: { businessId_customerId: { businessId, customerId } },
     });

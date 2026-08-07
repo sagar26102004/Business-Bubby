@@ -11,5 +11,6 @@ export { Stars } from './Stars';
 export { AutoCarousel } from './AutoCarousel';
 export { Icon, type IconName } from './Icon';
 export { SearchIcon } from './SearchIcon';
+export { SearchField } from './SearchField';
 export { ScanIcon } from './ScanIcon';
 export { LoadingView, ErrorView, EmptyView } from './StateView';

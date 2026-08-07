@@ -179,6 +179,9 @@ export interface RentalItem {
   price?: string;
   description?: string;
   subcategoryId?: string;
+  /** Prebuilt library grouping, e.g. "Cars" › "SUV" (see domain/offeringSections). */
+  category?: string;
+  subcategory?: string;
 }
 
 export type OfferingKind = 'product' | 'service';
@@ -362,7 +365,31 @@ export interface Call {
   endedAt?: string;
 }
 
+/** What a participant needs to join the call's live audio room (LiveKit). */
+export interface CallAudioToken {
+  token: string;
+  url: string;
+}
+
 export type VehicleKind = 'bus' | 'van' | 'truck' | 'car' | 'bike' | 'other';
+
+/** One point on a vehicle's route — the start, the end, or a stop in between. */
+export interface JourneyStop {
+  id: string;
+  label: string;
+  /** Pinned coordinate, when the owner placed one on the map. */
+  point?: GeoPoint;
+}
+
+/** A saved route a vehicle runs: a start, an end, and any stops between them. */
+export interface VehicleJourney {
+  id: string;
+  name: string;
+  start: JourneyStop;
+  end: JourneyStop;
+  stops: JourneyStop[];
+  createdAt: string;
+}
 
 export interface Vehicle {
   id: string;
@@ -371,6 +398,10 @@ export interface Vehicle {
   registrationNumber?: string;
   kind: VehicleKind;
   driverEmployeeId?: string;
+  /** Saved routes for this vehicle (morning run, way back home, …). */
+  journeys?: VehicleJourney[];
+  /** Which saved journey the vehicle is currently running, if any. */
+  activeJourneyId?: string;
   createdAt: string;
 }
 

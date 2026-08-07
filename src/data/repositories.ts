@@ -701,8 +701,16 @@ export interface BizChatRepository {
 /** Business side: enroll a customer into a recurring plan. */
 export interface NewMembershipInput {
   businessId: string;
+  /**
+   * The paying account. A user id when the payer has a Localo account; a
+   * `walkin:<lowercased name>` key (the same key CustomerRepository uses) when
+   * they don't — the business still tracks and bills them by name, the plan
+   * just reaches no Subscriptions tab.
+   */
   customerId: string;
   customerName: string;
+  /** Who actually uses the plan, when it isn't the payer (e.g. their child). */
+  enrolleeName?: string;
   planName: string;
   pricePerMonth: number;
 }

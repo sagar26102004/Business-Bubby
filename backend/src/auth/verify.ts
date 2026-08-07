@@ -5,6 +5,11 @@
  * and sends the resulting access token as `Authorization: Bearer <jwt>`. Supabase
  * access tokens are HS256-signed with the project's JWT secret; we verify with
  * that secret and read the user id from the `sub` claim.
+ *
+ * ANONYMOUS sessions (guests placing a voice call or chatting) are ordinary
+ * tokens with a real uuid `sub` plus an `is_anonymous` claim — they verify the
+ * same way and are deliberately accepted here. Every guard downstream keys on
+ * the uid alone, so a guest is just a user with no profile name.
  */
 import jwt from 'jsonwebtoken';
 import { config } from '@/config';

@@ -7,7 +7,18 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL ?? '',
   jwtSecret: process.env.SUPABASE_JWT_SECRET ?? '',
   supabaseUrl: process.env.SUPABASE_URL ?? '',
+  /**
+   * Live voice audio (LiveKit). Optional: when unset the token endpoint answers
+   * 501 and the app falls back to its simulated call UI — everything else runs.
+   */
+  livekitUrl: process.env.LIVEKIT_URL ?? '',
+  livekitApiKey: process.env.LIVEKIT_API_KEY ?? '',
+  livekitApiSecret: process.env.LIVEKIT_API_SECRET ?? '',
 };
+
+/** True when all three LIVEKIT_* vars are present. */
+export const isLivekitConfigured = (): boolean =>
+  !!config.livekitUrl && !!config.livekitApiKey && !!config.livekitApiSecret;
 
 /** Fail fast in production if the essentials are missing. */
 export function assertConfig(): void {

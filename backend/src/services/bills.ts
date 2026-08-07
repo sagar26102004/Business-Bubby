@@ -3,7 +3,7 @@ import type { Bill, PaymentStatus } from '@/domain/types';
 import type { NewBillInput } from '@/domain/contracts';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
-import { asData, jsonEquals, rowsData, toJson } from '@/lib/data';
+import { asData, isUuid, jsonEquals, rowsData, toJson } from '@/lib/data';
 import { formatMoney } from '@/lib/money';
 import { notFound } from '@/http/errors';
 import { issueBill } from './billing';
@@ -49,6 +49,8 @@ export const billService = {
   },
 
   async listForCustomer(customerId: string, businessId?: string): Promise<Bill[]> {
+    // A logged-out viewer arrives as the literal 'guest' — never a real account.
+    if (!isUuid(customerId)) return [];
     const rows = await prisma.bill.findMany({
       where: {
         AND: [

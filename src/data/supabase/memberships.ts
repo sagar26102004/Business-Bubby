@@ -178,6 +178,7 @@ export function createSupabaseMemberships(): MembershipRepository {
         businessName: info.name,
         customerId: input.customerId,
         customerName: input.customerName,
+        enrolleeName: input.enrolleeName?.trim() || undefined,
         planName: input.planName,
         pricePerMonth: input.pricePerMonth,
         startedAt: started.toISOString(),

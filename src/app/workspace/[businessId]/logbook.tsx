@@ -175,16 +175,28 @@ export default function WorkspaceLogbookScreen() {
 
   return (
     <Screen>
-      <Stack.Screen options={{ title: 'Logbook' }} />
+      {/* Adding a record is a top-bar action, next to the "Logbook" title —
+          the report itself owns the page. */}
+      <Stack.Screen
+        options={{
+          title: 'Logbook',
+          headerRight: () => (
+            <Text
+              tone="accent"
+              weight="semibold"
+              style={styles.headerAdd}
+              onPress={() => {
+                if (open) resetForm();
+                setOpen((v) => !v);
+              }}
+            >
+              {open ? 'Close' : '＋ Add'}
+            </Text>
+          ),
+        }}
+      />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-      <View style={styles.headerRow}>
-        <View style={styles.headerText} />
-        {!open ? (
-          <Button title="➕ Add" onPress={() => setOpen(true)} style={styles.headerAddBtn} />
-        ) : null}
-      </View>
-
       {open ? (
         <Card style={styles.addCard}>
           <Text weight="semibold" style={styles.addTitle}>
@@ -470,9 +482,7 @@ function formatWhen(iso: string): string {
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: spacing.lg },
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  headerText: { flex: 1 },
-  headerAddBtn: { marginTop: spacing.xs },
+  headerAdd: { paddingHorizontal: spacing.md, fontSize: 16 },
   subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   addCard: { marginBottom: spacing.md },
   addTitle: { marginBottom: spacing.sm },

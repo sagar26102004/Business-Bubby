@@ -1,9 +1,11 @@
 /**
- * Customers (business members only) — everyone who has ever done business
- * with this listing, aggregated from orders, bookings, bills, chats and
- * calls. The owner can star favourites, which stay pinned to the top.
+ * Customers — "Contacts" in the workspace of a membership business (business
+ * members only). Everyone who has ever done business with this listing,
+ * aggregated from orders, bookings, bills, chats and calls. The owner can star
+ * favourites, which stay pinned to the top; the search box cuts a long list
+ * down to one name.
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { CustomerSummary } from '@/data/repositories';
@@ -19,7 +21,7 @@ import {
   ErrorView,
   LoadingView,
   Screen,
-  Tag,
+  SearchField,
   Text,
 } from '@/components/ui';
 import { fontSize, spacing } from '@/theme/theme';
@@ -44,6 +46,7 @@ export default function CustomersScreen() {
   const router = useRouter();
   const { currentUser } = useAuth();
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
 
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
@@ -54,6 +57,19 @@ export default function CustomersScreen() {
     ]);
     return { business, employees, customers };
   }, [businessId]);
+
+  const term = query.trim().toLowerCase();
+  // A long-standing business has hundreds of these; searching by name beats
+  // scrolling. Walk-ins are findable by "walk-in" too, since that's often all
+  // the member remembers about them.
+  const matches = useMemo(() => {
+    if (!term) return [];
+    return (data?.customers ?? []).filter(
+      (c) =>
+        c.name.toLowerCase().includes(term) ||
+        (!c.hasAccount && (c.key === 'guest' ? 'guest' : 'walk-in').includes(term)),
+    );
+  }, [data?.customers, term]);
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
@@ -94,48 +110,70 @@ export default function CustomersScreen() {
   const favorites = customers.filter((c) => c.favorite);
   const others = customers.filter((c) => !c.favorite);
 
-  const renderCustomer = (c: CustomerSummary) => (
-    <Card key={c.key} style={styles.customerCard}>
-      <View style={styles.customerRow}>
-        <Avatar name={c.name} size={40} />
-        <View style={styles.customerInfo}>
-          <Text weight="medium">{c.name}</Text>
-          <Text variant="caption" tone="muted">
-            {activityLine(c)}
-          </Text>
-        </View>
-        {isOwner ? (
-          <Pressable
-            onPress={() => toggleFavorite(c)}
-            disabled={togglingKey === c.key}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={c.favorite ? `Unstar ${c.name}` : `Star ${c.name} as a favourite`}
-            style={({ pressed }) => [styles.star, pressed && styles.starPressed]}
-          >
-            <Text style={styles.starIcon}>{c.favorite ? '⭐' : '☆'}</Text>
-          </Pressable>
-        ) : c.favorite ? (
-          <Text style={styles.starIcon}>⭐</Text>
-        ) : null}
-      </View>
-      <View style={styles.actionRow}>
-        {!c.hasAccount ? (
-          <Tag label={c.key === 'guest' ? 'Guest' : 'Walk-in'} />
-        ) : null}
-        {c.chatCount > 0 || c.hasAccount ? (
-          <Tag
-            label="💬 Chat"
-            onPress={() => router.push(`/inbox/${business.id}/${c.key}`)}
-          />
-        ) : null}
-        {c.orderCount > 0 ? (
-          <Tag label="📦 Orders" onPress={() => router.push(`/orders/${business.id}`)} />
-        ) : null}
-        <Tag label="🧾 Bill" onPress={() => router.push(`/bill/new/${business.id}`)} />
-      </View>
-    </Card>
+  /** A compact icon action sitting on the name row. */
+  const iconAction = (icon: string, label: string, onPress: () => void) => (
+    <Pressable
+      key={label}
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
+    >
+      <Text style={styles.icon}>{icon}</Text>
+    </Pressable>
   );
+
+  /**
+   * One contact on ONE row: who they are on the left, the actions on the right.
+   * The walk-in/guest marker folds into the activity caption rather than taking
+   * a chip row of its own, so the card is two lines tall however many actions
+   * apply.
+   */
+  const renderCustomer = (c: CustomerSummary) => {
+    const marker = c.hasAccount ? '' : c.key === 'guest' ? 'Guest' : 'Walk-in';
+    const activity = activityLine(c);
+    return (
+      <Card key={c.key} style={styles.customerCard}>
+        <View style={styles.customerRow}>
+          <Avatar name={c.name} size={40} />
+          <View style={styles.customerInfo}>
+            <Text weight="medium" numberOfLines={1}>
+              {c.name}
+            </Text>
+            <Text variant="caption" tone="muted" numberOfLines={1}>
+              {[marker, activity].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+          {c.chatCount > 0 || c.hasAccount
+            ? iconAction('💬', `Chat with ${c.name}`, () =>
+                router.push(`/inbox/${business.id}/${c.key}`),
+              )
+            : null}
+          {c.orderCount > 0
+            ? iconAction('📦', `Orders from ${c.name}`, () =>
+                router.push(`/orders/${business.id}`),
+              )
+            : null}
+          {iconAction('🧾', `Bill ${c.name}`, () => router.push(`/bill/new/${business.id}`))}
+          {isOwner ? (
+            <Pressable
+              onPress={() => toggleFavorite(c)}
+              disabled={togglingKey === c.key}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={c.favorite ? `Unstar ${c.name}` : `Star ${c.name} as a favourite`}
+              style={({ pressed }) => [styles.iconBtn, pressed && styles.pressed]}
+            >
+              <Text style={styles.icon}>{c.favorite ? '⭐' : '☆'}</Text>
+            </Pressable>
+          ) : c.favorite ? (
+            <Text style={styles.icon}>⭐</Text>
+          ) : null}
+        </View>
+      </Card>
+    );
+  };
 
   return (
     <Screen scroll>
@@ -148,21 +186,43 @@ export default function CustomersScreen() {
         />
       ) : (
         <>
-          {favorites.length > 0 ? (
+          <SearchField
+            placeholder="Search by name…"
+            value={query}
+            onChangeText={setQuery}
+            accessibilityLabel="Search contacts by name"
+          />
+
+          {/* Searching collapses the favourites/all split — one flat result list
+              is what you want when you're hunting one person. */}
+          {term ? (
             <>
               <Text variant="subheading" weight="bold" style={styles.sectionTitle}>
-                ⭐ Favourites · {favorites.length}
+                {matches.length === 0
+                  ? `No one matches “${query.trim()}”`
+                  : `${matches.length} match${matches.length === 1 ? '' : 'es'}`}
               </Text>
-              {favorites.map(renderCustomer)}
+              {matches.map(renderCustomer)}
             </>
-          ) : null}
-          <Text variant="subheading" weight="bold" style={styles.sectionTitle}>
-            {favorites.length > 0 ? `All customers · ${customers.length}` : `${customers.length} customer${customers.length === 1 ? '' : 's'}`}
-          </Text>
-          {others.map(renderCustomer)}
-          {others.length === 0 ? (
-            <Text tone="muted">Every customer is a favourite. Nice problem to have.</Text>
-          ) : null}
+          ) : (
+            <>
+              {favorites.length > 0 ? (
+                <>
+                  <Text variant="subheading" weight="bold" style={styles.sectionTitle}>
+                    ⭐ Favourites · {favorites.length}
+                  </Text>
+                  {favorites.map(renderCustomer)}
+                </>
+              ) : null}
+              <Text variant="subheading" weight="bold" style={styles.sectionTitle}>
+                {favorites.length > 0 ? `All customers · ${customers.length}` : `${customers.length} customer${customers.length === 1 ? '' : 's'}`}
+              </Text>
+              {others.map(renderCustomer)}
+              {others.length === 0 ? (
+                <Text tone="muted">Every customer is a favourite. Nice problem to have.</Text>
+              ) : null}
+            </>
+          )}
         </>
       )}
 
@@ -179,16 +239,10 @@ export default function CustomersScreen() {
 const styles = StyleSheet.create({
   sectionTitle: { marginTop: spacing.md, marginBottom: spacing.md },
   customerCard: { marginBottom: spacing.sm },
-  customerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  customerInfo: { flex: 1 },
-  star: { padding: spacing.xs },
-  starPressed: { opacity: 0.6 },
-  starIcon: { fontSize: fontSize.lg },
-  actionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
+  customerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  customerInfo: { flex: 1, marginRight: spacing.xs },
+  iconBtn: { padding: spacing.xs },
+  pressed: { opacity: 0.6 },
+  icon: { fontSize: fontSize.lg },
   backBtn: { marginTop: spacing.lg },
 });

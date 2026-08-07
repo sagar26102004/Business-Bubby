@@ -9,10 +9,22 @@ import { notify } from './notify';
 export const threadKeyFor = (businessId: string, participantId: string) =>
   `${businessId}:${participantId}`;
 
-async function participantName(participantId: string): Promise<string> {
+/**
+ * The customer's display name for an inbox row. A guest who chatted through an
+ * anonymous session has a profile created by the `handle_new_user` trigger with
+ * an EMPTY name, so a bare profile read renders a blank row — the caller passes
+ * the thread's messages and we fall back to what the sender called themselves,
+ * then to 'Guest'.
+ */
+async function participantName(participantId: string, msgs: ChatMessage[] = []): Promise<string> {
   if (participantId === 'guest') return 'Guest';
   const row = await prisma.profile.findUnique({ where: { id: participantId } });
-  return row ? asData<User>(row).name : participantId;
+  const profileName = row ? asData<User>(row).name?.trim() : '';
+  if (profileName) return profileName;
+  const fromMessage = [...msgs]
+    .reverse()
+    .find((m) => m.authorType === 'customer' && m.authorName?.trim())?.authorName;
+  return fromMessage?.trim() || 'Guest';
 }
 
 async function businessName(businessId: string): Promise<string> {
@@ -78,7 +90,7 @@ export const chatService = {
       out.push({
         businessId,
         participantId: pid,
-        participantName: await participantName(pid),
+        participantName: await participantName(pid, msgs),
         lastBody: last?.body ?? '',
         lastAt: last?.createdAt ?? '',
         lastAuthorType: last?.authorType ?? 'customer',

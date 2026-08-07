@@ -3,7 +3,7 @@ import type { Business, Employee, GeoPoint, LocationShare, TrackedItem, Vehicle 
 import type { LiveVehicle, NewTrackedItemInput, NewVehicleInput } from '@/domain/contracts';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
-import { asData, rowsData, toJson, uuidOrNull, jsonEquals } from '@/lib/data';
+import { asData, isUuid, rowsData, toJson, uuidOrNull, jsonEquals } from '@/lib/data';
 import { haversineKm } from '@/lib/geo';
 import { getVehicleKind } from '@/lib/vehicles';
 import { notFound } from '@/http/errors';
@@ -120,6 +120,8 @@ export const trackingService = {
   },
 
   async listItemsForCustomer(customerId: string, businessId?: string): Promise<TrackedItem[]> {
+    // A logged-out viewer arrives as the literal 'guest' — never a real account.
+    if (!isUuid(customerId)) return [];
     const rows = await prisma.trackedItem.findMany({
       where: {
         AND: [

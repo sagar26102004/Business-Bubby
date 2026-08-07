@@ -32,220 +32,37 @@ re-derivation from the Supabase diff is required:
 
 ---
 
-## [SYNC-001] Live voice-call audio — LiveKit token endpoint
+## [SYNC-009] Memberships: `add` carries `enrolleeName`, payer may have no account
 
-- **Area:** CallRepository / calls (real WebRTC audio via LiveKit)
-- **Supabase change:** Added `getAudioToken(callId)` to the Supabase CallRepository
-  (`src/data/supabase/calls.ts`) — it invokes the edge function at slug `dynamic-responder`
-  (`supabase/functions/dynamic-responder/index.ts`), which verifies the caller's JWT, confirms
-  they are a participant on the call, and mints a LiveKit access token for room
-  `call_<callId>` (identity = user id), returning `{ token, url }`. `livekit-server-sdk` was
-  already `npm install`ed into `backend/` in anticipation of this entry.
-- **Domain/interface:** DONE (shared) — `CallAudioToken` type + `getAudioToken` added to
-  `CallRepository` in `src/data/repositories.ts`; the api client method already added to
-  `src/data/api/repositories.ts` (`POST /calls/:callId/token`).
-- **Path B — backend/:**
-  - Add `POST /calls/:callId/token` in `backend/src/routers/calls.ts`.
-  - Service `backend/src/services/calls.ts`: `getAudioToken(callId, userId)` — load the call,
-    authorize that `userId` is a participant (mirror the edge function / `authz.ts` call
-    guards), then mint the token with `livekit-server-sdk`:
-    `new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, { identity: userId, name, ttl: '2h' })`,
-    `addGrant({ room: 'call_'+callId, roomJoin: true, canPublish: true, canSubscribe: true })`,
-    `await at.toJwt()`. Return `{ token, url: LIVEKIT_URL }`.
-  - Read `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` from `backend/src/config.ts`
-    (env). If unset, respond 501 "Live audio is not configured".
-  - Document the route in `backend/src/swagger.ts`.
-- **Path B — src/data/api/:** DONE — `getAudioToken: (callId) => http.post('/calls/'+callId+'/token', {})`.
-- **DB/migration:** none (reuses the `calls` table).
-- **Verify:** backend `npm run typecheck`/`build`; server boots and `/docs` lists the new route;
-  api-client `npx tsc --noEmit` (already green). End-to-end needs the LIVEKIT_* env + a real call.
-
-## [SYNC-002] Vehicle journeys (saved routes with stops)
-
-- **Area:** TrackingRepository / vehicles
-- **Supabase change:** NONE needed — journeys are stored on the `Vehicle` object
-  (`Vehicle.journeys: VehicleJourney[]` + `Vehicle.activeJourneyId`) and persisted through the
-  existing generic `updateVehicle(id, patch)` (`{ ...current, ...patch }` merge into the
-  `vehicles.data` jsonb). Supabase/mock/api all already round-trip it with no code change.
-- **Domain/interface:** DONE (shared) — added `JourneyStop`, `VehicleJourney`, and the two new
-  optional `Vehicle` fields (`journeys?`, `activeJourneyId?`) to `src/domain/types.ts`. Frontend
-  is a new owner screen `src/app/fleet/[businessId]/journey.tsx` that reads/writes them via
-  `tracking.updateVehicle`; `RouteMap` extended with `stops`/`fromEmoji`/`fromColor` for the
-  route preview. No new repository methods.
-- **Path B — backend/:** TYPE-ONLY. Mirror the new shapes in `backend/src/domain/types.ts`:
-  add `JourneyStop` + `VehicleJourney` interfaces and the `journeys?: VehicleJourney[]` /
-  `activeJourneyId?: string` fields on `Vehicle`. `services/tracking.ts:updateVehicle` already
-  spreads the whole object into `data` jsonb, so journeys persist with NO logic change. No new
-  router/endpoint, no authz change (updateVehicle stays owner/member-guarded as today).
-- **Path B — src/data/api/:** none — `updateVehicle` client method already sends the full patch.
-- **DB/migration:** none (jsonb column already holds it).
-- **Verify:** backend `npm run typecheck`/`build` stays green after the type mirror; a
-  round-trip PATCH `/tracking/vehicles/:id` with a `journeys` array returns it back intact.
-
-## [SYNC-003] Guest voice calls — anonymous sign-in identity
-
-- **Area:** AuthRepository / auth (let guests place calls without a sign-up form)
-- **Supabase change:** Added `signInGuest()` to the Supabase AuthRepository
-  (`src/data/supabase/auth.ts`): reuses an existing session, else `sb.auth.signInAnonymously()`;
-  returns a `User` with `isAnonymous: true, name: 'Guest'`. `getCurrentUser()` now maps a
-  `session.user.is_anonymous` session to that same guest User (so a reload stays a guest with a
-  real uid). Requires the project's **Anonymous sign-ins** toggle ON (Supabase Auth settings) —
-  no SQL/RLS change: anonymous users are in the `authenticated` role, so `calls_insert`
-  (`customer_id = auth.uid()`) and the token function's `getUser()` already accept them, and the
-  `handle_new_user` trigger creates their profile row (empty name via `coalesce`).
-- **Domain/interface:** DONE (shared) — added `User.isAnonymous?` (`src/domain/types.ts`),
-  `signInGuest()` to `AuthRepository` (`src/data/repositories.ts`), and wired
-  `DataProvider.signInGuest` + `useAuth().isGuest = !currentUser || currentUser.isAnonymous`.
-  Frontend: the call pre-screen (`src/app/call/[businessId].tsx`) calls `signInGuest()` before
-  `calls.start` when there's no `currentUser`. **The api client twin is already done** —
-  `src/data/api/auth.ts` implements `signInGuest()` (same Supabase anonymous sign-in) and marks
-  anonymous sessions in `getCurrentUser()`.
-- **Path B — backend/:** VERIFY-ONLY (auth identity is Supabase in both paths, so no new
-  endpoint). Confirm the Express JWT middleware/`authz.ts` accepts an anonymous Supabase JWT
-  (valid `sub`/uid, `is_anonymous` claim) and does NOT require a non-anonymous profile — i.e. an
-  anonymous caller can `POST /calls` (start) and `POST /calls/:callId/token`. The customer/member
-  guards key on the uid only, so this should already pass; add a test call to be sure.
-- **Path B — src/data/api/:** DONE (see above).
-- **DB/migration:** none. Operational: enable **Anonymous sign-ins** in the Supabase dashboard.
-- **Verify:** backend `npm run typecheck`/`build`; a guest (anonymous JWT) can start a call and
-  fetch an audio token end-to-end.
-
-## [SYNC-004] Voice call — never ring the caller / dedupe participants
-
-- **Area:** CallRepository / calls (`start`)
-- **Supabase change:** In `src/data/supabase/calls.ts` `start()`, after building the business
-  `targets`, exclude any target whose id equals the caller's (`customer.id`) and dedupe by id
-  before composing `participants`. Prevents a person who is the business's owner/handler AND the
-  caller from appearing twice (duplicate participant id → crashes the session list's React keys)
-  and from ringing themselves. If nothing remains after exclusion, throw
-  `"You're set to answer this business's calls yourself — there's no one else to ring."` when the
-  caller was among the targets, else the existing "No one … can take voice calls" message. Same
-  fix already applied to the mock (`src/data/mock/mockRepositories.ts` `start`).
-- **Domain/interface:** none (behaviour only).
-- **Path B — backend/:** Apply the identical guard in `backend/src/services/calls.ts` `start()`:
-  filter the owner/handler targets to exclude `customerId` and dedupe by id before saving
-  participants; mirror the empty-after-exclusion error message.
-- **Path B — src/data/api/:** none (client passes through).
-- **Frontend note (shared, already done):** `src/app/call/session/[callId].tsx` now dedupes
-  `call.participants` before mapping (defensive against calls created before this fix).
-- **DB/migration:** none.
-- **Verify:** backend build/typecheck; a member calling their own business either rings the OTHER
-  members only, or errors clearly — never returns a call with a duplicate participant id.
-
-## [SYNC-005] Incoming-call poll — filter by data.status, not a bare column
-
-- **Area:** CallRepository / calls (`getIncomingForUser`) — THE bug that stopped the receiver ever
-  ringing.
-- **Supabase change:** `src/data/supabase/calls.ts` `getIncomingForUser` was filtering
-  `.in('status', [...])` on a non-existent top-level column (the `calls` table is
-  `{id, business_id, customer_id, data jsonb, …}` — `status` lives in `data`). Postgres returned
-  42703 "column calls.status does not exist" every 2s poll; the gate's `.catch` swallowed it, so no
-  incoming call ever surfaced. Fixed to `.in('data->>status', ['ringing','active'])`.
-- **Domain/interface:** none.
-- **Path B — backend/:** VERIFY `backend/src/services/calls.ts` `getIncomingForUser` does the same
-  correctly — with Prisma the `calls` model is `{ data: Json }`, so filter on the JSON path
-  (`where: { data: { path: ['status'], in: ['ringing','active'] } }`) or load the caller's visible
-  calls and filter in JS by `call.status`. Ensure it does NOT reference a scalar `status` column.
-- **Path B — src/data/api/:** none (client passes through).
-- **DB/migration:** none.
-- **Verify:** a ringing call is returned to a business member's `getIncomingForUser`; the incoming
-  overlay appears on the receiver within the poll interval.
-
-## [SYNC-006] Guest access — synthetic ids must never hit uuid columns; guests can chat
-
-- **Area:** OrderRepository, BillRepository, BookingRepository, MembershipRepository,
-  NotificationRepository, TrackingRepository, ReviewRepository, ChatRepository — everything a
-  LOGGED-OUT viewer touches.
-- **Supabase change (two parts):**
-  1. **Synthetic-id guard.** A logged-out viewer is passed to repositories as the literal
-     `'guest'` (see the `?? 'guest'` callers: `app/business/[id].tsx`, `app/(tabs)/orders.tsx`,
-     `app/(tabs)/chats.tsx`, `app/orders/[businessId].tsx`, `app/cart/[businessId].tsx`,
-     `app/order/new/[businessId].tsx`). Those ids were being sent straight into **uuid** scoping
-     columns, so PostgREST returned `22P02 invalid input syntax for type uuid: "guest"` — which
-     threw and made the whole **business page fail to load for logged-out users**. Every
-     customer-scoped read now early-returns empty when the id isn't a uuid (`isUuid` from
-     `src/data/supabase/shared.ts`): `orders.listForCustomer` → `[]`, `bills.listForCustomer` →
-     `[]`, `bookings.listForCustomer` → `[]`, `memberships.listForCustomer`/`monthlySpend` →
-     `[]`, `tracking.listItemsForCustomer` → `[]`, `notifications.listForUser` → `[]` /
-     `unreadCount` → `0` / `markAllRead` → no-op, `reviews.getMine` → `null`, and
-     `reviews` eligibility now rejects any non-uuid id (was an explicit `=== 'guest'` check).
-  2. **Guest chat identity.** `chat_messages` RLS is
-     `participant_id = auth.uid()::text or is_business_member(...)`, so a logged-out guest could
-     neither read nor insert with `participant_id = 'guest'`. The customer chat screen now
-     resolves identity at SEND time via `signInGuest()` (anonymous Supabase auth — the same
-     mechanism voice calls already use), so the message is stored under the guest's real anon
-     uid. Also: `chat.listBusinessThreads` falls back to the message's `authorName` (then
-     `'Guest'`) when the participant's profile name is blank — anonymous profiles are created by
-     the `handle_new_user` trigger with `name: ''`, which was rendering blank inbox rows.
-- **Domain/interface:** none (no interface or type changes).
-- **Path B — backend/:** the same two problems exist there.
-  1. In `backend/src/services/` — `orders.ts`, `bills.ts`, `bookings.ts`, `memberships.ts`,
-     `notifications.ts`, `tracking.ts`, `reviews.ts` — guard every customer/recipient-scoped
-     query the same way: if the id is not a uuid, return the empty result instead of passing it
-     to Prisma (Prisma throws on an invalid uuid for a `String @db.Uuid` column). Add a shared
-     `isUuid()` helper (e.g. `backend/src/util/ids.ts`) rather than repeating the regex.
-     Mirror `reviews` eligibility: a non-uuid customer id → `{ eligible: false, reason: 'Sign in
-     to rate businesses.' }`.
-  2. `backend/src/authz.ts` chat guards: a chat thread's `participantId` must be allowed when it
-     equals the authenticated user's id (including an anonymous Supabase uid — the JWT verifies
-     the same way, `is_anonymous` is just a claim), or the caller is a business member. No
-     special-casing of the string `'guest'` on writes — guests always arrive with a real uid now.
-  3. `backend/src/services/chat.ts` `listBusinessThreads`: fall back to the message's
-     `authorName`, then `'Guest'`, when the participant profile's name is blank.
-- **Path B — src/data/api/:** none — the client passes ids straight through; the guards belong on
-  the server. (The shared frontend changes are already done and apply to both backends:
-  `src/features/chat/ChatThread.tsx` gained an optional `ensureIdentity()` prop resolved just
-  before sending plus an inline send-error bar; `src/app/chat/[businessId]/index.tsx` supplies it
-  with `signInGuest()`; `src/app/inbox/[businessId]/[participantId].tsx` and
-  `src/app/business/[id].tsx` handle blank anon names / gate rating+enrol on `isGuest`.)
-- **DB/migration:** none. Requires Supabase **Auth → Anonymous sign-ins = ON** (already needed by
-  voice calls). Path B relies on the same Supabase Auth for identity, so nothing extra.
-- **Verify:** logged out, a business page loads fully (no error screen); 📞 Call and 💬 Chat both
-  work and the guest's message appears in the business inbox under "Guest"; the Orders, Subs and
-  Chat tabs render empty instead of throwing.
+- **Area:** MembershipRepository / memberships (workspace Members ＋ Add)
+- **Supabase change:** `src/data/supabase/memberships.ts` → `add()` now sets
+  `enrolleeName: input.enrolleeName?.trim() || undefined` on the created `Membership`
+  (same line the existing `request()` already has). Nothing else changed — `add()` already
+  writes the `customer_id` scoping column through `uuidOrNull()`, so a payer with no Localo
+  account (`customerId` = `walkin:<lowercased name>`) stores `null` there and simply never
+  appears in anyone's Subscriptions, while still grouping and billing normally in the
+  workspace. The mock (`src/data/mock/mockRepositories.ts` → `MockMembershipRepository.add`)
+  got the same one-line change.
+- **Domain/interface:** DONE (shared) — `NewMembershipInput` in `src/data/repositories.ts`
+  gained `enrolleeName?: string`, and its `customerId` doc now states it may be a
+  `walkin:<lowercased name>` key rather than a user id.
+- **Path B — backend/:** `backend/src/services/memberships.ts` → in `add()` (the
+  `const membership: Membership = {…}` literal around line 172), add
+  `enrolleeName: input.enrolleeName?.trim() || undefined,` after `customerName`. Verify the
+  input type used by `add()` mirrors the shared `NewMembershipInput` (add the optional
+  `enrolleeName` field to it and to the request-body validation in
+  `backend/src/routers/memberships.ts` → `POST /memberships`, accepting an optional string).
+  **Do NOT add a uuid guard on `customerId`** — it must keep accepting `walkin:…` /
+  `standalone:…` keys; `uuidOrNull(membership.customerId)` at the Prisma write already
+  handles the scoping column. Check the POST /memberships authz guard is business-member-only
+  (it must not try to resolve `customerId` to a real user).
+- **Path B — src/data/api/:** no change needed — `add` already posts the whole
+  `NewMembershipInput` to `POST /memberships`.
+- **DB/migration:** none (document model — `enrolleeName` lives inside `data` jsonb).
+- **Swagger:** add optional `enrolleeName` to the `NewMembershipInput` schema in
+  `backend/src/swagger.ts` and note `customerId` accepts a `walkin:<name>` key.
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; `npx tsc --noEmit` at the
+  repo root. Smoke: POST a membership with `customerId: "walkin:ramesh kumar"` +
+  `enrolleeName: "Aarav"` and confirm it lists under the business's members.
 
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
-
----
-
-## [SYNC-007] Robust edge-error extraction in getAudioToken (RN-safe)
-
-- **Area:** CallRepository / calls — `getAudioToken` error surfacing (frontend client only; no server/DB change)
-- **Supabase change:** In `src/data/supabase/calls.ts`, the FunctionsHttpError unwrap no longer
-  uses `ctx instanceof Response` (false on React Native → real error was swallowed, phone only saw
-  the generic "edge function returned a non-2xx status code"). Added a module helper
-  `extractEdgeError(ctx)` that reads the body by CAPABILITY (duck-typed `.json()`, then `.text()`
-  with JSON.parse fallback, then plain-object `.error`, then raw string) and returns '' when
-  nothing usable. `getAudioToken` now does `detail = (await extractEdgeError(error.context)) || error.message || 'Could not connect the call audio.'`.
-- **Domain/interface:** none.
-- **Path B — backend/:** none (the api client talks to Express, not to a Supabase edge function —
-  Express should already return JSON `{ error }` bodies).
-- **Path B — src/data/api/:** IF the api client's `calls.getAudioToken` (or any api-client method)
-  parses fetch error bodies with a web-only `instanceof Response` / assumes `.json()` succeeds,
-  apply the same duck-typed, RN-safe extraction so phone builds surface the real message. If it
-  already reads `res.text()`/`res.json()` defensively, no change needed — just confirm.
-- **DB/migration:** none.
-- **Verify:** app `npx tsc --noEmit` (green). On a phone build, a failing token request shows the
-  real reason instead of the generic non-2xx sentence.
-
----
-
-## [SYNC-008] Prebuilt category libraries for services & rentals
-
-- **Area:** BusinessRepository / businesses — `Business.services[]` and `Business.rentals[]`
-  now carry section grouping. No repository METHOD changes: both live inside the business
-  document (`data jsonb`), so Supabase needed no code change and Path B needs none either.
-- **Supabase change:** none (nested fields ride along in the existing business document).
-- **Domain/interface:** DONE (shared) — `RentalItem` in `src/domain/types.ts` gained optional
-  `category?` / `subcategory?` (it already had `subcategoryId`). `ServiceItem` already had
-  both fields. New frontend-only module `src/domain/offeringSections.ts` holds
-  `SERVICE_SECTIONS` / `RENTAL_SECTIONS` (prebuilt libraries), `findSection`, `sortBySection`
-  and `rentalCategory` (falls back to the browse `subcategoryId` for pre-library rentals).
-- **Path B — backend/:** mirror the two optional fields on `RentalItem` in
-  `backend/src/domain/types.ts` so the backend's copy of the domain stays type-identical.
-  Nothing else — no service, router, authz or validation change; the fields are stored and
-  returned as part of the business document exactly as before.
-- **Path B — src/data/api/:** none (business objects pass straight through).
-- **DB/migration:** none — document model, no new columns.
-- **Verify:** backend `npm run typecheck` green; a business created through Path B with
-  services/rentals round-trips `category`/`subcategory` unchanged.

@@ -10,19 +10,22 @@
  * parent's active group and reappears, still under that parent, in Unsubscribed
  * (even while their siblings stay subscribed). Every child card can be renamed
  * or split off into its own standalone member.
+ *
+ * Putting a child on a bus is NOT done here — it lives in Fleet & tracking ›
+ * Assign to a vehicle, which works the same enrolment list from the vehicle's
+ * side and can fill a whole bus in one pass.
  */
 import { useMemo, useState } from 'react';
 import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
-import type { Membership, TrackedItem, Vehicle } from '@/domain/types';
+import type { Membership, User } from '@/domain/types';
 import { canAccessService } from '@/domain/access';
-import { hasModule } from '@/domain/modules';
-import { getVehicleKind } from '@/domain/catalog';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
 import {
+  Avatar,
   Button,
   Card,
   EmptyView,
@@ -34,6 +37,21 @@ import {
   Text,
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+
+/**
+ * The account a plan is billed to. `key` is a user id when they have a Localo
+ * account, else the `walkin:<name>` key the rest of the app already files
+ * account-less customers under (bills, favourites).
+ */
+interface PayingAccount {
+  key: string;
+  name: string;
+  hasAccount: boolean;
+  phone?: string;
+}
+
+/** The customer key for someone with no Localo account — matches bills. */
+const walkInKey = (name: string) => `walkin:${name.trim().toLowerCase()}`;
 
 /** All the enrolments filed under one paying account (or one standalone member). */
 interface MemberGroup {
@@ -81,31 +99,28 @@ export default function WorkspaceMembersScreen() {
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
-    // Fleet is only relevant when this business runs live tracking (a bus
-    // service). We load vehicles + assignments so each member can be put on a bus.
-    const trackingOn = hasModule(business, 'tracking');
-    const [employees, members, cancelled, requests, customers, vehicles, trackedItems] =
-      await Promise.all([
-        repos.employees.listByBusiness(business.id),
-        repos.memberships.listForBusiness(business.id),
-        repos.memberships.listCancelledForBusiness(business.id),
-        repos.memberships.listRequests(business.id),
-        repos.customers.listForBusiness(business.id),
-        trackingOn ? repos.tracking.listVehicles(business.id) : Promise.resolve([] as Vehicle[]),
-        trackingOn ? repos.tracking.listItems(business.id) : Promise.resolve([] as TrackedItem[]),
-      ]);
+    const [employees, members, cancelled, requests, customers] = await Promise.all([
+      repos.employees.listByBusiness(business.id),
+      repos.memberships.listForBusiness(business.id),
+      repos.memberships.listCancelledForBusiness(business.id),
+      repos.memberships.listRequests(business.id),
+      repos.customers.listForBusiness(business.id),
+    ]);
     const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
     const isMember = currentUser?.id === business.ownerId || !!meEmployee;
     const canAccess = canAccessService(business, meEmployee, currentUser?.id, 'members');
-    return {
-      business, isMember, canAccess, members, cancelled, requests, customers,
-      trackingOn, vehicles, trackedItems,
-    };
+    return { business, isMember, canAccess, members, cancelled, requests, customers };
   }, [businessId, currentUser?.id]);
 
-  // Add-member form (revealed from the header button).
+  // Add-member form (revealed from the header button). The payer is found by
+  // searching EVERY account by name — not just this business's existing
+  // customers — and can also be a plain name with no account at all.
   const [showAdd, setShowAdd] = useState(false);
-  const [memberCustomerKey, setMemberCustomerKey] = useState<string | null>(null);
+  const [payer, setPayer] = useState<PayingAccount | null>(null);
+  const [payerTerm, setPayerTerm] = useState('');
+  const [payerResults, setPayerResults] = useState<User[]>([]);
+  const [searchingPayer, setSearchingPayer] = useState(false);
+  const [enrolleeName, setEnrolleeName] = useState('');
   const [memberPlan, setMemberPlan] = useState('');
   const [memberPrice, setMemberPrice] = useState('');
   const [addingMember, setAddingMember] = useState(false);
@@ -116,9 +131,6 @@ export default function WorkspaceMembersScreen() {
   const [busyPayId, setBusyPayId] = useState<string | null>(null);
   // Which parent group is busy running a "Mark all paid" sweep (its key).
   const [busyGroupPay, setBusyGroupPay] = useState<string | null>(null);
-  // Which member's bus-assignment picker is open (a membership id, or `group:<key>`).
-  const [busPickerFor, setBusPickerFor] = useState<string | null>(null);
-  const [busBusy, setBusBusy] = useState(false);
 
   // Per-request accept inputs (plan name + monthly price), keyed by request id.
   const [reqPlan, setReqPlan] = useState<Record<string, string>>({});
@@ -141,7 +153,7 @@ export default function WorkspaceMembersScreen() {
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" />;
 
-  const { business, isMember, canAccess, requests, customers, trackingOn, vehicles, trackedItems } = data;
+  const { business, isMember, canAccess, requests, customers } = data;
   if (!isMember) {
     return (
       <Screen>
@@ -161,9 +173,12 @@ export default function WorkspaceMembersScreen() {
 
   const memberSince = (iso: string) => new Date(iso).toDateString().slice(4);
 
-  // Only customers with an app account can be enrolled — the plan has to
-  // reach THEIR Subscriptions tab.
-  const memberCandidates = customers.filter((c) => c.hasAccount && c.key !== 'guest');
+  // People this business already deals with — a one-tap shortcut only. The
+  // search below reaches every account on Localo, and a payer who has no
+  // account at all can simply be typed in.
+  const knownPayers: PayingAccount[] = customers
+    .filter((c) => c.key !== 'guest')
+    .map((c) => ({ key: c.key, name: c.name, hasAccount: c.hasAccount }));
 
   // A subscription request should be accepted like an order: the price is
   // already set on the business's page (its services), so the owner never
@@ -187,10 +202,41 @@ export default function WorkspaceMembersScreen() {
     setExpanded((e) => ({ ...e, [key]: !e[key] }));
   };
 
+  /** Look the typed name up across every Localo account. */
+  const searchPayer = async (next: string) => {
+    setPayerTerm(next);
+    if (next.trim().length < 2) {
+      setPayerResults([]);
+      return;
+    }
+    setSearchingPayer(true);
+    try {
+      setPayerResults(await repos.users.search(next));
+    } finally {
+      setSearchingPayer(false);
+    }
+  };
+
+  const pickPayer = (a: PayingAccount | null) => {
+    setPayer(a);
+    setPayerTerm('');
+    setPayerResults([]);
+    setMemberError(null);
+  };
+
+  const resetAddForm = () => {
+    setPayer(null);
+    setPayerTerm('');
+    setPayerResults([]);
+    setEnrolleeName('');
+    setMemberPlan('');
+    setMemberPrice('');
+    setMemberError(null);
+  };
+
   const addMember = async () => {
-    const customer = memberCandidates.find((c) => c.key === memberCustomerKey);
-    if (!customer) {
-      setMemberError('Pick a customer first — they need a Localo account.');
+    if (!payer) {
+      setMemberError('Find the account paying for this plan, or type their name.');
       return;
     }
     if (!memberPlan.trim()) {
@@ -202,19 +248,22 @@ export default function WorkspaceMembersScreen() {
       setMemberError('Enter the monthly price in ₹.');
       return;
     }
+    // A blank "who's it for" means the payer is the member themselves — the
+    // plan then has no separate enrollee, exactly like a self-enrolment. Typing
+    // the payer's own name back in counts as the same thing.
+    const enrollee = enrolleeName.trim();
+    const forSomeoneElse = !!enrollee && enrollee.toLowerCase() !== payer.name.trim().toLowerCase();
     setAddingMember(true);
     try {
       await repos.memberships.add({
         businessId: business.id,
-        customerId: customer.key,
-        customerName: customer.name,
+        customerId: payer.key,
+        customerName: payer.name,
+        enrolleeName: forSomeoneElse ? enrollee : undefined,
         planName: memberPlan.trim(),
         pricePerMonth: price,
       });
-      setMemberCustomerKey(null);
-      setMemberPlan('');
-      setMemberPrice('');
-      setMemberError(null);
+      resetAddForm();
       setShowAdd(false);
       reload();
     } finally {
@@ -282,70 +331,6 @@ export default function WorkspaceMembersScreen() {
     }
   };
 
-  // ─── Bus assignment (tracking businesses only) ──────────────────────────
-  // A member's current bus, if any: the tracked-child row we filed under their
-  // membership.
-  const assignedItemFor = (m: Membership): TrackedItem | undefined =>
-    trackedItems.find((t) => t.membershipId === m.id);
-  const vehicleName = (id?: string) => vehicles.find((v) => v.id === id)?.name;
-
-  /** Put one member on a bus (or, tapping the bus they're already on, take them
-   *  off). Upserts a tracked child filed under their membership. */
-  const assignBus = async (m: Membership, vehicleId: string, toggle = true) => {
-    setBusBusy(true);
-    try {
-      const existing = assignedItemFor(m);
-      if (existing) {
-        const next = toggle && existing.vehicleId === vehicleId ? undefined : vehicleId;
-        await repos.tracking.updateItem(existing.id, { vehicleId: next });
-      } else {
-        await repos.tracking.addItem({
-          businessId: business.id,
-          kind: 'child',
-          label: m.enrolleeName ?? m.customerName,
-          customerId: m.customerId,
-          customerName: m.customerName,
-          vehicleId,
-          membershipId: m.id,
-        });
-      }
-      reload();
-    } finally {
-      setBusBusy(false);
-    }
-  };
-
-  /** Put every child under one parent on the same bus in one tap. */
-  const assignAll = async (items: Membership[], vehicleId: string) => {
-    setBusBusy(true);
-    try {
-      for (const m of items) {
-        if (m.standalone) continue;
-        await assignBusNoReload(m, vehicleId);
-      }
-      reload();
-    } finally {
-      setBusBusy(false);
-      setBusPickerFor(null);
-    }
-  };
-  // Same as assignBus but without its own reload/busy — used inside assignAll's loop.
-  const assignBusNoReload = async (m: Membership, vehicleId: string) => {
-    const existing = assignedItemFor(m);
-    if (existing) {
-      await repos.tracking.updateItem(existing.id, { vehicleId });
-    } else {
-      await repos.tracking.addItem({
-        businessId: business.id,
-        kind: 'child',
-        label: m.enrolleeName ?? m.customerName,
-        customerId: m.customerId,
-        customerName: m.customerName,
-        vehicleId,
-        membershipId: m.id,
-      });
-    }
-  };
   const approvePay = async (paymentId: string) => {
     setBusyPayId(paymentId);
     try {
@@ -538,47 +523,7 @@ export default function WorkspaceMembersScreen() {
             </>
           )}
         </View>
-
-        {trackingOn && vehicles.length > 0 && !item.standalone && !cancelled
-          ? renderBusRow(item)
-          : null}
       </Card>
-    );
-  };
-
-  /** The "🚌 On Bus 3 ▾" assign line + inline vehicle picker on a member card. */
-  const renderBusRow = (item: Membership) => {
-    const assigned = assignedItemFor(item);
-    const onBus = vehicleName(assigned?.vehicleId);
-    const open = busPickerFor === item.id;
-    return (
-      <View style={[styles.busBlock, { borderTopColor: colors.border }]}>
-        <Pressable
-          onPress={() => setBusPickerFor(open ? null : item.id)}
-          style={styles.busHeader}
-          hitSlop={6}
-        >
-          <Text variant="caption" weight="semibold" tone={onBus ? 'brand' : 'accent'}>
-            🚌 {onBus ? `On ${onBus}` : 'Assign a bus'}
-          </Text>
-          <Text variant="caption" tone="muted">
-            {open ? '▾' : '▸'}
-          </Text>
-        </Pressable>
-        {open ? (
-          <View style={styles.chips}>
-            {vehicles.map((v) => (
-              <Tag
-                key={v.id}
-                label={v.name}
-                icon={getVehicleKind(v.kind).icon}
-                selected={assigned?.vehicleId === v.id}
-                onPress={() => !busBusy && assignBus(item, v.id)}
-              />
-            ))}
-          </View>
-        ) : null}
-      </View>
     );
   };
 
@@ -591,7 +536,6 @@ export default function WorkspaceMembersScreen() {
     );
     const activeItems = items.filter((i) => i.status === 'active');
     const cancelledItems = items.filter((i) => i.status === 'cancelled');
-    const activeAssignable = activeItems.filter((i) => !i.standalone);
     // Billed children who still owe this month — the ones "Mark all paid" clears.
     const unpaidActive = activeItems.filter(
       (i) => !i.standalone && i.payment && i.payment.status !== 'paid',
@@ -626,7 +570,11 @@ export default function WorkspaceMembersScreen() {
                 re-enroll the whole family at once. */}
             <View style={styles.groupActions}>
               <Pressable
-                onPress={() => router.push(`/member-account/${businessId}/${g.key}` as Href)}
+                // Keys aren't always uuids — a `walkin:…` payer key carries
+                // spaces, so it has to be encoded into the path.
+                onPress={() =>
+                  router.push(`/member-account/${businessId}/${encodeURIComponent(g.key)}` as Href)
+                }
                 hitSlop={6}
               >
                 <Text variant="caption" tone="accent" weight="semibold">
@@ -663,44 +611,7 @@ export default function WorkspaceMembersScreen() {
                 </Pressable>
               ) : null}
             </View>
-            {trackingOn && vehicles.length > 0 && activeAssignable.length > 1
-              ? renderGroupBusRow(g, activeAssignable)
-              : null}
             {items.map((it) => renderLeaf(it))}
-          </View>
-        ) : null}
-      </View>
-    );
-  };
-
-  /** "Put everyone under this parent on one bus" — one tap for a whole family. */
-  const renderGroupBusRow = (g: MemberGroup, assignItems: Membership[]) => {
-    const pickerKey = `group:${g.key}`;
-    const open = busPickerFor === pickerKey;
-    return (
-      <View style={[styles.busBlock, styles.groupBusBlock, { borderColor: colors.border }]}>
-        <Pressable
-          onPress={() => setBusPickerFor(open ? null : pickerKey)}
-          style={styles.busHeader}
-          hitSlop={6}
-        >
-          <Text variant="caption" weight="semibold" tone="accent">
-            🚌 Put everyone on one bus
-          </Text>
-          <Text variant="caption" tone="muted">
-            {open ? '▾' : '▸'}
-          </Text>
-        </Pressable>
-        {open ? (
-          <View style={styles.chips}>
-            {vehicles.map((v) => (
-              <Tag
-                key={v.id}
-                label={v.name}
-                icon={getVehicleKind(v.kind).icon}
-                onPress={() => !busBusy && assignAll(assignItems, v.id)}
-              />
-            ))}
           </View>
         ) : null}
       </View>
@@ -732,47 +643,130 @@ export default function WorkspaceMembersScreen() {
       {showAdd ? (
         <Card style={styles.addCard}>
           <Text weight="semibold">➕ Add a member</Text>
-          {memberCandidates.length === 0 ? (
-            <Text variant="caption" tone="muted" style={styles.hintTop}>
-              No enrollable customers yet — someone has to order, book, chat or call first (and have a
-              Localo account).
-            </Text>
+
+          {/* Who pays — any Localo account (searched by name), or a name with
+              no account at all. Their children hang under this one account. */}
+          <Text variant="caption" tone="muted" style={styles.hintTop}>
+            Whose account is this on?
+          </Text>
+          {payer ? (
+            <Card style={[styles.selected, { borderColor: colors.brand }]}>
+              <View style={styles.selectedRow}>
+                <Avatar name={payer.name} size={36} />
+                <View style={styles.flex}>
+                  <Text weight="semibold">{payer.name}</Text>
+                  <Text variant="caption" tone="muted">
+                    {payer.hasAccount
+                      ? `Has a Localo account${payer.phone ? ` · ${payer.phone}` : ''} — the plan shows in their Subscriptions.`
+                      : 'No Localo account — tracked and billed here by name only.'}
+                  </Text>
+                </View>
+                <Text tone="brand" weight="semibold" onPress={() => pickPayer(null)}>
+                  Change
+                </Text>
+              </View>
+            </Card>
           ) : (
             <>
-              <Text variant="caption" tone="muted" style={styles.hintTop}>
-                Who is it for?
-              </Text>
-              <View style={styles.chips}>
-                {memberCandidates.map((c) => (
-                  <Tag
-                    key={c.key}
-                    label={c.name}
-                    selected={memberCustomerKey === c.key}
-                    onPress={() => setMemberCustomerKey(memberCustomerKey === c.key ? null : c.key)}
-                  />
-                ))}
-              </View>
+              {knownPayers.length > 0 ? (
+                <View style={styles.chips}>
+                  {knownPayers.map((c) => (
+                    <Tag key={c.key} label={c.name} onPress={() => pickPayer(c)} />
+                  ))}
+                </View>
+              ) : null}
               <Input
-                label="Plan"
-                placeholder="e.g. Monthly membership, Morning yoga batch"
-                value={memberPlan}
-                onChangeText={setMemberPlan}
+                placeholder="Search everyone by name, or type a new one"
+                value={payerTerm}
+                onChangeText={searchPayer}
               />
-              <Input
-                label="Price per month (₹)"
-                placeholder="e.g. 1200"
-                value={memberPrice}
-                onChangeText={(t) => setMemberPrice(sanitizePriceInput(t))}
-                keyboardType="numeric"
-              />
-              {memberError ? (
-                <Text variant="caption" tone="danger" style={styles.error}>
-                  {memberError}
+              {searchingPayer ? (
+                <Text variant="caption" tone="muted" style={styles.hintTop}>
+                  Searching…
                 </Text>
               ) : null}
-              <Button title="Add member" onPress={addMember} loading={addingMember} />
+              {payerResults.length > 0 ? (
+                <Card style={styles.results}>
+                  {payerResults.map((u, i) => (
+                    <Pressable
+                      key={u.id}
+                      onPress={() =>
+                        pickPayer({ key: u.id, name: u.name, hasAccount: true, phone: u.phone })
+                      }
+                      style={[
+                        styles.resultRow,
+                        i < payerResults.length - 1 && {
+                          borderBottomColor: colors.border,
+                          borderBottomWidth: StyleSheet.hairlineWidth,
+                        },
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Enrol under ${u.name}`}
+                    >
+                      <Avatar name={u.name} size={32} />
+                      <View style={styles.flex}>
+                        <Text weight="medium">{u.name}</Text>
+                        <Text variant="caption" tone="muted">
+                          {u.phone ?? 'Localo account'}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                </Card>
+              ) : null}
+              {payerTerm.trim().length >= 2 ? (
+                <Button
+                  title={`＋ Add “${payerTerm.trim()}” without an account`}
+                  variant="secondary"
+                  onPress={() =>
+                    pickPayer({
+                      key: walkInKey(payerTerm),
+                      name: payerTerm.trim(),
+                      hasAccount: false,
+                    })
+                  }
+                  style={styles.walkIn}
+                />
+              ) : (
+                <Text variant="caption" tone="muted" style={styles.hintTop}>
+                  Type at least 2 letters to find an account — or add someone who isn’t on Localo yet.
+                </Text>
+              )}
             </>
           )}
+
+          {/* Who actually attends — a child, or the account holder themselves. */}
+          <Input
+            label="Who is it for?"
+            placeholder="e.g. their child’s name"
+            value={enrolleeName}
+            onChangeText={setEnrolleeName}
+          />
+          <Text variant="caption" tone="muted" style={styles.hintTop}>
+            {payer
+              ? `Leave blank if the plan is for ${payer.name} themselves.`
+              : 'Leave blank if the plan is for the account holder themselves.'}
+          </Text>
+
+          <Input
+            label="Plan"
+            placeholder="e.g. Monthly membership, Morning yoga batch"
+            value={memberPlan}
+            onChangeText={setMemberPlan}
+          />
+          <Input
+            label="Price per month (₹)"
+            placeholder="e.g. 1200"
+            value={memberPrice}
+            onChangeText={(t) => setMemberPrice(sanitizePriceInput(t))}
+            keyboardType="numeric"
+          />
+          {memberError ? (
+            <Text variant="caption" tone="danger" style={styles.error}>
+              {memberError}
+            </Text>
+          ) : null}
+          <Button title="Add member" onPress={addMember} loading={addingMember} />
         </Card>
       ) : null}
 
@@ -950,19 +944,17 @@ const styles = StyleSheet.create({
   },
   renameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   renameBtn: { paddingHorizontal: spacing.xs },
-  busBlock: { marginTop: spacing.md, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth },
-  busHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  groupBusBlock: {
-    marginTop: 0,
-    marginBottom: spacing.sm,
-    paddingTop: spacing.sm,
-    paddingHorizontal: spacing.sm,
-    borderTopWidth: 0,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    borderStyle: 'dashed',
-  },
   addCard: { marginBottom: spacing.md },
+  selected: { marginBottom: spacing.sm, borderWidth: 1 },
+  selectedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  results: { marginBottom: spacing.sm, paddingVertical: 0 },
+  resultRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  walkIn: { marginBottom: spacing.sm },
   hintTop: { marginTop: spacing.xs, marginBottom: spacing.sm },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   error: { marginBottom: spacing.sm },

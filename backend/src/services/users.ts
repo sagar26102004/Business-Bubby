@@ -17,10 +17,11 @@ export const userService = {
   async search(term: string): Promise<User[]> {
     const q = term.trim().toLowerCase();
     if (!q) return [];
-    // Small directory — filter public profiles by name in JS.
-    return (await this.list()).filter(
-      (u) => u.isProfilePublic && u.name.toLowerCase().includes(q),
-    );
+    // Small directory — filter by name in JS. Every NAMED account is reachable:
+    // search is how a business links a teammate or picks who to bill, and
+    // `isProfilePublic` only governs whether an employee profile page is
+    // tappable. Anonymous guests have an empty name, so they never match.
+    return (await this.list()).filter((u) => !!u.name && u.name.toLowerCase().includes(q));
   },
 
   async update(id: string, patch: Partial<User>): Promise<User> {

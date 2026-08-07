@@ -1,10 +1,12 @@
 /**
- * Workspace › Fleet & live location — the driver's live-share toggle, the
- * live fleet map, and (owner) the link to manage vehicles & tracked items.
- * Members only.
+ * Workspace › Fleet & live location — everything the fleet needs in ONE place:
+ * the driver's live-share toggle, the live fleet map, and (owner) the vehicle
+ * and tracked-item screens. There used to be a second "Manage fleet & tracking"
+ * hub in between that only repeated these links (and a duplicate map button);
+ * its tiles now live here directly. Members only.
  */
 import { Alert, StyleSheet, Switch, View } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { getVehicleKind } from '@/domain/catalog';
 import { canAccessService } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -22,9 +24,10 @@ export default function WorkspaceFleetScreen() {
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
-    const [employees, vehicles, sharing] = await Promise.all([
+    const [employees, vehicles, items, sharing] = await Promise.all([
       repos.employees.listByBusiness(business.id),
       repos.tracking.listVehicles(business.id),
+      repos.tracking.listItems(business.id),
       currentUser
         ? repos.tracking.isSharing(business.id, currentUser.id)
         : Promise.resolve(false),
@@ -33,14 +36,14 @@ export default function WorkspaceFleetScreen() {
     const isOwner = currentUser?.id === business.ownerId;
     const isMember = isOwner || !!meEmployee;
     const canAccess = canAccessService(business, meEmployee, currentUser?.id, 'fleet');
-    return { business, vehicles, sharing, meEmployee, isOwner, isMember, canAccess };
+    return { business, vehicles, items, sharing, meEmployee, isOwner, isMember, canAccess };
   }, [businessId, currentUser?.id]);
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" />;
 
-  const { business, vehicles, sharing, meEmployee, isOwner, isMember, canAccess } = data;
+  const { business, vehicles, items, sharing, meEmployee, isOwner, isMember, canAccess } = data;
   if (!isMember) {
     return (
       <Screen>
@@ -107,6 +110,7 @@ export default function WorkspaceFleetScreen() {
         </Card>
       ) : null}
 
+      {/* The one and only live-map entry point. */}
       {vehicles.length > 0 ? (
         <Button title="🗺️ Live fleet map" onPress={() => router.push(`/track/${business.id}`)} />
       ) : (
@@ -115,15 +119,67 @@ export default function WorkspaceFleetScreen() {
         </Text>
       )}
 
+      {/* Owner tools, straight on this page — no "Manage fleet" hop. */}
       {isOwner ? (
-        <Button
-          title="🚌 Manage fleet & tracking"
-          variant="secondary"
-          onPress={() => router.push(`/fleet/${business.id}`)}
-          style={styles.manageBtn}
-        />
+        <View style={styles.tiles}>
+          <HubTile
+            icon="🚌"
+            label="Vehicles"
+            sub={
+              vehicles.length
+                ? `${vehicles.length} vehicle${vehicles.length === 1 ? '' : 's'} · add, assign drivers, journeys`
+                : 'Add your first vehicle'
+            }
+            onPress={() => router.push(`/fleet/${business.id}/vehicles` as Href)}
+          />
+          <HubTile
+            icon="📌"
+            label="Assign to a vehicle"
+            sub="Pick a bus, search a student or parcel, tap to put them aboard"
+            onPress={() => router.push(`/fleet/${business.id}/assign` as Href)}
+          />
+          <HubTile
+            icon="🧒"
+            label="Tracked for customers"
+            sub={
+              items.length
+                ? `${items.length} aboard · children & goods, by vehicle`
+                : 'Register a child or goods to a customer'
+            }
+            onPress={() => router.push(`/fleet/${business.id}/items` as Href)}
+          />
+        </View>
       ) : null}
     </Screen>
+  );
+}
+
+function HubTile({
+  icon,
+  label,
+  sub,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  sub: string;
+  onPress: () => void;
+}) {
+  return (
+    <Card onPress={onPress} style={styles.tile}>
+      <View style={styles.tileRow}>
+        <Text style={styles.tileIcon}>{icon}</Text>
+        <View style={styles.flex}>
+          <Text weight="semibold">{label}</Text>
+          <Text variant="caption" tone="muted">
+            {sub}
+          </Text>
+        </View>
+        <Text tone="muted" style={styles.chev}>
+          ›
+        </Text>
+      </View>
+    </Card>
   );
 }
 
@@ -136,5 +192,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: spacing.md,
   },
-  manageBtn: { marginTop: spacing.md },
+  flex: { flex: 1 },
+  tiles: { marginTop: spacing.lg },
+  tile: { marginBottom: spacing.md },
+  tileRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  tileIcon: { fontSize: 28 },
+  chev: { fontSize: 22 },
 });
