@@ -39,6 +39,7 @@ import type {
 import { getVehicleKind } from '@/domain/catalog';
 import { applyCatalogEntries, catalogKey, isCodeCatalogName } from '@/domain/catalogEntries';
 import { normalizeRole } from '@/domain/roles';
+import { isNotificationMuted } from '@/domain/notifications';
 import type {
   AuthRepository,
   BillRepository,
@@ -893,17 +894,26 @@ class MockChatRepository implements ChatRepository {
 }
 
 class MockNotificationRepository implements NotificationRepository {
+  /** Alert families this recipient has silenced (see domain/notifications.ts). */
+  private mutesOf(recipientId: string): string[] | undefined {
+    return users.find((u) => u.id === recipientId)?.mutedNotifications;
+  }
+
   async listForUser(recipientId: string): Promise<AppNotification[]> {
     await delay(60);
+    const mutes = this.mutesOf(recipientId);
     return notifications
-      .filter((n) => n.recipientId === recipientId)
+      .filter((n) => n.recipientId === recipientId && !isNotificationMuted(n, mutes))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map(clone);
   }
 
   async unreadCount(recipientId: string): Promise<number> {
     await delay(30);
-    return notifications.filter((n) => n.recipientId === recipientId && !n.read).length;
+    const mutes = this.mutesOf(recipientId);
+    return notifications.filter(
+      (n) => n.recipientId === recipientId && !n.read && !isNotificationMuted(n, mutes),
+    ).length;
   }
 
   async markRead(id: string): Promise<void> {
@@ -1769,6 +1779,9 @@ class MockReviewRepository implements ReviewRepository {
 /** How long a call rings before it counts as missed. */
 const RING_TIMEOUT_MS = 30_000;
 
+/** Default window of the workspace call log: the last 7 days. */
+const CALL_LOG_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Expire calls that rang out. Run lazily at the top of every call method. */
 function sweepCalls(): void {
   const now = Date.now();
@@ -1956,6 +1969,19 @@ class MockCallRepository implements CallRepository {
         c.participants.some((p) => p.side === 'business' && p.id === userId && p.state === 'ringing'),
     );
     return found ? clone(found) : null;
+  }
+
+  async listForBusiness(businessId: string, sinceIso?: string): Promise<Call[]> {
+    await delay(80);
+    // Sweep first so a call that rang out shows up as "missed" in the log.
+    sweepCalls();
+    const since = sinceIso
+      ? new Date(sinceIso).getTime()
+      : Date.now() - CALL_LOG_WINDOW_MS;
+    return calls
+      .filter((c) => c.businessId === businessId && new Date(c.startedAt).getTime() >= since)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .map(clone);
   }
 
   async getAudioToken(): Promise<{ token: string; url: string }> {

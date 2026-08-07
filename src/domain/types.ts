@@ -72,6 +72,15 @@ export interface User {
    * sign-up. Absent/false for ordinary accounts.
    */
   isAnonymous?: boolean;
+  /**
+   * Alert families this person has silenced, as `"<businessId>:<category>"`
+   * keys (or `"*:<category>"` to silence that family everywhere) — see
+   * `domain/notifications.ts`. A muted alert never reaches the Alerts tab or
+   * the unread badge; the underlying work is still there to look at in the
+   * workspace (orders, call log, chats), which is the point: a busy cafe owner
+   * silences order pings without losing a single order.
+   */
+  mutedNotifications?: string[];
 }
 
 /**

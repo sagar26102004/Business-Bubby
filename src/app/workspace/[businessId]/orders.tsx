@@ -85,12 +85,10 @@ export default function WorkspaceOrdersScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: vocab.requestsTitle }} />
 
-      {/* Members can take an order at the counter, on a customer's behalf. */}
-      <Button
-        title={`➕ Take a ${vocab.requestNoun}`}
-        onPress={() => router.push(`/order/new/${business.id}`)}
-        style={styles.takeBtn}
-      />
+      {/* No "take an order at the counter" button here: a walk-in is billed
+          directly from Billing › Bill a customer, which is the same job in one
+          step instead of two (order → accept → bill). Orders on this desk are
+          the ones customers placed themselves. */}
 
       {seats.length > 0 ? (
         <Section
@@ -230,7 +228,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 const styles = StyleSheet.create({
   subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
-  takeBtn: { marginBottom: spacing.xl },
   tableFloor: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tableCell: {
     width: 76,

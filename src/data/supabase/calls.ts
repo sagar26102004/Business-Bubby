@@ -10,6 +10,9 @@ import { sb, uuid, nowIso, uuidOrNull, notify } from './shared';
 
 const RING_TIMEOUT_MS = 30_000;
 
+/** Default window of the workspace call log: the last 7 days. */
+const CALL_LOG_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
  * Pull the real `{ error }` message out of a supabase-js FunctionsHttpError
  * `.context`, by CAPABILITY not by type. The context may be a web `Response`, a
@@ -252,6 +255,23 @@ export function createSupabaseCalls(): CallRepository {
         }
       }
       return null;
+    },
+
+    async listForBusiness(businessId: string, sinceIso?: string): Promise<Call[]> {
+      const since = sinceIso ?? new Date(Date.now() - CALL_LOG_WINDOW_MS).toISOString();
+      // `created_at` is a real column (the jsonb `startedAt` is written at the
+      // same moment), so the window is filtered in SQL. RLS already limits the
+      // rows to this business's members and the caller themselves.
+      const { data, error } = await sb()
+        .from('calls')
+        .select('data')
+        .eq('business_id', businessId)
+        .gte('created_at', since)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      // Sweep so a call that rang out reads as "missed" in the log.
+      const rows = await Promise.all((data ?? []).map((r) => sweepOne(r.data as Call)));
+      return rows.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     },
 
     async getAudioToken(callId: string): Promise<{ token: string; url: string }> {

@@ -470,6 +470,12 @@ export interface CallRepository {
    */
   getIncomingForUser(userId: string): Promise<Call | null>;
   /**
+   * Every call this business received on or after `sinceIso` (defaults to the
+   * last 7 days), newest first — answered, missed and declined alike. Powers
+   * the workspace call log. Members only.
+   */
+  listForBusiness(businessId: string, sinceIso?: string): Promise<Call[]>;
+  /**
    * Mint a short-lived access token so a joined participant can connect to the
    * call's REAL audio room (LiveKit; room = `call_<callId>`, identity = the
    * user id). Returns the token plus the media-server URL to connect to. The

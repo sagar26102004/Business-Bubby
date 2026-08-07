@@ -64,7 +64,11 @@ export default function ChatsScreen() {
 
   const load = useCallback(() => {
     repos.chat.listCustomerThreads(participantId).then(setThreads);
-    repos.notifications.listForUser(participantId).then(setItems);
+    // Alerts is an inbox, not a history: once an alert is opened (or marked
+    // read) it leaves the list, so what's left is only what still needs you.
+    repos.notifications
+      .listForUser(participantId)
+      .then((list) => setItems(list.filter((n) => !n.read)));
   }, [repos, participantId]);
 
   // Refresh whenever the tab regains focus.
@@ -160,11 +164,22 @@ export default function ChatsScreen() {
       <Tabs.Screen
         options={{
           headerRight:
-            segment === 'alerts' && hasUnread
+            segment === 'alerts'
               ? () => (
-                  <Text tone="accent" weight="semibold" style={styles.headerAction} onPress={markAll}>
-                    Mark all read
-                  </Text>
+                  <View style={styles.headerActions}>
+                    {hasUnread ? (
+                      <Text tone="accent" weight="semibold" onPress={markAll}>
+                        Mark all read
+                      </Text>
+                    ) : null}
+                    {/* Too many pings? Silence whole families here. */}
+                    <Text
+                      style={styles.headerIcon}
+                      onPress={() => router.push('/notification-settings')}
+                    >
+                      🔕
+                    </Text>
+                  </View>
                 )
               : undefined,
         }}
@@ -211,8 +226,8 @@ export default function ChatsScreen() {
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <EmptyView
-              title="No notifications yet"
-              subtitle="When a business replies to your chat, it shows up here."
+              title="You’re all caught up"
+              subtitle="New alerts land here and leave once you’ve opened them."
             />
           }
           renderItem={({ item }) => (
@@ -244,7 +259,13 @@ export default function ChatsScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerAction: { marginRight: spacing.lg },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginRight: spacing.lg,
+  },
+  headerIcon: { fontSize: 18 },
   segments: {
     flexDirection: 'row',
     margin: spacing.lg,

@@ -229,6 +229,15 @@ export default function WorkspaceScreen() {
           sub: hasChatAccess ? 'Read & reply to messages' : 'You can read as a manager',
           href: `/inbox/${business.id}` as Href,
         },
+        // The other half of "who tried to reach us?": every voice call of the
+        // last 7 days, missed ones included. Same audience as the chats tile,
+        // plus the members who actually answer calls.
+        (hasChatAccess || takesCalls || canManageAll) && {
+          icon: '📞',
+          label: 'Call log',
+          sub: 'Calls & missed calls · last 7 days',
+          href: `${base}/calls` as Href,
+        },
         // "Customers" = everyone who ever touched the business (chats, orders,
         // calls, bills). "Members" = the subset on a paid monthly plan. For a
         // membership business the two look alike, so spell out the difference.
@@ -250,6 +259,14 @@ export default function WorkspaceScreen() {
             : 'Paid monthly plans',
           badge: memberRequests.length || undefined,
           href: `${base}/members` as Href,
+        },
+        // Every member's own alert switchboard — mute the families that buzz
+        // too much without losing the work behind them.
+        {
+          icon: '🔔',
+          label: 'Manage notifications',
+          sub: 'Mute orders, chats, calls & more for this business',
+          href: `${base}/notifications` as Href,
         },
       ],
     },
