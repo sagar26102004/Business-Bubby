@@ -25,8 +25,14 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
-/** Must match CALL_CHANNEL_ID in src/features/notifications/push.ts. */
-const CALL_CHANNEL_ID = 'calls';
+/**
+ * Must match CALL_CHANNEL_ID in src/features/notifications/push.ts. Versioned
+ * because Android freezes a channel's sound at creation — bumping the id there
+ * without bumping it here sends every ring to a channel that no longer exists.
+ */
+const CALL_CHANNEL_ID = 'calls_v2';
+/** Must match CALL_CATEGORY_ID — this is what puts Accept/Decline on the popup. */
+const CALL_CATEGORY_ID = 'incoming_call';
 
 interface Participant {
   id: string;
@@ -108,6 +114,13 @@ Deno.serve(async (req: Request) => {
       // `high` is what lets Android deliver to an app that isn't running.
       priority: 'high',
       channelId: CALL_CHANNEL_ID,
+      // Attaches the ACCEPT / DECLINE buttons registered on the device. Without
+      // this the notification is just a banner you have to open the app to act
+      // on — which is the whole thing we're fixing.
+      categoryId: CALL_CATEGORY_ID,
+      // Keep it on screen until it's dealt with, rather than sliding away
+      // silently like an ordinary alert.
+      sticky: true,
       // A ring is worthless once it's been answered elsewhere or timed out;
       // the app's own ring window is 30s.
       ttl: 30,

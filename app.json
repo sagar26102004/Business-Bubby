@@ -48,7 +48,10 @@
       [
         "expo-notifications",
         {
-          "color": "#141414"
+          "color": "#141414",
+          "sounds": [
+            "./assets/call-ringtone.wav"
+          ]
         }
       ]
     ],
