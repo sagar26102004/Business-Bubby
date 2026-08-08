@@ -108,24 +108,33 @@ Deno.serve(async (req: Request) => {
 
     const messages = tokens.map((to) => ({
       to,
-      title: `📞 ${call.customerName}`,
-      body: `Incoming call for ${call.businessName}`,
-      sound: 'default',
+      // ⚠️ DELIBERATELY NO title/body — this is a DATA-ONLY message.
+      //
+      // A push carrying title/body makes Android render its own plain banner,
+      // which cannot be restyled: no avatar, no coloured Answer/Decline pills,
+      // and it collapses after a few seconds. Sending data only means Android
+      // draws nothing and instead wakes the app's background task, which posts
+      // the real system CallStyle popup (see src/features/notifications/
+      // incomingCallTask.ts). Adding a title here silently reverts the feature.
+      //
       // `high` is what lets Android deliver to an app that isn't running.
       priority: 'high',
       channelId: CALL_CHANNEL_ID,
-      // Attaches the ACCEPT / DECLINE buttons registered on the device. Without
-      // this the notification is just a banner you have to open the app to act
-      // on — which is the whole thing we're fixing.
       categoryId: CALL_CATEGORY_ID,
-      // Keep it on screen until it's dealt with, rather than sliding away
-      // silently like an ordinary alert.
-      sticky: true,
       // A ring is worthless once it's been answered elsewhere or timed out;
       // the app's own ring window is 30s.
       ttl: 30,
-      // PushRegistrar reads this to open the right call on tap.
-      data: { callId: call.id, kind: 'incoming_call' },
+      // Everything the popup renders travels here, because the woken app has no
+      // session yet and cannot look the call up before it needs to ring.
+      data: {
+        callId: call.id,
+        kind: 'incoming_call',
+        callerName: call.customerName,
+        businessName: call.businessName,
+      },
+      // iOS needs this flag to be woken for a content-only push at all. Harmless
+      // on Android, and iOS calls aren't wired up yet (no PushKit/CallKit).
+      _contentAvailable: true,
     }));
 
     const res = await fetch(EXPO_PUSH_URL, {

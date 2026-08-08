@@ -8,7 +8,7 @@
  * The screen polls CallRepository — the mock stand-in for a realtime signaling
  * channel. Audio itself is simulated until the WebRTC backend is wired in.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Call, CallParticipant } from '@/domain/types';
@@ -35,7 +35,10 @@ const STATUS_LABEL: Record<Call['status'], string> = {
 };
 
 export default function CallSessionScreen() {
-  const { callId } = useLocalSearchParams<{ callId: string }>();
+  // `answer=1` means we got here from the ANSWER pill on the system call
+  // notification — the user has already said yes, so joining is not something
+  // to ask them a second time.
+  const { callId, answer } = useLocalSearchParams<{ callId: string; answer?: string }>();
   const repos = useRepositories();
   const router = useRouter();
   const colors = useColors();
@@ -75,6 +78,22 @@ export default function CallSessionScreen() {
   const meLive = call?.participants.find((p) => p.id === myId);
   const callLive = call ? call.status === 'ringing' || call.status === 'active' : false;
   const audio = useCallAudio(callId, meLive?.state === 'joined' && callLive, muted);
+
+  // Answered from the notification: join as soon as the call loads. Guarded by
+  // a ref rather than state so a re-render mid-request can't fire a second join.
+  const autoJoined = useRef(false);
+  useEffect(() => {
+    if (answer !== '1' || autoJoined.current) return;
+    if (!call || !callLive || meLive?.state !== 'ringing') return;
+    autoJoined.current = true;
+    repos.calls
+      .join(callId, myId)
+      .then(setCall)
+      .catch(() => {
+        // Rang out or was answered by a teammate while the app was starting —
+        // the polled state below already shows the truth.
+      });
+  }, [answer, call, callLive, meLive?.state, repos, callId, myId]);
 
   if (loadError) return <ErrorView message={loadError} />;
   if (!call) return <LoadingView />;

@@ -19,6 +19,10 @@ import { router } from 'expo-router';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import type { Repositories } from '@/data/repositories';
 import { configureNotificationHandler, getPushToken } from './push';
+// Importing for effect: the task must be DEFINED at module scope, because a
+// headless launch for a background notification runs the module graph and
+// nothing else — there is no React tree to define it from.
+import { registerIncomingCallTask } from './incomingCallTask';
 
 configureNotificationHandler();
 
@@ -53,6 +57,8 @@ export function PushRegistrar() {
     }
 
     (async () => {
+      // Route background call pushes to the task that draws the system popup.
+      await registerIncomingCallTask();
       const token = await getPushToken();
       if (!active || !token) return;
       try {

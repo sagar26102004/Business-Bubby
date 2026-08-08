@@ -1,0 +1,26 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.callnotification'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.callnotification"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // NotificationCompat.CallStyle landed in androidx.core 1.9.0. React Native
+  // already pulls a newer core in, and Gradle resolves to the HIGHEST version
+  // in the graph, so naming a floor here can only guarantee the API exists —
+  // it can never downgrade what RN picked.
+  implementation "androidx.core:core-ktx:1.13.1"
+}

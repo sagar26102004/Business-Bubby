@@ -10,13 +10,14 @@
  * push notification — the real backend swaps the poll for a push + CallKeep so
  * the phone rings even when the app is closed, without touching this UI.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AppState, Platform, Pressable, StyleSheet, Vibration, View } from 'react-native';
 import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { router } from 'expo-router';
 import type { Call } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { Avatar, Text } from '@/components/ui';
+import { dismissIncomingCall } from '../../../modules/call-notification';
 import { palette, radius, spacing, useColors } from '@/theme/theme';
 
 const POLL_MS = 2000;
@@ -78,6 +79,21 @@ export function IncomingCallGate() {
   // banner is a soft nudge and stays silent.
   const isRinging = !!call && call.status === 'ringing' && call.id !== dismissedId;
   const player = useAudioPlayer(RINGTONE);
+
+  // Clear the SYSTEM call popup (posted by the background task while the app
+  // was closed) as soon as this call stops ringing — answered here, answered by
+  // a teammate, cancelled, or rang out. Without this the phone would keep
+  // showing "incoming call" for a call that no longer exists. Keyed on the id
+  // so it fires on the transition, not on every poll.
+  const poppedId = useRef<string | null>(null);
+  useEffect(() => {
+    if (isRinging && call) {
+      poppedId.current = call.id;
+    } else if (poppedId.current) {
+      void dismissIncomingCall(poppedId.current);
+      poppedId.current = null;
+    }
+  }, [isRinging, call?.id]);
 
   useEffect(() => {
     if (!isRinging) return;

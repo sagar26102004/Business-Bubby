@@ -37,6 +37,13 @@ const LEGACY_CALL_CHANNEL_ID = 'calls';
 export const CALL_CATEGORY_ID = 'incoming_call';
 
 /**
+ * How long a call rings. MUST match RING_TIMEOUT_MS in the call repositories —
+ * it's the `setTimeoutAfter` on the native popup, so a value that's too long
+ * leaves a phantom "incoming call" on screen after the call is already dead.
+ */
+export const CALL_RING_MS = 30_000;
+
+/**
  * Show the alert even when the app happens to be in the FOREGROUND. Android's
  * default is to suppress it, which would mean a call arriving while you're on
  * another screen makes no sound at all.

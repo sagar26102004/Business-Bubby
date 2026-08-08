@@ -1,0 +1,29 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+    Lets the incoming-call notification take over a LOCKED screen instead of
+    sitting silently behind the lock. On Android 14+ this is granted at install
+    only to apps whose core function is calling or alarms; Localo qualifies
+    (in-app voice calls), but it must be declared to Google Play. Without the
+    grant nothing breaks — Android simply demotes it to a heads-up banner.
+  -->
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+  <application>
+    <!--
+      Handles the Decline pill without opening the app. Not exported: only our
+      own PendingIntent may trigger it, so no other app can dismiss a user's
+      incoming call.
+    -->
+    <!--
+      FULLY QUALIFIED on purpose. A relative ".CallActionReceiver" is resolved
+      against a package name at manifest-merge time, and this library manifest
+      is merged into an app whose namespace is com.localo.app — if it ever
+      resolved against that, Decline would throw ClassNotFoundException at the
+      moment someone pressed it, with nothing failing at build time to warn us.
+    -->
+    <receiver
+      android:name="expo.modules.callnotification.CallActionReceiver"
+      android:exported="false" />
+  </application>
+</manifest>
