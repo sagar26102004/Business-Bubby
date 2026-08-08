@@ -43,6 +43,13 @@
         {
           "microphonePermission": "Localo uses your microphone for in-app voice calls with businesses."
         }
+      ],
+      "expo-audio",
+      [
+        "expo-notifications",
+        {
+          "color": "#141414"
+        }
       ]
     ],
     "experiments": {
@@ -75,7 +82,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"

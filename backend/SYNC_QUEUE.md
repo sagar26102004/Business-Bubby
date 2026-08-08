@@ -356,3 +356,78 @@ re-derivation from the Supabase diff is required:
   re-read the order and confirm the stored price is ₹120.
 
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
+
+---
+
+## [SYNC-017] Voice-call ring timeout must use the SERVER clock, not the device's
+
+- **Area:** CallRepository / calls
+- **Supabase change:** `src/data/supabase/calls.ts` — `sweepOne(call, createdAt?)` now measures
+  a call's age from the row's **server `created_at`** against a **server-anchored now**, instead
+  of `data.startedAt` vs the reader's `Date.now()`. Every read path (`getById`, `join`,
+  `decline`, `leave`, `getIncomingForUser`, `listForBusiness`) selects `created_at` and passes
+  it; `getById`/`getIncomingForUser`/`listForBusiness` `await syncServerClock()` first.
+  New helpers in `src/data/supabase/shared.ts`: `syncServerClock()` / `serverNow()` (offset
+  learned from the `server_now()` RPC, falling back to the HTTP `Date` header, then the local
+  clock; 5-min refresh, 15s retry floor). `src/lib/supabase.ts` now exports `SUPABASE_URL` /
+  `SUPABASE_ANON_KEY`.
+- **Why:** the caller stamped `startedAt` with ITS clock and every business member's poll judged
+  it against THEIRS. A phone running ~39s fast expired brand-new calls on its first poll — the
+  caller saw "No answer" in ~2s and that phone never rang (the sweep beats the ringing check).
+- **Domain/interface:** none.
+- **Path B — backend/:** **likely NOTHING to do.** `backend/src/services/calls.ts` `sweepCall()`
+  already runs server-side, and `start()` generates `startedAt` on the same machine, so both
+  sides of the comparison share one clock. **Verify only** — confirm `sweepCall` compares
+  server-generated values; if it ever reads a client-supplied timestamp, switch it to the row's
+  `createdAt` column.
+- **Path B — src/data/api/:** nothing.
+- **DB/migration:** `supabase/migrations/0010_server_now.sql` — `public.server_now()`, a
+  `stable` SQL function returning `now()`, execute granted to `anon, authenticated`. Shared DB,
+  apply once. Path B does not need it (it has a real server clock).
+- **Verify:** backend typecheck/build; confirm no client timestamp feeds a timeout decision.
+
+---
+
+## [SYNC-018] Push tokens + `call-ring`: ring a business whose app is CLOSED
+
+- **Area:** New PushRepository; CallRepository.start side effect
+- **Supabase change:**
+  - New `src/data/supabase/push.ts` → `createSupabasePush()`: `register(token, platform)`
+    upserts `{token, user_id: <caller>, platform, updated_at}` into `push_tokens`
+    (`onConflict: 'token'`, so a handset changing hands reassigns rather than duplicates);
+    `unregister(token)` deletes by token (RLS scopes it to the caller). Both no-op on an empty
+    token; `register` no-ops for a guest. Registered in `src/data/supabase/index.ts`.
+  - `src/data/supabase/calls.ts` → `start()` now fires
+    `sb().functions.invoke('call-ring', { body: { callId } })` after the insert, **not awaited
+    and errors swallowed** — a failed push must never stop a call being placed.
+  - New edge function `supabase/functions/call-ring/index.ts`: verifies the caller's JWT,
+    requires that they are the call's `customerId`, requires `status === 'ringing'`, collects
+    business participants still in state `ringing`, reads their tokens with the SERVICE ROLE
+    (RLS hides other users' tokens by design), and POSTs to
+    `https://exp.host/--/api/v2/push/send` with `priority: 'high'`, `channelId: 'calls'`,
+    `ttl: 30`, `data: { callId, kind: 'incoming_call' }`.
+- **Domain/interface:** `PushRepository` added to `src/data/repositories.ts` and to the
+  `Repositories` type (**shared — already done**). Mock impl `MockPushRepository` (in-memory
+  Map, never sends) already added.
+- **Path B — backend/:**
+  - Prisma: introspect the new `push_tokens` table (`prisma db pull`) — columns
+    `token text PK`, `user_id uuid FK profiles`, `platform text`, `created_at`, `updated_at`.
+  - `backend/src/services/push.ts`: `register(userId, token, platform)` = upsert by token
+    (**must overwrite `user_id`** so a shared handset follows the current account);
+    `unregister(userId, token)` = delete where token AND user_id = caller.
+  - `backend/src/services/calls.ts` → `start()` calls a new `ringDevices(call)`: same target
+    selection + Expo push POST as the edge function above. Best-effort; never throws into
+    `start()`.
+  - Router `backend/src/routers/push.ts`: `POST /push/tokens` `{token, platform}` and
+    `DELETE /push/tokens/:token`, both **authenticated, self-only** (userId comes from the JWT,
+    never the body). Add to Swagger.
+  - Authz note: a push token is a routable address for a device — never expose a read/list
+    endpoint, and never let one user register or delete another's token.
+- **Path B — src/data/api/:** **already written** — `createApiPush()` in
+  `src/data/api/repositories.ts` posts `/push/tokens` and deletes `/push/tokens/:token`, wired
+  in `src/data/api/index.ts`. Until the routes exist these 404, which the caller swallows.
+- **DB/migration:** `supabase/migrations/0011_push_tokens.sql` (table + RLS: own rows only;
+  UPDATE uses `using (true) with check (user_id = auth.uid())` so a handset can change hands).
+  Shared DB, apply once.
+- **Verify:** backend typecheck/build; `POST /push/tokens` upserts and cannot write another
+  user's row; starting a call pushes to registered devices and still succeeds when push fails.

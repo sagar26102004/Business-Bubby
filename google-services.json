@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "873239914538",
+    "project_id": "one-piece-52204",
+    "storage_bucket": "one-piece-52204.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:873239914538:android:7fb78ba0113fef259d7b53",
+        "android_client_info": {
+          "package_name": "com.localo.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQl-u4QpMfSOZ-mDgqtROXMyxmkOfwKBE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -44,3 +44,16 @@ yarn-error.*
 
 # Claude Code
 .claude/
+
+# Firebase
+# The service-account private key grants ADMIN access to the Firebase project
+# (it can send a push to any registered device). It is uploaded to EAS
+# credentials and must NEVER be committed.
+*firebase-adminsdk*.json
+serviceAccountKey.json
+# NOTE: google-services.json is deliberately NOT ignored. It is not a secret —
+# it ships inside the APK — and EAS cloud builds skip gitignored files, so the
+# build needs it committed.
+
+# Supabase CLI local state (link target, temp files) — machine-specific
+supabase/.temp/

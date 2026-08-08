@@ -24,6 +24,7 @@ import {
   createApiNotifications,
   createApiOrders,
   createApiProductThreads,
+  createApiPush,
   createApiReviews,
   createApiTracking,
   createApiUsers,
@@ -51,5 +52,6 @@ export function createApiRepositories(): Repositories {
     bizChat: createApiBizChat(),
     productThreads: createApiProductThreads(),
     logbook: createApiLogbook(),
+    push: createApiPush(),
   };
 }

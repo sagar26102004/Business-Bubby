@@ -11,7 +11,8 @@
  * the phone rings even when the app is closed, without touching this UI.
  */
 import { useEffect, useState } from 'react';
-import { AppState, Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Platform, Pressable, StyleSheet, Vibration, View } from 'react-native';
+import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { router } from 'expo-router';
 import type { Call } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -19,6 +20,16 @@ import { Avatar, Text } from '@/components/ui';
 import { palette, radius, spacing, useColors } from '@/theme/theme';
 
 const POLL_MS = 2000;
+
+/** A 4s loop of the classic 440+480 Hz ring cadence (see assets/ringtone.wav). */
+const RINGTONE = require('../../../assets/ringtone.wav');
+
+/**
+ * Android vibration cadence, roughly in step with the ringtone:
+ * [wait, buzz, wait, buzz, wait]. Repeated until the call is answered.
+ * (iOS ignores the durations and just pulses on each entry.)
+ */
+const VIBRATION_PATTERN = [0, 700, 550, 700, 2050];
 
 export function IncomingCallGate() {
   const repos = useRepositories();
@@ -61,6 +72,46 @@ export function IncomingCallGate() {
       sub.remove();
     };
   }, [repos, currentUser?.id]);
+
+  // Ring out loud while a call is genuinely waiting to be answered. Only the
+  // full-screen `ringing` state does this — the "a teammate answered, join?"
+  // banner is a soft nudge and stays silent.
+  const isRinging = !!call && call.status === 'ringing' && call.id !== dismissedId;
+  const player = useAudioPlayer(RINGTONE);
+
+  useEffect(() => {
+    if (!isRinging) return;
+    let stopped = false;
+    // Vibration is the alert that still lands with the phone face-down or on
+    // silent; the ringtone is what you actually notice across the room.
+    if (Platform.OS !== 'web') Vibration.vibrate(VIBRATION_PATTERN, true);
+    (async () => {
+      try {
+        // A call must ring THROUGH the silent switch and take audio focus from
+        // whatever is playing — that's the whole point of a ring.
+        await setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'doNotMix' });
+        if (stopped) return;
+        player.loop = true;
+        player.volume = 1;
+        player.play();
+      } catch {
+        // A browser blocking autoplay before any user gesture is the common
+        // case. The vibration and the full-screen overlay still do their job.
+      }
+    })();
+    return () => {
+      stopped = true;
+      if (Platform.OS !== 'web') Vibration.cancel();
+      try {
+        player.pause();
+        // Rewind so the NEXT call starts at the beginning of the cadence
+        // instead of halfway through a silent gap.
+        void player.seekTo(0);
+      } catch {
+        /* player already released */
+      }
+    };
+  }, [isRinging, player]);
 
   if (!currentUser || !call || call.id === dismissedId) return null;
 

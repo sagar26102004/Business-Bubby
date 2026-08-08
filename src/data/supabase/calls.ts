@@ -183,6 +183,17 @@ export function createSupabaseCalls(): CallRepository {
         data: call,
       });
       if (error) throw error;
+
+      // Wake the phones. In-app polling only finds a call while the app is
+      // OPEN, so without this a business that closed Localo never learns
+      // anyone rang. Best-effort and deliberately NOT awaited into the result:
+      // a push that fails (function not deployed, no FCM credentials, nobody
+      // registered) must never stop the call itself from being placed — the
+      // caller still rings anyone who does have the app open.
+      void sb()
+        .functions.invoke('call-ring', { body: { callId: call.id } })
+        .catch(() => {});
+
       return call;
     },
 

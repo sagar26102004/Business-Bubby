@@ -63,6 +63,7 @@ import type {
   EnrollRequestInput,
   LiveVehicle,
   LogbookRepository,
+  PushRepository,
   MembershipRepository,
   NewBillInput,
   NewLogEntryInput,
@@ -151,6 +152,8 @@ const locationShares: LocationShare[] = seed(seedLocationShares);
 // The logbook stores only MANUAL records; order entries are derived live on
 // read (see MockLogbookRepository), so every order is always in the book.
 const logEntries: LogEntry[] = seed(seedLogEntries);
+/** Device push tokens -> platform. Mock-only: nothing here ever sends a push. */
+const pushTokens = new Map<string, string>();
 
 /** Push a notification (used by chat + bookings). */
 function notify(n: Omit<AppNotification, 'id' | 'read' | 'createdAt'>): void {
@@ -2799,6 +2802,23 @@ export function resetMockData(): void {
   currentUserId = null;
 }
 
+/**
+ * Push registration, mocked. There is no push server behind the mock backend
+ * (and no device token off a real build), so this just remembers the tokens so
+ * register/unregister behave sanely. Nothing ever rings from here.
+ */
+class MockPushRepository implements PushRepository {
+  async register(token: string, platform: string): Promise<void> {
+    await delay(30);
+    pushTokens.set(token, platform);
+  }
+
+  async unregister(token: string): Promise<void> {
+    await delay(30);
+    pushTokens.delete(token);
+  }
+}
+
 class MockLogbookRepository implements LogbookRepository {
   async listForBusiness(businessId: string): Promise<LogEntry[]> {
     await delay(80);
@@ -2847,5 +2867,6 @@ export function createMockRepositories(): Repositories {
     bizChat: new MockBizChatRepository(),
     productThreads: new MockProductThreadRepository(),
     logbook: new MockLogbookRepository(),
+    push: new MockPushRepository(),
   };
 }

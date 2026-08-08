@@ -13,6 +13,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { Icon } from '@/components/ui';
 import { DataProvider } from '@/data/DataProvider';
 import { IncomingCallGate } from '@/features/calls/IncomingCallGate';
+import { PushRegistrar } from '@/features/notifications/PushRegistrar';
 import { CartProvider } from '@/features/orders/CartContext';
 import { spacing, useColors } from '@/theme/theme';
 // Registers the driver background-location task at app start, so the OS can
@@ -211,6 +212,8 @@ export default function RootLayout() {
         <ColdStartRedirect />
         {/* Rings business members on incoming voice calls, on any screen. */}
         <IncomingCallGate />
+        {/* Registers this device for push, so a CLOSED app still gets called. */}
+        <PushRegistrar />
         </CartProvider>
       </DataProvider>
     </SafeAreaProvider>

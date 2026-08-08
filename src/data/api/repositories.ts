@@ -43,6 +43,7 @@ import type {
   EnrollRequestInput,
   LiveVehicle,
   LogbookRepository,
+  PushRepository,
   MembershipRepository,
   NewBillInput,
   NewBizMessageInput,
@@ -373,6 +374,20 @@ export function createApiProductThreads(): ProductThreadRepository {
         `/product-threads/business/${seg(businessId)}/product/${seg(productId)}/message/${seg(messageId)}/pin`,
         { pinned },
       ),
+  };
+}
+
+/**
+ * Device push tokens (Path B). The Express routes are queued in
+ * backend/SYNC_QUEUE.md — until they land these calls 404, which is why the
+ * CALLER swallows registration failures: a device that can't register should
+ * still be able to use the app, it just won't ring while closed.
+ */
+export function createApiPush(): PushRepository {
+  return {
+    register: (token: string, platform: string) =>
+      http.post<void>('/push/tokens', { token, platform }),
+    unregister: (token: string) => http.del<void>(`/push/tokens/${seg(token)}`),
   };
 }
 

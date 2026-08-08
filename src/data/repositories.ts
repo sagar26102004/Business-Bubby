@@ -841,6 +841,25 @@ export interface LogbookRepository {
   addManual(input: NewLogEntryInput): Promise<LogEntry>;
 }
 
+/**
+ * Device push tokens — how a CLOSED app gets told a call is ringing.
+ *
+ * In-app polling only works while the app is open, so a business owner who
+ * swiped Localo away never learns someone is calling. Each signed-in device
+ * registers its Expo push token here; when a call starts, the server looks up
+ * the ring targets' tokens and pushes to them, which wakes the phone.
+ *
+ * One row PER DEVICE (the token is the identity), so a user signed in on a
+ * phone and a tablet rings on both. Registering the same token twice just
+ * refreshes it — tokens are stable per install but can be reissued.
+ */
+export interface PushRepository {
+  /** Attach this device's push token to the signed-in user. Idempotent. */
+  register(token: string, platform: string): Promise<void>;
+  /** Detach a token — on sign-out, so the next user doesn't get their calls. */
+  unregister(token: string): Promise<void>;
+}
+
 /** One offering (or tag) to record into the growing collection. */
 export interface CaptureEntryInput {
   kind: CatalogEntryKind;
@@ -897,4 +916,5 @@ export interface Repositories {
   bizChat: BizChatRepository;
   productThreads: ProductThreadRepository;
   logbook: LogbookRepository;
+  push: PushRepository;
 }
