@@ -3,6 +3,9 @@
  *
  * Switch identity, spin up test accounts and businesses, reset the demo data,
  * and jump straight to key screens. On web you can also reach this at /dev.
+ *
+ * Gated by EXPO_PUBLIC_DEV_TOOLS (see lib/devTools.ts) — the screen refuses to
+ * render in production, so the URL is dead even though the route file ships.
  */
 import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
@@ -11,6 +14,7 @@ import type { GeoPoint, ListingType } from '@/domain/types';
 import type { NewBusinessInput } from '@/data/repositories';
 import { LISTING_TYPES } from '@/domain/catalog';
 import { useAuth, useRepositories } from '@/data/DataProvider';
+import { DEV_TOOLS_ENABLED } from '@/lib/devTools';
 import { useAsync } from '@/lib/useAsync';
 import { Button, Card, Input, Screen, Tag, Text } from '@/components/ui';
 import { spacing } from '@/theme/theme';
@@ -42,7 +46,26 @@ function randomBusiness(near: GeoPoint): NewBusinessInput {
   };
 }
 
-export default function DevToolsScreen() {
+/**
+ * Route entry. Kept as a wrapper so the harness below can use hooks freely —
+ * the flag is a build-time constant, so only one of the two ever mounts.
+ */
+export default function DevToolsRoute() {
+  if (!DEV_TOOLS_ENABLED) {
+    return (
+      <Screen scroll>
+        <Stack.Screen options={{ title: 'Not available' }} />
+        <Text variant="heading" weight="bold" style={styles.stack}>
+          Not available
+        </Text>
+        <Text tone="muted">This screen is only available in development builds.</Text>
+      </Screen>
+    );
+  }
+  return <DevToolsScreen />;
+}
+
+function DevToolsScreen() {
   const router = useRouter();
   const { currentUser, isGuest, signInAs, signOut, resetData } = useAuth();
   const repos = useRepositories();

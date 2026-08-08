@@ -8,6 +8,7 @@ import { StyleSheet } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { enabledModules } from '@/domain/modules';
 import type { NotificationCategory } from '@/domain/notifications';
+import { isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
@@ -23,9 +24,8 @@ export default function WorkspaceNotificationsScreen() {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
     const employees = await repos.employees.listByBusiness(business.id);
-    const isMember =
-      currentUser?.id === business.ownerId ||
-      employees.some((e) => e.userId && e.userId === currentUser?.id);
+    const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
+    const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
     return { business, isMember };
   }, [businessId, currentUser?.id]);
 

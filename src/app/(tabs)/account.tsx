@@ -7,6 +7,7 @@ import { StyleSheet, Switch, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { useAuth, useRepositories } from '@/data/DataProvider';
+import { DEV_TOOLS_ENABLED } from '@/lib/devTools';
 import { Avatar, Button, Card, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
 
@@ -39,12 +40,14 @@ export default function AccountScreen() {
             onPress={() => router.push('/sign-in')}
             style={styles.guestBtn}
           />
-          <Button
-            title="🧪 Dev tools"
-            variant="ghost"
-            onPress={() => router.push('/dev')}
-            style={styles.guestBtn}
-          />
+          {DEV_TOOLS_ENABLED ? (
+            <Button
+              title="🧪 Dev tools"
+              variant="ghost"
+              onPress={() => router.push('/dev')}
+              style={styles.guestBtn}
+            />
+          ) : null}
         </View>
       </Screen>
     );
@@ -97,13 +100,23 @@ export default function AccountScreen() {
         />
       ) : null}
 
+      {DEV_TOOLS_ENABLED ? (
+        <Button
+          title="🧪 Dev tools"
+          variant="secondary"
+          onPress={() => router.push('/dev')}
+          style={isSuperAdminUser(currentUser) ? styles.signOutGhost : styles.signOut}
+        />
+      ) : null}
       <Button
-        title="🧪 Dev tools"
-        variant="secondary"
-        onPress={() => router.push('/dev')}
-        style={isSuperAdminUser(currentUser) ? styles.signOutGhost : styles.signOut}
+        title="Sign out"
+        variant="ghost"
+        onPress={() => signOut()}
+        // Keeps its breathing room when nothing sits above it.
+        style={
+          isSuperAdminUser(currentUser) || DEV_TOOLS_ENABLED ? styles.signOutGhost : styles.signOut
+        }
       />
-      <Button title="Sign out" variant="ghost" onPress={() => signOut()} style={styles.signOutGhost} />
     </Screen>
   );
 }

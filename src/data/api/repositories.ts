@@ -72,6 +72,7 @@ import type { LogEntry } from '@/domain/types';
 import { getSupabase } from '@/lib/supabase';
 import {
   TEST_PASSWORD,
+  assertDevTool,
   fallbackUser,
   niceAuthError,
   phoneToEmail,
@@ -136,6 +137,8 @@ export function createApiUsers(): UserRepository {
     // user's session, so dev.tsx switches into it afterwards; the profile row is
     // created by the DB trigger and read back through the API.
     create: async (input: NewUserInput): Promise<User> => {
+      // Creates a REAL account on the shared database — dev only.
+      assertDevTool('Adding a test account');
       const phone = syntheticTestPhone();
       const { data, error } = await getSupabase().auth.signUp({
         email: phoneToEmail(phone),

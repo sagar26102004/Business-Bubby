@@ -11,8 +11,22 @@
  * Plain data, like the module and tag catalogs: a new grantable service is
  * added here, tied to the module that must be enabled for it to be offered.
  */
-import type { Business, Employee } from './types';
+import type { Business, Employee, User } from './types';
 import { hasModule, type ModuleId } from './modules';
+import { isSuperAdminUser } from './superAdmin';
+
+/**
+ * Who's looking. Just enough of a User to answer both questions these rules
+ * ask: "which account is this?" and "is it a platform super-admin?".
+ *
+ * A SUPER-ADMIN passes every check below. They onboard businesses for owners
+ * who aren't running the app themselves — listing the shop, pricing its menu,
+ * putting its first offers up — so they stand in for the owner everywhere. This
+ * mirrors the database: supabase/migrations/0004_super_admin.sql already lets
+ * `is_super_admin()` update ANY business, so gating them out here would only
+ * hide a power Postgres grants regardless.
+ */
+export type Viewer = Pick<User, 'id' | 'isSuperAdmin' | 'phone'> | null | undefined;
 
 export type ServiceId =
   | 'orders'
@@ -21,7 +35,9 @@ export type ServiceId =
   | 'customers'
   | 'members'
   | 'fleet'
-  | 'logbook';
+  | 'logbook'
+  | 'offerings'
+  | 'offers';
 
 export interface ServiceDef {
   id: ServiceId;
@@ -85,6 +101,20 @@ export const SERVICE_CATALOG: ServiceDef[] = [
     icon: '📒',
     description: 'The record book of orders — read it and add manual records.',
   },
+  // Universal, like the logbook: every business has something it sells and can
+  // promote, whichever modules it runs.
+  {
+    id: 'offerings',
+    label: 'Menu & pricing',
+    icon: '📝',
+    description: 'Edit the menu, products, services and rentals — names, prices and photos.',
+  },
+  {
+    id: 'offers',
+    label: 'Offers',
+    icon: '🎉',
+    description: 'Create discounted bundles of what you sell, shown on your page.',
+  },
 ];
 
 export function getService(id: string): ServiceDef | undefined {
@@ -103,15 +133,32 @@ export function offeredServices(business: Business): ServiceDef[] {
 export function isManagerOrOwner(
   business: Pick<Business, 'ownerId'>,
   employee: Pick<Employee, 'level'> | undefined,
-  viewerId: string | undefined,
+  viewer: Viewer,
 ): boolean {
-  if (!viewerId) return false;
-  if (viewerId === business.ownerId) return true;
+  if (isSuperAdminUser(viewer)) return true;
+  if (!viewer) return false;
+  if (viewer.id === business.ownerId) return true;
   return (employee?.level ?? 'staff') === 'manager';
 }
 
 /**
+ * Is this viewer on the business's team at all — owner, employee, or a
+ * super-admin standing in? The gate every workspace screen opens with, before
+ * the finer per-service check.
+ */
+export function isBusinessTeamMember(
+  business: Pick<Business, 'ownerId'>,
+  employee: Pick<Employee, 'id'> | undefined | null,
+  viewer: Viewer,
+): boolean {
+  if (isSuperAdminUser(viewer)) return true;
+  if (!viewer) return false;
+  return viewer.id === business.ownerId || !!employee;
+}
+
+/**
  * May this viewer open a given workspace service?
+ *  - A platform super-admin always can (see `Viewer`).
  *  - The owner always can.
  *  - A non-member never can.
  *  - A MANAGER with no explicit permission list keeps full access — managers
@@ -123,12 +170,13 @@ export function isManagerOrOwner(
  */
 export function canAccessService(
   business: Pick<Business, 'ownerId'>,
-  employee: Pick<Employee, 'permissions' | 'level'> | undefined,
-  viewerId: string | undefined,
+  employee: Pick<Employee, 'permissions' | 'level'> | undefined | null,
+  viewer: Viewer,
   serviceId: ServiceId,
 ): boolean {
-  if (!viewerId) return false;
-  if (viewerId === business.ownerId) return true;
+  if (isSuperAdminUser(viewer)) return true;
+  if (!viewer) return false;
+  if (viewer.id === business.ownerId) return true;
   if (!employee) return false;
   if (!employee.permissions) return (employee.level ?? 'staff') === 'manager';
   return employee.permissions.includes(serviceId);

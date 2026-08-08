@@ -57,7 +57,7 @@ export default function FulfillOrderScreen() {
 
   const { order, business, employees, bill } = data;
   const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
-  const allowed = canScanFor(business, currentUser?.id, meEmployee);
+  const allowed = canScanFor(business, currentUser, meEmployee);
   const myName = currentUser?.name ?? 'Team';
 
   if (!allowed) {

@@ -10,7 +10,13 @@ import type { AuthRepository, SignUpInput } from '@/data/repositories';
 import type { User } from '@/domain/types';
 import { getSupabase } from '@/lib/supabase';
 import { clearCache } from '@/lib/queryCache';
-import { TEST_PASSWORD, fallbackUser, niceAuthError, phoneToEmail } from '@/data/supabase/shared';
+import {
+  TEST_PASSWORD,
+  assertDevTool,
+  fallbackUser,
+  niceAuthError,
+  phoneToEmail,
+} from '@/data/supabase/shared';
 import { http, seg } from './client';
 
 /** Read a profile via the API, falling back when the row isn't ready yet. */
@@ -79,6 +85,8 @@ export function createApiAuth(): AuthRepository {
       // Real auth has no service-role impersonation on the client, so we do a
       // genuine sign-in as the target user with the shared seed password. Only
       // works for the seeded test accounts (created with TEST_PASSWORD).
+      // Hard-gated: impersonation must never be reachable in a release build.
+      assertDevTool('Switching identity');
       const profile = await http.get<User | null>(`/users/${seg(userId)}`);
       if (!profile?.phone) {
         throw new Error(
@@ -90,8 +98,10 @@ export function createApiAuth(): AuthRepository {
         password: TEST_PASSWORD,
       });
       if (error) {
+        // Deliberately does NOT echo the password — error text ends up in Metro
+        // logs, crash reporters and screenshots.
         throw new Error(
-          `Can't switch to ${profile.name} — this only works for seeded test accounts (password "${TEST_PASSWORD}"). Sign in manually instead.`,
+          `Can't switch to ${profile.name} — this only works for seeded test accounts created with the shared dev password. Sign in manually instead.`,
         );
       }
       await clearCache();

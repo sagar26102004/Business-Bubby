@@ -5,7 +5,7 @@
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import type { Booking, BookingStatus } from '@/domain/types';
-import { canAccessService } from '@/domain/access';
+import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Button, Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
@@ -24,8 +24,8 @@ export default function WorkspaceBookingsScreen() {
       repos.bookings.listForBusiness(business.id),
     ]);
     const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
-    const isMember = currentUser?.id === business.ownerId || !!meEmployee;
-    const canAccess = canAccessService(business, meEmployee, currentUser?.id, 'bookings');
+    const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
+    const canAccess = canAccessService(business, meEmployee, currentUser, 'bookings');
     return { business, isMember, canAccess, bookings };
   }, [businessId, currentUser?.id]);
 

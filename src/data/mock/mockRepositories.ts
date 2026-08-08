@@ -40,6 +40,7 @@ import { getVehicleKind } from '@/domain/catalog';
 import { applyCatalogEntries, catalogKey, isCodeCatalogName } from '@/domain/catalogEntries';
 import { normalizeRole } from '@/domain/roles';
 import { isNotificationMuted } from '@/domain/notifications';
+import { isSuperAdminPhone } from '@/domain/superAdmin';
 import type {
   AuthRepository,
   BillRepository,
@@ -706,11 +707,26 @@ class MockUserRepository implements UserRepository {
 // Session auth state. Starts null — the app opens as a guest.
 let currentUserId: string | null = null;
 
+/**
+ * Stamp the derived super-admin flag onto a session user.
+ *
+ * On the real backend this is read from the `platform_admins` table, which no
+ * session can write to (supabase/migrations/0006). The mock has no such table,
+ * so dev mode derives it from the provisioning phone list instead — sign up as
+ * one of those numbers and you get the admin console to test with. This is a
+ * DEV-ONLY shortcut; nothing ships it, because the mock never runs in a
+ * production build.
+ */
+const asSessionUser = (user: User): User => ({
+  ...clone(user),
+  isSuperAdmin: isSuperAdminPhone(user.phone),
+});
+
 class MockAuthRepository implements AuthRepository {
   async getCurrentUser(): Promise<User | null> {
     await delay(50);
     const user = users.find((u) => u.id === currentUserId);
-    return user ? clone(user) : null;
+    return user ? asSessionUser(user) : null;
   }
 
   async signIn(_email: string, _password?: string): Promise<User> {
@@ -718,7 +734,7 @@ class MockAuthRepository implements AuthRepository {
     // Mock: any credentials sign you in as the demo user (who owns the seed data).
     const demo = users.find((u) => u.id === 'u_demo')!;
     currentUserId = demo.id;
-    return clone(demo);
+    return asSessionUser(demo);
   }
 
   async signUp(input: SignUpInput): Promise<User> {
@@ -731,7 +747,7 @@ class MockAuthRepository implements AuthRepository {
     };
     users.push(user);
     currentUserId = user.id;
-    return clone(user);
+    return asSessionUser(user);
   }
 
   async signOut(): Promise<void> {
@@ -744,7 +760,7 @@ class MockAuthRepository implements AuthRepository {
     const user = users.find((u) => u.id === userId);
     if (!user) throw new Error(`User ${userId} not found`);
     currentUserId = user.id;
-    return clone(user);
+    return asSessionUser(user);
   }
 
   async signInGuest(): Promise<User> {

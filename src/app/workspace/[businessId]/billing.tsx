@@ -5,7 +5,7 @@
 import { StyleSheet } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { canScanFor } from '@/features/fulfillment/fulfillment';
-import { canAccessService } from '@/domain/access';
+import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Button, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
@@ -25,9 +25,9 @@ export default function WorkspaceBillingScreen() {
       repos.bills.listForBusiness(business.id),
     ]);
     const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
-    const isMember = currentUser?.id === business.ownerId || !!meEmployee;
-    const canScan = canScanFor(business, currentUser?.id, meEmployee);
-    const canAccess = canAccessService(business, meEmployee, currentUser?.id, 'billing');
+    const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
+    const canScan = canScanFor(business, currentUser, meEmployee);
+    const canAccess = canAccessService(business, meEmployee, currentUser, 'billing');
     return { business, isMember, canAccess, canScan, bills };
   }, [businessId, currentUser?.id]);
 

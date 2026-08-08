@@ -48,10 +48,26 @@ export interface BusinessLocation {
  * A person with an app account. The same user can be a customer, an owner, and
  * an employee — roles are not mutually exclusive.
  */
+/**
+ * A person with a Localo account.
+ *
+ * STORED IN TWO HALVES (supabase/migrations/0007_profiles_private.sql), because
+ * Localo is a public directory and row-level security cannot hide a field:
+ *  - `profiles`         — the PUBLIC card: name, isProfilePublic, avatarUrl,
+ *                         bio. World-readable, so owner names and employee
+ *                         cards render for guests.
+ *  - `profiles_private` — `email`, `phone`, `mutedNotifications`. Readable only
+ *                         by the account itself and platform super-admins.
+ * The repositories merge both into this one object, so `phone`/`email` are
+ * simply ABSENT when you're not entitled to them — never assume they're set on
+ * someone else's User.
+ */
 export interface User {
   id: string;
   name: string;
+  /** Private (profiles_private) — absent unless it's you or a super-admin. */
   email?: string;
+  /** Private (profiles_private) — absent unless it's you or a super-admin. */
   phone?: string;
   avatarUrl?: string;
   bio?: string;
@@ -59,9 +75,13 @@ export interface User {
   isProfilePublic: boolean;
   /**
    * Platform super-admin: a privileged operator who can register businesses on
-   * behalf of anyone and hand ownership to another user. Derived from the
-   * account's phone (see domain/superAdmin.ts) and persisted on the profile so
-   * the backends can gate on it. Absent/false for ordinary users.
+   * behalf of anyone and hand ownership to another user.
+   *
+   * DERIVED, session-only: the auth repository stamps it from the
+   * `platform_admins` table (migration 0006), which no session can write to. It
+   * is deliberately NOT persisted on the profile — that document is
+   * user-writable, so a flag stored there could be forged. Absent/false for
+   * ordinary users. See domain/superAdmin.ts.
    */
   isSuperAdmin?: boolean;
   /**
@@ -207,6 +227,56 @@ export interface Deal {
   wasPrice?: string;
   /** Emoji on the card; falls back to the listing type's icon. */
   emoji?: string;
+}
+
+/** Where an offer line came from — which of the business's own lists. */
+export type OfferLineKind = 'menu' | 'service' | 'product' | 'rental' | 'custom';
+
+/**
+ * One thing included in an `Offer`, picked from what the business already
+ * lists. `price` is the item's NORMAL price captured at the moment it was
+ * picked, so the offer can show what the bundle would otherwise cost even
+ * after the underlying item is repriced.
+ */
+export interface OfferLine {
+  kind: OfferLineKind;
+  name: string;
+  /** The item's normal price label when picked, e.g. "₹120". */
+  price?: string;
+  /** How many of it the offer includes. Defaults to 1. */
+  quantity?: number;
+}
+
+/**
+ * An OFFER — the business's own promotion: some of what it already sells,
+ * bundled at a special price ("Cold coffee + sandwich for ₹99"). The business
+ * builds one in Workspace › Offers by picking from its menu/services/products/
+ * rentals, and it shows on the business page directly under the description.
+ *
+ * Deliberately a superset of `Deal` (tag/title/price/wasPrice/emoji): promoting
+ * an offer onto the Home "Deals near you" carousel — the paid ad placement —
+ * is then just a matter of surfacing it, with no reshaping of the data.
+ */
+export interface Offer {
+  id: string;
+  /** What the offer is, e.g. "Cold coffee + sandwich". */
+  title: string;
+  description?: string;
+  /** Shout label on the card, e.g. "COMBO", "40% OFF". */
+  tag?: string;
+  /** Emoji on the card; falls back to the listing type's icon. */
+  emoji?: string;
+  /** What's included — picked from the business's own offerings. */
+  lines: OfferLine[];
+  /** What the customer pays for the bundle, e.g. "₹99". */
+  price?: string;
+  /** Normal total of `lines`, shown struck through. Recomputed on save. */
+  wasPrice?: string;
+  /** Off = kept in the workspace but hidden from customers. */
+  active: boolean;
+  /** ISO date the offer stops showing. Undefined = runs until switched off. */
+  endsAt?: string;
+  createdAt: string;
 }
 
 /** A single line on a shop's menu (cafe/restaurant/bakery, etc.). */
@@ -663,6 +733,12 @@ export interface Business {
   partyPackages?: PartyPackage[];
   /** Live limited-time offers, shown on the Browse deals carousel. */
   deals?: Deal[];
+  /**
+   * The business's own promotions — bundles of what it already sells at a
+   * special price. Built in Workspace › Offers, shown on the business page
+   * right under the description.
+   */
+  offers?: Offer[];
   /** Work showcase — photos & videos of past work, shown on the listing. */
   portfolio?: PortfolioItem[];
   /** Services offered with prices, for service providers. */

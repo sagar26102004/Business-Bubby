@@ -75,7 +75,7 @@ export default function WorkspaceAccessScreen() {
   if (!data) return <EmptyView title="Not found" />;
 
   const meEmployee = data.employees.find((e) => e.userId && e.userId === currentUser?.id);
-  if (!isManagerOrOwner(data.business, meEmployee, currentUser?.id)) {
+  if (!isManagerOrOwner(data.business, meEmployee, currentUser)) {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Access' }} />

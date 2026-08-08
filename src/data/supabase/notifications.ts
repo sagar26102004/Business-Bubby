@@ -10,13 +10,21 @@ import { isNotificationMuted } from '@/domain/notifications';
 import { sb, isUuid } from './shared';
 
 /**
- * The alert families this recipient has silenced. Stored on their profile so a
- * mute follows them across devices. Failures are swallowed — a profile we
- * can't read just means nothing is muted, never a broken Alerts tab.
+ * The alert families this recipient has silenced. Kept in `profiles_private`
+ * (migration 0007) — a mute list reveals which businesses you deal with, so it
+ * is not part of the public directory card. RLS returns it only to the account
+ * itself, which is the only caller: you read your own inbox.
+ *
+ * Failures are swallowed — a row we can't read just means nothing is muted,
+ * never a broken Alerts tab.
  */
 async function mutesOf(recipientId: string): Promise<string[] | undefined> {
-  const { data } = await sb().from('profiles').select('data').eq('id', recipientId).maybeSingle();
-  return (data?.data as User | undefined)?.mutedNotifications;
+  const { data } = await sb()
+    .from('profiles_private')
+    .select('data')
+    .eq('id', recipientId)
+    .maybeSingle();
+  return (data?.data as Partial<User> | undefined)?.mutedNotifications;
 }
 
 export function createSupabaseNotifications(): NotificationRepository {

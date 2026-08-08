@@ -136,4 +136,223 @@ re-derivation from the Supabase diff is required:
   have a customer place an order, and confirm no alert/badge appears while the order still
   shows in the workspace orders desk.
 
+## [SYNC-012] Offers on Business + `offerings`/`offers` access services
+
+- **Area:** BusinessRepository / businesses (Workspace › Offers, Manage, business page)
+- **Supabase change:** NONE needed, and none was made. `Offer` lives inside `Business` as
+  `offers?: Offer[]`, so it rides the existing `data jsonb` document. Both
+  `src/data/supabase/businesses.ts` → `update()` and the mock's `update()` already spread the
+  patch (`{ ...current, ...patch }` / `Object.assign`), so offers persist through the plain
+  `BusinessRepository.update` with no new repo method, no new endpoint and **no SQL migration**.
+- **Domain/interface:** DONE (shared) — `src/domain/types.ts` gained `OfferLineKind`,
+  `OfferLine` and `Offer`, plus `Business.offers?: Offer[]`. `Offer` is deliberately a
+  superset of `Deal` (tag/title/price/wasPrice/emoji) so a future paid Home-carousel
+  placement needs no reshaping. `src/domain/access.ts` gained two universal (no-module)
+  `ServiceId`s: `'offerings'` (label "Menu & pricing") and `'offers'` (label "Offers").
+- **Path B — backend/:**
+  1. `backend/src/domain/types.ts` — mirror the three new types verbatim from
+     `src/domain/types.ts` (they sit just after `Deal`), and add `offers?: Offer[]` to the
+     `Business` interface next to the existing `deals?: Deal[]` on line ~313.
+  2. Nothing else. `businessService.update` (`backend/src/services/businesses.ts`) already does
+     `Object.assign(business, patch)` and `PATCH /api/businesses/:id` already guards with
+     `requireBusinessMember`, so offers round-trip once the type exists.
+  3. **Authz note (do NOT skip):** the two new services are enforced CLIENT-side only, exactly
+     like the existing seven (`canAccessService` runs in the app). Path B's
+     `requireBusinessMember` on `PATCH /businesses/:id` is what actually gates the write, so
+     any member can still write `offers`/`menu`/`services` at the API level. If per-service
+     enforcement is ever added server-side, do it for all nine ids at once rather than
+     special-casing these two.
+- **Path B — src/data/api/:** nothing. `repositories.ts` → `businesses.update` already sends
+  the whole patch through `http.patch('/businesses/:id', patch)`.
+- **Not a Path B concern:** `src/domain/access.ts` was also refactored to take a `Viewer`
+  object instead of a bare `viewerId` (so super-admins pass every check, matching
+  `0004_super_admin.sql`). That file has NO backend twin — `backend/src/domain/types.ts`
+  keeps `Employee.permissions?: string[]` and nothing reads it server-side. Nothing to port.
+- **DB/migration:** none (document model).
+- **Verify:** `cd backend && npm run typecheck && npm run build`; then with
+  `EXPO_PUBLIC_BACKEND=api`, create an offer in Workspace › Offers and confirm it renders under
+  the description on the business page after a reload.
+
+## [SYNC-013] SECURITY: super-admin grant moves to `platform_admins`
+
+- **Area:** authz / super-admin (`backend/src/lib/superAdmin.ts`)
+- **Why:** `isSuperAdmin()` decided platform-operator status from
+  `profiles.data ->> 'isSuperAdmin'` and a phone allow-list — both inside a document
+  every user can rewrite (`profiles_update`, and on Path B `PATCH /api/users/:id`).
+  Any signed-in user could promote themselves and then update ANY business.
+  **Path B is currently vulnerable in exactly the same way and this entry is the fix.**
+- **Supabase change:** new migration `supabase/migrations/0006_platform_admins.sql` —
+  creates `platform_admins (user_id pk, note, granted_at)` with RLS on and NO write
+  policy (service role only, read-own for the app), migrates existing admins across,
+  repoints `public.is_super_admin()` at the table, adds a BEFORE UPDATE trigger on
+  `profiles` stripping `isSuperAdmin` and pinning `phone`, and clears the stale flag.
+  Client side: `User.isSuperAdmin` is now DERIVED per session — `src/data/supabase/shared.ts`
+  gained `fetchIsSuperAdmin()` / `withAdminFlag()`, the auth repo stamps it on every
+  session-establishing call, and `users.update` strips it before writing.
+- **Domain/interface:** DONE (shared) — `src/domain/superAdmin.ts` → `isSuperAdminUser`
+  now trusts ONLY `user.isSuperAdmin` (the derived flag); the phone list is documented
+  as provisioning/mock-only and is no longer a trust path.
+- **Path B — backend/:**
+  1. `prisma db pull` to pick up the new `platform_admins` table (or hand-add the model:
+     `model PlatformAdmin { userId String @id @map("user_id") @db.Uuid; note String?;
+     grantedAt DateTime @default(now()) @map("granted_at"); @@map("platform_admins") }`).
+  2. `backend/src/lib/superAdmin.ts` → replace the body of `isSuperAdmin(uid)` with a
+     lookup: `return (await prisma.platformAdmin.count({ where: { userId: uid } })) > 0;`
+     Delete the `SUPER_ADMIN_PHONES` / `isSuperAdminPhone` trust path (keep the constant
+     only if something still needs it for provisioning — nothing on the server does).
+  3. `backend/src/services/users.ts` → `update()` must WHITELIST editable fields rather
+     than spreading `req.body`. Allow `name`, `isProfilePublic`, `mutedNotifications`,
+     `avatarUrl`; drop everything else, `isSuperAdmin` and `phone` especially. Prisma
+     uses the privileged connection, so the 0006 trigger does NOT protect this path —
+     the whitelist is the only guard on Path B.
+- **Path B — src/data/api/:** `auth.ts` must stamp the derived flag like the Supabase
+  repo does. Simplest: add `GET /api/users/me/is-super-admin` (requireAuth, returns
+  `{ isSuperAdmin: await isSuperAdmin(userId(req)) }`) and have the api auth repo call it
+  wherever it builds the session user, mirroring `withAdminFlag`.
+- **DB/migration:** `supabase/migrations/0006_platform_admins.sql` — SHARED DB, apply once.
+  Path B needs it applied before its Prisma model resolves.
+- **Verify:** `cd backend && npm run typecheck && npm run build`. Then, as a NON-admin user,
+  confirm `PATCH /api/users/<own id>` with `{"isSuperAdmin":true}` does NOT grant anything
+  (re-read the profile, and check a super-admin-only route still 403s).
+
+## [SYNC-014] SECURITY: contact details split into `profiles_private`
+
+- **Area:** UserRepository / profiles (+ notifications mute lookup)
+- **Why:** `profiles_read` is `using (true)` (public directory), and the whole domain
+  `User` — phone and email included — sat in that one world-readable `data` document.
+  RLS is row-level and cannot hide a field, so `GET /rest/v1/profiles?select=data`
+  dumped every user's phone + email to anyone holding the public anon key. On Path B
+  the equivalent is `GET /api/users` and `GET /api/users/search`, which return full
+  profiles through `optionalAuth` — i.e. **to guests**. Path B is vulnerable today.
+- **Supabase change:** migration `supabase/migrations/0007_profiles_private.sql` —
+  new `profiles_private (id uuid pk → profiles, data jsonb, updated_at)` holding
+  `phone`, `email`, `mutedNotifications`; RLS select = `id = auth.uid() or is_super_admin()`,
+  insert/update = own row only. Values backfilled out of `profiles.data` and stripped
+  from it; `handle_new_user` now writes both halves; the 0006 `protect_profile_fields`
+  trigger extended (and an INSERT twin added) to strip all four private keys.
+  Client: `src/data/supabase/shared.ts` gained `PRIVATE_PROFILE_KEYS`,
+  `fetchPrivateProfile`, `fetchPrivateProfiles`; `fetchProfile` merges both halves;
+  `users.update` partitions the write; `users.list`/`search` merge only what RLS
+  returns; `notifications.ts` → `mutesOf` reads `profiles_private`.
+- **Domain/interface:** DONE (shared) — `src/domain/types.ts` `User` doc now states
+  `phone`/`email` are private and may be absent on other people's Users.
+- **Path B — backend/:**
+  1. `prisma db pull` for `profiles_private` (or add the model by hand, `@@map("profiles_private")`).
+  2. `backend/src/services/users.ts` — Prisma bypasses RLS, so the API must enforce the
+     split ITSELF. `list()` and `search()` must return the PUBLIC card only (strip
+     `phone`, `email`, `mutedNotifications`) unless the caller `isSuperAdmin(uid)`.
+     `getById(id)` returns the public card plus the private half only when
+     `id === uid || isSuperAdmin(uid)`. `update()` must write the two halves separately
+     — and see [SYNC-013] for the field whitelist it also needs.
+  3. `backend/src/services/notifications.ts` — the mute lookup must read
+     `profiles_private`, not `profiles`.
+  4. `backend/src/routers/users.ts` — `GET /` and `GET /search` are `optionalAuth`, so
+     guests hit them. Keep them public (the directory needs names) but ONLY after the
+     service strips private fields. Do not "fix" this by requiring auth: a signed-in
+     stranger is exactly the threat model here.
+- **Path B — src/data/api/:** no signature changes; the endpoints return the same
+  `User` shape with fields absent. Confirm `api/auth.ts` `signInAs` still reads
+  `profile.phone` and fails gracefully when it's absent (mirrors the Supabase repo).
+- **DB/migration:** `supabase/migrations/0007_profiles_private.sql` — SHARED DB, apply
+  once, and 0006 must be applied first (`is_super_admin()`).
+- **Verify:** `cd backend && npm run typecheck && npm run build`. Then as a guest (no
+  token) call `GET /api/users` and confirm no `phone` or `email` appears in the response;
+  as a super-admin confirm they do.
+
+## [SYNC-015] SECURITY: an employee can seize the business (ownership + rank)
+
+- **Area:** authz — businesses PATCH, employees add/update/remove
+- **Why:** two chained holes. (1) `businesses_update` authorises with
+  `is_business_member`, which never inspects `owner_id` — so a staff member could set
+  `owner_id` (or just the `data.ownerId` the app actually reads) to themselves and own
+  the shop. (2) `employees_write` was `FOR ALL` to any member and `Employee.level` lives
+  in `data`, so staff could promote themselves to manager.
+  **Path B is fully vulnerable and the new triggers do NOT protect it** — they skip their
+  checks when `auth.uid()` is null, which is exactly the Prisma/service-role connection.
+  Path B must reimplement these rules in `authz`.
+- **Supabase change:** migration `supabase/migrations/0008_business_ownership_lock.sql` —
+  adds `is_business_owner()` / `is_business_manager()`; a BEFORE UPDATE trigger on
+  `businesses` that (a) allows an `owner_id` change only for the current owner or a
+  super-admin, (b) requires manager+ to change `employeeIds`/`callHandlerIds`/
+  `chatRecipientIds`/`scanHandlerIds`/`modules`, and (c) force-syncs `data.ownerId` to the
+  column on every write (plus an INSERT twin); splits `employees_write` into
+  owner-only INSERT/DELETE + member UPDATE, with a trigger blocking changes to
+  `level`, `userId`/`user_id` and `business_id` by anyone but the owner.
+- **Domain/interface:** none — no shape changes.
+- **Path B — backend/:**
+  1. `backend/src/services/businesses.ts` → `update()` currently does
+     `Object.assign(business, patch)`. Strip `ownerId` and `id` from the patch outright
+     (ownership moves only through `reassignOwner`), and after assigning, force
+     `business.ownerId` to the row's `ownerId` column so the document can't drift.
+     Never write the `ownerId` column from `update()`.
+  2. `backend/src/routers/businesses.ts` → `PATCH /:id` keeps `requireBusinessMember`,
+     but add a manager-or-owner check when the body touches `employeeIds`,
+     `callHandlerIds`, `chatRecipientIds`, `scanHandlerIds` or `modules`.
+  3. `backend/src/authz.ts` → add `isBusinessManager(businessId, uid)` (owner, or an
+     employee row whose `data.level === 'manager'`) and `requireBusinessManager`.
+  4. `backend/src/routers/employees.ts` → `POST /business/:businessId` and
+     `DELETE /:id` must use `requireOwner` (which already exists) or super-admin, NOT
+     `requireBusinessMember`. `PATCH /:id` stays member-level BUT the service must reject
+     changes to `level`, `userId` and `businessId` unless the actor owns the business or
+     is a super-admin. Also fix the fail-open `if (emp)` guards while you're in there —
+     throw `notFound()` when the row is missing instead of skipping the check.
+- **Path B — src/data/api/:** none.
+- **DB/migration:** `supabase/migrations/0008_business_ownership_lock.sql` — SHARED DB,
+  apply once; needs 0006 (`is_super_admin`).
+- **Verify:** `cd backend && npm run typecheck && npm run build`. Then as a STAFF member:
+  `PATCH /api/businesses/:id {"ownerId":"<me>"}` must not change ownership (re-read it),
+  `PATCH /api/employees/<own row> {"level":"manager"}` must 403, and
+  `DELETE /api/employees/<any>` must 403. As a MANAGER, granting `permissions` on a
+  teammate's row must still succeed.
+
+## [SYNC-016] SECURITY: order pricing & state transitions are no longer client-trusted
+
+- **Area:** OrderRepository / orders (create, append, proposal) + billing
+- **Why:** `orders_update` let the CUSTOMER rewrite their own order document. Place an
+  order, let the business accept it (dine-in tabs and accepted proposals stay open by
+  design), then rewrite the line prices to zero — "Move to billing" bills from
+  `order.lines`, so the bill totals ₹0 and the business never re-checks because it
+  already approved. Same write also forged `status`, `billId` and `respondedByName`.
+  **Path B is PARTLY protected already**, and this matters for how you fix it: it has no
+  generic `PATCH /orders/:id`, only per-transition endpoints whose logic runs on the
+  server — so status forgery is not reachable there. What IS reachable is **price
+  trust**: `POST /orders` and `POST /orders/:id/append` take line prices straight from
+  the request body.
+- **Supabase change:** migration `supabase/migrations/0009_order_integrity.sql` —
+  adds `catalog_price(bid, line)` (looks a line's unit price up in the business's own
+  menu/products/services/rentals/partyPackages by name); a BEFORE INSERT trigger
+  `sanitize_customer_order` that, for a non-member actor, forces `status='requested'`,
+  strips `billId`/`respondedByName`/`responseMessage`, pins `customerId`/`businessId`
+  to the scoping columns, and rebuilds every line keeping only kind/name/quantity/
+  offerPrice with a catalog-derived `price` and `included=true`; narrows
+  `orders_update` to business members only; and adds two SECURITY DEFINER functions,
+  `decide_order_proposal(order_id, accept)` and `append_order_lines(order_id, new_lines)`,
+  as the customer's only two mutations (execute granted to `authenticated` only).
+  Client: `src/data/supabase/orders.ts` → `decideProposal` and `appendLines` now call
+  those RPCs instead of writing; `create` reads the row back so it returns what was
+  actually stored.
+- **Domain/interface:** none — no shape changes.
+- **Path B — backend/:**
+  1. Port `catalogPrice(business, line)` into `backend/src/services/orders.ts` (or
+     `lib/`): match `line.name` case-insensitively against the business's `menu`,
+     `products`, `services`, `rentals` and `partyPackages`, return that item's `price`.
+  2. `orderService.create()` — when the actor is NOT a business member, ignore
+     `input.lines[].price` and use `catalogPrice(...) ?? input price`; force
+     `status='requested'`, no `billId`, and drop any client-sent `counterPrice`/
+     `included`. `create` currently takes no actor, so thread the caller's uid in from
+     the router (`routers/orders.ts` already has it for `requireCustomerOrMember`).
+  3. `orderService.appendLines()` — same price derivation; it already forces
+     `status='requested'` server-side, so only the pricing needs fixing.
+  4. Leave `respond` / `moveToBilling` / `markDelivered` alone — they're member-only
+     and their prices ARE authoritative.
+- **Path B — src/data/api/:** none. `decideProposal`/`appendLines` already POST to
+  transition endpoints; the server does the work.
+- **DB/migration:** `supabase/migrations/0009_order_integrity.sql` — SHARED DB, apply
+  once. Note the trigger and both functions no-op their checks when `auth.uid()` is
+  null, i.e. on Prisma's service-role connection — Path B gets NO protection from them
+  and must do the above itself.
+- **Verify:** `cd backend && npm run typecheck && npm run build`. Then as a customer,
+  `POST /api/orders` with a line priced `"₹0"` for an item the business lists at ₹120 —
+  re-read the order and confirm the stored price is ₹120.
+
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->

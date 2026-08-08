@@ -17,7 +17,7 @@ import type { OfferingSection } from '@/domain/offeringSections';
 import { Button, Card, Input, Tag, Text } from '@/components/ui';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
 import { PhotosField } from '@/features/media/PhotosField';
-import { radius, spacing } from '@/theme/theme';
+import { radius, spacing, useColors } from '@/theme/theme';
 
 /** "150" / "4.5" (numeric box) → "₹150" / "₹4.50"; blank/junk → undefined. */
 function toPriceLabel(raw: string): string | undefined {
@@ -80,6 +80,7 @@ export function OfferingsEditor<T extends OfferingItem>({
   descriptionPlaceholder = 'What it includes (optional)',
   withImage = false,
 }: OfferingsEditorProps<T>) {
+  const colors = useColors();
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [description, setDescription] = useState('');
@@ -100,6 +101,10 @@ export function OfferingsEditor<T extends OfferingItem>({
   // Why: a silently disabled Add button reads as broken — keep it tappable
   // and explain what's missing instead.
   const [error, setError] = useState<string | null>(null);
+  // Index of the row loaded into the composer for editing, or null when the
+  // composer is adding a new item. Editing reuses the composer rather than
+  // growing a second form, so every field stays editable the same way.
+  const [editing, setEditing] = useState<number | null>(null);
 
   const allSections = useMemo(
     () => [...library, ...customSections],
@@ -155,12 +160,8 @@ export function OfferingsEditor<T extends OfferingItem>({
       subcategoryId: section?.subcategoryId,
     }) as T;
 
-  const add = () => {
-    if (!name.trim()) {
-      setError('Type a name in the box above first — the price is optional.');
-      return;
-    }
-    onChange([...value, buildItem(name, price)]);
+  /** Clear the composer back to an empty "add the next one" state. */
+  const resetComposer = () => {
     setName('');
     setPrice('');
     setDescription('');
@@ -168,21 +169,97 @@ export function OfferingsEditor<T extends OfferingItem>({
     setError(null);
   };
 
+  const add = () => {
+    if (!name.trim()) {
+      setError('Type a name in the box above first — the price is optional.');
+      return;
+    }
+    onChange([...value, buildItem(name, price)]);
+    resetComposer();
+  };
+
+  /** Save the row being edited, keeping everything the composer holds. */
+  const saveEdit = () => {
+    if (editing === null) return;
+    if (!name.trim()) {
+      setError('An item needs a name. Clear the price instead if it’s not for sale.');
+      return;
+    }
+    const edited = buildItem(name, price);
+    onChange(
+      value.map((item, i) =>
+        // Keep fields the composer doesn't own (a product's id, its sold flag)
+        // so editing a price never detaches the item from its page or thread.
+        i === editing ? ({ ...item, ...edited } as T) : item,
+      ),
+    );
+    setEditing(null);
+    resetComposer();
+  };
+
+  /** Load a row into the composer so every field can be changed in place. */
+  const startEdit = (index: number) => {
+    const item = value[index];
+    if (!item) return;
+    setEditing(index);
+    setError(null);
+    setName(item.name);
+    // Stored prices are labels ("₹120"); the box holds the bare number.
+    const amount = parsePrice(item.price);
+    setPrice(amount === undefined ? '' : String(amount));
+    setDescription(item.description ?? '');
+    setImages(item.images ?? []);
+
+    // Re-select the section/subcategory it was filed under, inventing chips for
+    // anything the library doesn't know so the pick round-trips unchanged.
+    const categoryName = item.category?.trim();
+    if (!categoryName) {
+      setSectionId(undefined);
+      setSubcategory(undefined);
+      return;
+    }
+    let target = allSections.find((s) => s.name.toLowerCase() === categoryName.toLowerCase());
+    if (!target) {
+      target = { id: `custom:${categoryName}`, name: categoryName, icon: '✨' };
+      setCustomSections((prev) => [...prev, target!]);
+    }
+    setSectionId(target.id);
+    const sub = item.subcategory?.trim();
+    setSubcategory(sub || undefined);
+    setCustomSubs(
+      sub && !(target.subcategories ?? []).some((s) => s.toLowerCase() === sub.toLowerCase())
+        ? [sub]
+        : [],
+    );
+  };
+
+  const cancelEdit = () => {
+    setEditing(null);
+    resetComposer();
+  };
+
   // A row typed but never "Add"ed would silently vanish when the user moves
   // on (e.g. taps Next in the register wizard). Commit it on unmount instead.
-  const latest = useRef({ name, price, value, onChange, buildItem });
-  latest.current = { name, price, value, onChange, buildItem };
+  // An in-progress EDIT is not committed — it already exists in the list, and
+  // appending it would duplicate the row.
+  const latest = useRef({ name, price, value, onChange, buildItem, editing });
+  latest.current = { name, price, value, onChange, buildItem, editing };
   useEffect(
     () => () => {
       const pending = latest.current;
-      if (pending.name.trim()) {
+      if (pending.editing === null && pending.name.trim()) {
         pending.onChange([...pending.value, pending.buildItem(pending.name, pending.price)]);
       }
     },
     [],
   );
 
-  const remove = (index: number) => onChange(value.filter((_, i) => i !== index));
+  const remove = (index: number) => {
+    onChange(value.filter((_, i) => i !== index));
+    // Removing a row shifts every later index — drop the edit rather than let
+    // it write over whatever slid into the slot.
+    if (editing !== null && editing >= index) cancelEdit();
+  };
 
   /** "Repairs › AC" — where the item was filed, shown under its name. */
   const groupLabel = (item: T): string | undefined =>
@@ -193,7 +270,13 @@ export function OfferingsEditor<T extends OfferingItem>({
       {value.length > 0 ? (
         <Card style={styles.list}>
           {value.map((item, i) => (
-            <View key={`${item.name}-${i}`} style={styles.row}>
+            <View
+              key={`${item.name}-${i}`}
+              style={[
+                styles.row,
+                editing === i ? { ...styles.rowEditing, borderColor: colors.brand } : null,
+              ]}
+            >
               {withImage && item.images?.[0] ? (
                 <Image source={{ uri: item.images[0] }} style={styles.thumb} resizeMode="cover" />
               ) : null}
@@ -215,6 +298,13 @@ export function OfferingsEditor<T extends OfferingItem>({
                   {item.price}
                 </Text>
               ) : null}
+              <Text
+                weight="semibold"
+                tone={editing === i ? 'brand' : 'muted'}
+                onPress={() => (editing === i ? cancelEdit() : startEdit(i))}
+              >
+                ✏️
+              </Text>
               <Text tone="danger" weight="semibold" onPress={() => remove(i)}>
                 ✕
               </Text>
@@ -329,9 +419,11 @@ export function OfferingsEditor<T extends OfferingItem>({
       ) : null}
       {sections ? (
         <Text variant="caption" tone="muted" style={styles.groupsHint}>
-          {section
-            ? `Adding to ${[section.name, subcategory].filter(Boolean).join(' › ')} — the section sticks, so put the whole lot in, then switch.`
-            : 'Pick a section above so customers can browse your list instead of scrolling it.'}
+          {editing !== null
+            ? `Filed under ${section ? [section.name, subcategory].filter(Boolean).join(' › ') : 'no section'} — switch it above to move the item.`
+            : section
+              ? `Adding to ${[section.name, subcategory].filter(Boolean).join(' › ')} — the section sticks, so put the whole lot in, then switch.`
+              : 'Pick a section above so customers can browse your list instead of scrolling it.'}
         </Text>
       ) : null}
       {error ? (
@@ -339,7 +431,18 @@ export function OfferingsEditor<T extends OfferingItem>({
           {error}
         </Text>
       ) : null}
-      <Button title={addLabel} variant="secondary" onPress={add} />
+      {editing !== null ? (
+        <View style={styles.editActions}>
+          <View style={styles.editBtn}>
+            <Button title="Cancel" variant="ghost" onPress={cancelEdit} />
+          </View>
+          <View style={styles.editBtn}>
+            <Button title="Save changes" variant="secondary" onPress={saveEdit} />
+          </View>
+        </View>
+      ) : (
+        <Button title={addLabel} variant="secondary" onPress={add} />
+      )}
     </View>
   );
 }
@@ -347,6 +450,16 @@ export function OfferingsEditor<T extends OfferingItem>({
 const styles = StyleSheet.create({
   list: { marginBottom: spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xs },
+  // The row loaded into the composer — a left rule so it's obvious which item
+  // the fields below belong to.
+  rowEditing: {
+    borderLeftWidth: 3,
+    paddingLeft: spacing.sm,
+    marginLeft: -spacing.sm,
+    borderRadius: radius.sm,
+  },
+  editActions: { flexDirection: 'row', gap: spacing.sm },
+  editBtn: { flex: 1 },
   itemName: { flex: 1 },
   thumb: { width: 40, height: 40, borderRadius: radius.sm },
   inputs: { flexDirection: 'row', gap: spacing.md },

@@ -16,7 +16,8 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { commerceVocab, getVehicleKind } from '@/domain/catalog';
 import { enabledModules } from '@/domain/modules';
-import { canAccessService, isManagerOrOwner, type ServiceId } from '@/domain/access';
+import { canAccessService, isBusinessTeamMember, isManagerOrOwner, type ServiceId } from '@/domain/access';
+import { liveOffers } from '@/features/businesses/offerUtils';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { startBackgroundShare, stopBackgroundShare } from '@/lib/backgroundLocation';
@@ -73,9 +74,9 @@ export default function WorkspaceScreen() {
   const mods = new Set(enabledModules(business));
   const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
   const isOwner = currentUser?.id === business.ownerId;
-  const isMember = isOwner || !!meEmployee;
+  const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
   // Owner + managers see every tool; managers may also set who accesses what.
-  const canManageAll = isManagerOrOwner(business, meEmployee ?? undefined, currentUser?.id);
+  const canManageAll = isManagerOrOwner(business, meEmployee ?? undefined, currentUser);
 
   // Not a member → no access.
   if (!isMember) {
@@ -113,9 +114,11 @@ export default function WorkspaceScreen() {
   // Per-employee service access: the owner grants each tool on the Access
   // screen. Owner has everything; a member with no explicit grants keeps all.
   const canUse = (id: ServiceId) =>
-    canAccessService(business, meEmployee ?? undefined, currentUser?.id, id);
+    canAccessService(business, meEmployee ?? undefined, currentUser, id);
 
   const base = `/workspace/${business.id}`;
+  // How many offers a customer is actually seeing right now.
+  const liveOfferCount = liveOffers(business).length;
 
   // Vehicles this member drives — for a driver the live-share toggle is the one
   // control they open the workspace for, so it's pulled up top as its own card
@@ -214,6 +217,22 @@ export default function WorkspaceScreen() {
           label: 'Logbook',
           sub: 'Record book of orders & manual entries',
           href: `${base}/logbook` as Href,
+        },
+        // Offers & pricing — universal, like the logbook: every business has
+        // something it sells, prices and can promote.
+        canUse('offers') && {
+          icon: '🎉',
+          label: 'Offers',
+          sub: liveOfferCount
+            ? `${liveOfferCount} live on your page`
+            : 'Bundle what you sell at a deal price',
+          href: `${base}/offers` as Href,
+        },
+        canUse('offerings') && {
+          icon: '📝',
+          label: 'Menu & pricing',
+          sub: 'Edit what you sell, and what it costs',
+          href: `/manage/${business.id}` as Href,
         },
       ],
     },

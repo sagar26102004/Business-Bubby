@@ -123,13 +123,22 @@ export function createSupabaseOrders(): OrderRepository {
         status: 'requested',
         createdAt: nowIso(),
       };
-      const { error } = await sb().from('orders').insert({
-        id: order.id,
-        business_id: input.businessId,
-        customer_id: uuidOrNull(input.customerId),
-        data: order,
-      });
+      // Read the row back: a customer-placed order is sanitised on the way in
+      // (migration 0009 forces status/billId and re-derives each line's price
+      // from the business's catalog), so what was stored is the truth — return
+      // that rather than what we optimistically built.
+      const { data: stored, error } = await sb()
+        .from('orders')
+        .insert({
+          id: order.id,
+          business_id: input.businessId,
+          customer_id: uuidOrNull(input.customerId),
+          data: order,
+        })
+        .select('data')
+        .single();
       if (error) throw error;
+      Object.assign(order, (stored?.data ?? {}) as Partial<Order>);
 
       if (business) {
         if (order.party) {
@@ -276,11 +285,20 @@ export function createSupabaseOrders(): OrderRepository {
       if (order.status !== 'proposed') throw new Error('There is no open proposal on this order.');
       const business = await loadBusiness(order.businessId);
 
+      // Goes through a SECURITY DEFINER function (migration 0009), not a direct
+      // write: a customer has no UPDATE on orders at all, because the business
+      // bills from this document and every field in it would otherwise be
+      // theirs to rewrite. The function moves `status` and nothing else.
+      const { data: updated, error: rpcError } = await sb().rpc('decide_order_proposal', {
+        order_id: id,
+        accept,
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      Object.assign(order, (updated ?? {}) as Partial<Order>);
+
       if (accept) {
         // RLS: a customer can't issue a bill. A customer-accepted proposal becomes
         // a confirmed OPEN TAB; the business closes it with "Move to billing".
-        order.status = 'accepted';
-        await saveOrder(order);
         if (business) {
           const dineInOrParty = order.fulfillment === 'dine_in' || order.party;
           await notify({
@@ -296,19 +314,15 @@ export function createSupabaseOrders(): OrderRepository {
             orderId: order.id,
           });
         }
-      } else {
-        order.status = 'declined';
-        await saveOrder(order);
-        if (business) {
-          await notify({
-            recipientId: business.ownerId,
-            kind: 'order_update',
-            title: `Proposal declined · ${business.name}`,
-            body: `${order.customerName} declined your proposal.`,
-            businessId: order.businessId,
-            orderId: order.id,
-          });
-        }
+      } else if (business) {
+        await notify({
+          recipientId: business.ownerId,
+          kind: 'order_update',
+          title: `Proposal declined · ${business.name}`,
+          body: `${order.customerName} declined your proposal.`,
+          businessId: order.businessId,
+          orderId: order.id,
+        });
       }
       return order;
     },
@@ -320,20 +334,23 @@ export function createSupabaseOrders(): OrderRepository {
         throw new Error('This order is not open anymore — place a new order instead.');
       }
       if (lines.length === 0) throw new Error('Pick at least one item to add.');
-      order.lines.push(
-        ...lines.map((l) => ({
-          id: uuid(),
+
+      // Same reasoning as decideProposal: the customer has no UPDATE on orders.
+      // The function appends the lines, re-derives each unit price from the
+      // business's own catalog, and sends the order back to 'requested' so the
+      // business re-confirms before anything is billed.
+      const { data: updated, error: rpcError } = await sb().rpc('append_order_lines', {
+        order_id: id,
+        new_lines: lines.map((l) => ({
           kind: l.kind,
           name: l.name,
           price: l.price,
           offerPrice: l.offerPrice?.trim() || undefined,
           quantity: Math.max(1, Math.round(l.quantity)),
-          included: true,
         })),
-      );
-      order.status = 'requested';
-      order.responseMessage = undefined;
-      await saveOrder(order);
+      });
+      if (rpcError) throw new Error(rpcError.message);
+      Object.assign(order, (updated ?? {}) as Partial<Order>);
 
       const business = await loadBusiness(order.businessId);
       if (business) {

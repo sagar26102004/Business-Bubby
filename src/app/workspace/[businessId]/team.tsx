@@ -10,6 +10,7 @@ import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Employee } from '@/domain/types';
 import type { NewEmployeeInput } from '@/data/repositories';
+import { isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Avatar, Button, Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
@@ -32,7 +33,8 @@ export default function WorkspaceTeamScreen() {
       repos.tracking.listVehicles(business.id),
     ]);
     const isOwner = currentUser?.id === business.ownerId;
-    const isMember = isOwner || employees.some((e) => e.userId && e.userId === currentUser?.id);
+    const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
+    const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
     // Anyone pinned as a vehicle's driver is grouped under Drivers.
     const driverIds = new Set(vehicles.map((v) => v.driverEmployeeId).filter(Boolean) as string[]);
     return { business, employees, owner, isOwner, isMember, driverIds };

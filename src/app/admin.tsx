@@ -17,6 +17,7 @@ import { applyCatalogEntries } from '@/domain/catalogEntries';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
+import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import {
   Button,
   Card,
@@ -53,6 +54,17 @@ export default function AdminScreen() {
   const { data: entries, reload, loading } = useAsync(
     () => (isAdmin ? repos.catalog.listAll() : Promise.resolve([])),
     [isAdmin],
+  );
+
+  // Business finder — the way into any listing's owner-facing screens.
+  const [bizQuery, setBizQuery] = useState('');
+  const debouncedBiz = useDebouncedValue(bizQuery, 300);
+  const { data: bizResults, loading: bizLoading } = useAsync(
+    () =>
+      isAdmin && debouncedBiz.trim().length > 1
+        ? repos.businesses.list({ search: debouncedBiz.trim() })
+        : Promise.resolve([]),
+    [isAdmin, debouncedBiz],
   );
 
   /** Re-pull approved entries into the in-app suggestion overlays after edits. */
@@ -131,6 +143,55 @@ export default function AdminScreen() {
       <Text variant="heading" weight="bold" style={styles.h1}>
         🛡️ Platform admin
       </Text>
+
+      {/* Onboarding desk — list a business for someone, then set up their page
+          for them. A super-admin passes every access check (domain/access.ts),
+          so these open the real owner-facing screens. */}
+      <Card style={styles.card}>
+        <Text weight="semibold" style={styles.cardTitle}>
+          Set up a business
+        </Text>
+        <Text variant="caption" tone="muted" style={styles.cardSub}>
+          List a shop on the owner’s behalf, then open it to price its menu or put its first
+          offers up. Search by name to find one that’s already listed.
+        </Text>
+        <Button
+          title="＋ Register a business for someone"
+          onPress={() => router.push('/register')}
+        />
+        <View style={styles.searchRow}>
+          <Input
+            placeholder="Find a listed business by name"
+            value={bizQuery}
+            onChangeText={setBizQuery}
+          />
+        </View>
+        {bizLoading ? (
+          <Text variant="caption" tone="muted">
+            Searching…
+          </Text>
+        ) : null}
+        {(bizResults ?? []).map((b) => (
+          <View key={b.id} style={[styles.bizRow, { borderTopColor: colors.border }]}>
+            <View style={styles.bizName}>
+              <Text weight="semibold">{b.name}</Text>
+              <Text variant="caption" tone="muted" numberOfLines={1}>
+                {b.tagline || b.providerType || b.type}
+              </Text>
+            </View>
+            <View style={styles.bizActions}>
+              <Tag label="Page" onPress={() => router.push(`/business/${b.id}`)} />
+              <Tag label="Prices" onPress={() => router.push(`/manage/${b.id}`)} />
+              <Tag label="Offers" onPress={() => router.push(`/workspace/${b.id}/offers`)} />
+            </View>
+          </View>
+        ))}
+        {bizQuery.trim().length > 1 && !bizLoading && (bizResults ?? []).length === 0 ? (
+          <Text variant="caption" tone="muted" style={styles.searchRow}>
+            No business matches “{bizQuery.trim()}”.
+          </Text>
+        ) : null}
+      </Card>
 
       {/* Add a business tag */}
       <Card style={styles.card}>
@@ -232,6 +293,17 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   rowMain: { flex: 1 },
   action: { paddingHorizontal: spacing.xs },
+  searchRow: { marginTop: spacing.md },
+  bizRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+    marginTop: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  bizName: { flex: 1 },
+  bizActions: { flexDirection: 'row', gap: spacing.xs },
   denied: { alignItems: 'center', paddingTop: spacing.xxl },
   deniedIcon: { fontSize: 44 },
   deniedTitle: { marginTop: spacing.md, textAlign: 'center' },

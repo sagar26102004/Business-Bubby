@@ -27,6 +27,7 @@ import {
   sortBySection,
 } from '@/domain/offeringSections';
 import { isSuperAdminUser } from '@/domain/superAdmin';
+import { isBusinessTeamMember } from '@/domain/access';
 import { haversineKm } from '@/lib/geo';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -43,6 +44,8 @@ import {
 } from '@/components/ui';
 import { BusinessHero } from '@/features/businesses/BusinessHero';
 import { OfferingsSection, type OfferingGroup } from '@/features/businesses/OfferingsSection';
+import { OffersSection } from '@/features/businesses/OffersSection';
+import { liveOffers } from '@/features/businesses/offerUtils';
 import { ProductTile } from '@/features/businesses/ProductTile';
 import { PortfolioGallery } from '@/features/businesses/PortfolioGallery';
 import { ReviewsSection } from '@/features/businesses/ReviewsSection';
@@ -122,9 +125,18 @@ export default function BusinessDetailScreen() {
 
   const { business, employees, owner, myTrackedItems, myOrders, places, reviews, myReview } = data;
   const isOwner = currentUser?.id === business.ownerId;
-  const isMember = isOwner || employees.some((e) => e.userId && e.userId === currentUser?.id);
   const isSuper = isSuperAdminUser(currentUser);
+  // A super-admin stands in for the owner (they onboard businesses on their
+  // behalf), so they reach the same tools — see domain/access.ts.
+  const isMember = isBusinessTeamMember(
+    business,
+    employees.find((e) => e.userId && e.userId === currentUser?.id),
+    currentUser,
+  );
   const isStall = business.type === 'item';
+  // The page is what CUSTOMERS see, members included — a paused offer stays off
+  // it. Status lives in Workspace › Offers, where it can be explained.
+  const offers = liveOffers(business);
 
   const hasMenu = (business.menu?.length ?? 0) > 0;
   // Enrol/Subscribe and Order are two distinct buttons on two distinct modules.
@@ -269,6 +281,10 @@ export default function BusinessDetailScreen() {
           isOwner && !isStall ? () => router.push(`/manage/${business.id}`) : undefined
         }
       />
+
+      {/* Offers — the business's own promotions, straight under the
+          description so they're the first thing read after the intro. */}
+      <OffersSection offers={offers} />
 
       {/* ——— 2. What they offer ——— */}
       {hasOfferings ? <SectionTitle>What we offer</SectionTitle> : null}
@@ -452,9 +468,9 @@ export default function BusinessDetailScreen() {
           />
         </>
       ) : null}
-      {isOwner && !isStall ? (
+      {(isOwner || isSuper) && !isStall ? (
         <Button
-          title="✏️ Edit business page"
+          title={isOwner ? '✏️ Edit business page' : '🛡️ Edit page (super-admin)'}
           onPress={() => router.push(`/manage/${business.id}`)}
           style={styles.manageBtn}
         />

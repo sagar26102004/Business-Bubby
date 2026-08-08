@@ -13,7 +13,8 @@
  */
 import * as Linking from 'expo-linking';
 import type { Bill, Business, Employee, Order } from '@/domain/types';
-import { canAccessService } from '@/domain/access';
+import { canAccessService, type Viewer } from '@/domain/access';
+import { isSuperAdminUser } from '@/domain/superAdmin';
 
 /** Where an order stands in the handover flow. */
 export type HandoverStage = 'unpaid' | 'paid' | 'collected';
@@ -73,16 +74,17 @@ export const handoverStarted = (order: Order): boolean => !!order.billId;
  */
 export function canScanFor(
   business: Pick<Business, 'ownerId' | 'scanHandlerIds'>,
-  viewerId: string | undefined,
+  viewer: Viewer,
   meEmployee: Pick<Employee, 'id' | 'permissions'> | undefined,
 ): boolean {
-  if (!viewerId) return false;
-  if (viewerId === business.ownerId) return true;
+  if (isSuperAdminUser(viewer)) return true;
+  if (!viewer) return false;
+  if (viewer.id === business.ownerId) return true;
   if (!meEmployee) return false;
   if ((business.scanHandlerIds ?? []).includes(meEmployee.id)) return true;
   return (
-    canAccessService(business, meEmployee, viewerId, 'billing') ||
-    canAccessService(business, meEmployee, viewerId, 'orders')
+    canAccessService(business, meEmployee, viewer, 'billing') ||
+    canAccessService(business, meEmployee, viewer, 'orders')
   );
 }
 

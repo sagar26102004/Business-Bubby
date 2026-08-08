@@ -1,7 +1,12 @@
 /**
- * Manage screen (owner only). The owner sets each employee's hierarchy level
- * and chooses who attends calls and who customer chats are forwarded to. The
- * owner is always included, so the toggles here cover the employees.
+ * Manage screen. The owner sets each employee's hierarchy level and chooses who
+ * attends calls and who customer chats are forwarded to. The owner is always
+ * included, so the toggles here cover the employees.
+ *
+ * TWO audiences: the owner sees the whole screen, while a team member granted
+ * the "Menu & pricing" service (domain/access.ts) sees the CATALOG half only —
+ * enough to edit and reprice the menu, products, services and rentals, and
+ * nothing that would let them rewrite the listing, the team or the modules.
  */
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Switch, View } from 'react-native';
@@ -17,6 +22,9 @@ import type {
   RentalStatus,
   ServiceItem,
 } from '@/domain/types';
+import { canAccessService } from '@/domain/access';
+import { isSuperAdminUser } from '@/domain/superAdmin';
+import { SuperAdminBanner } from '@/features/businesses/SuperAdminBanner';
 import { RENTAL_BASES, offersDineIn } from '@/domain/catalog';
 import { AVAILABLE_MODULES, COMING_SOON_MODULES, enabledModules } from '@/domain/modules';
 import { isFoodShop, SUGGESTED_BUSINESS_TAGS } from '@/domain/tags';
@@ -116,11 +124,22 @@ export default function ManageScreen() {
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" />;
 
-  if (currentUser?.id !== data.business.ownerId) {
+  // Two audiences, one screen. The OWNER gets everything. A team member granted
+  // the "Menu & pricing" service gets the catalog half only — they can reprice
+  // and edit what's sold without touching the listing's identity, the team, or
+  // which modules run.
+  const meEmployee = data.employees.find((e) => e.userId && e.userId === currentUser?.id);
+  const isOwner = !!currentUser && currentUser.id === data.business.ownerId;
+  const canEditOfferings = canAccessService(data.business, meEmployee, currentUser, 'offerings');
+
+  if (!isOwner && !canEditOfferings) {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Manage' }} />
-        <EmptyView title="Owners only" subtitle="Only the business owner can manage this." />
+        <EmptyView
+          title="No access"
+          subtitle="Only the owner, or a team member granted “Menu & pricing”, can edit this."
+        />
       </Screen>
     );
   }
@@ -149,45 +168,56 @@ export default function ManageScreen() {
     setSaving(true);
     try {
       await repos.businesses.update(data.business.id, {
-        callHandlerIds: Array.from(callSet),
-        ownerHandlesCalls: ownerOnCalls,
-        chatRecipientIds: Array.from(chatSet),
-        scanHandlerIds: Array.from(scanSet),
-        // Saving always writes the explicit module list — a legacy business
-        // (no list = everything on) becomes explicit on its first save.
-        modules: Array.from(moduleSet),
+        // The catalog — the half a "Menu & pricing" member may write.
         products: products.length > 0 ? products : undefined,
         menu: menu.length > 0 ? menu : undefined,
         services: services.length > 0 ? services : undefined,
         rentals: rentals.length > 0 ? rentals : undefined,
         partyPackages: partyPackages.length > 0 ? partyPackages : undefined,
-        // Dine-in seating: how many tables to seat orders at (blank = no tables).
-        ...(offersDineIn(data.business) ? { tableCount: parsedTableCount } : {}),
-        // Stalls start out named after the owner — let them pick a real name.
-        ...(isStall && stallName.trim() ? { name: stallName.trim() } : {}),
-        // Business page identity — editable after publishing.
-        ...(isStall
-          ? {}
-          : {
-              ...(name.trim() ? { name: name.trim() } : {}),
-              tagline: tagline.trim() || undefined,
-              description: description.trim() || undefined,
-              coverImageUrl: cover[0],
-              tags: tags.length > 0 ? tags : undefined,
-              openingHours,
-              hours: summarizeHours(openingHours),
-            }),
-        // Rentals: flip Available/Rented instead of re-listing.
-        ...(isRental ? { rentalStatus, rentalBasis } : {}),
+        // Everything below is the owner's: routing, modules, the listing's
+        // identity and rental status. A member's save must never carry these,
+        // even unchanged — their form never rendered them.
+        ...(isOwner
+          ? {
+              callHandlerIds: Array.from(callSet),
+              ownerHandlesCalls: ownerOnCalls,
+              chatRecipientIds: Array.from(chatSet),
+              scanHandlerIds: Array.from(scanSet),
+              // Saving always writes the explicit module list — a legacy
+              // business (no list = everything on) becomes explicit on its
+              // first save.
+              modules: Array.from(moduleSet),
+              // Dine-in seating: how many tables to seat orders at (blank = none).
+              ...(offersDineIn(data.business) ? { tableCount: parsedTableCount } : {}),
+              // Stalls start out named after the owner — let them pick a real name.
+              ...(isStall && stallName.trim() ? { name: stallName.trim() } : {}),
+              // Business page identity — editable after publishing.
+              ...(isStall
+                ? {}
+                : {
+                    ...(name.trim() ? { name: name.trim() } : {}),
+                    tagline: tagline.trim() || undefined,
+                    description: description.trim() || undefined,
+                    coverImageUrl: cover[0],
+                    tags: tags.length > 0 ? tags : undefined,
+                    openingHours,
+                    hours: summarizeHours(openingHours),
+                  }),
+              // Rentals: flip Available/Rented instead of re-listing.
+              ...(isRental ? { rentalStatus, rentalBasis } : {}),
+            }
+          : {}),
       });
-      await Promise.all(
-        data.employees.flatMap((e) => {
-          const patch: Partial<Employee> = {};
-          if (levels[e.id] && levels[e.id] !== (e.level ?? 'staff')) patch.level = levels[e.id];
-          if (showSet.has(e.id) !== !!e.showOnPage) patch.showOnPage = showSet.has(e.id);
-          return Object.keys(patch).length > 0 ? [repos.employees.update(e.id, patch)] : [];
-        }),
-      );
+      if (isOwner) {
+        await Promise.all(
+          data.employees.flatMap((e) => {
+            const patch: Partial<Employee> = {};
+            if (levels[e.id] && levels[e.id] !== (e.level ?? 'staff')) patch.level = levels[e.id];
+            if (showSet.has(e.id) !== !!e.showOnPage) patch.showOnPage = showSet.has(e.id);
+            return Object.keys(patch).length > 0 ? [repos.employees.update(e.id, patch)] : [];
+          }),
+        );
+      }
       Alert.alert('Saved', 'Your business page has been updated.');
       router.back();
     } catch (err) {
@@ -201,10 +231,15 @@ export default function ManageScreen() {
     <Screen scroll>
       <Stack.Screen options={{ title: 'Manage' }} />
 
+      {!isOwner && isSuperAdminUser(currentUser) ? (
+        <SuperAdminBanner businessName={data.business.name} what="menu & prices" />
+      ) : null}
+
       {/* Business page — the same identity fields set at registration, editable
           any time. Stalls edit their name in the "What you're selling" section
-          below, so this block is for real businesses only. */}
-      {!isStall ? (
+          below, so this block is for real businesses only. Owner-only: a member
+          with "Menu & pricing" edits the catalog, not the listing's identity. */}
+      {isOwner && !isStall ? (
         <>
           <Text variant="title" weight="bold">
             Business page
@@ -266,6 +301,9 @@ export default function ManageScreen() {
         </>
       ) : null}
 
+      {/* Team, routing, modules and availability — the owner's half. */}
+      {isOwner ? (
+        <>
       <Text variant="title" weight="bold" style={!isStall ? styles.catalogTitle : undefined}>
         Calls & chat
       </Text>
@@ -277,7 +315,7 @@ export default function ManageScreen() {
 
       {/* Owner row — chats always on, calls opt-in/out */}
       <Card style={styles.card}>
-        <Text weight="semibold">{currentUser.name} · Owner</Text>
+        <Text weight="semibold">{currentUser?.name ?? 'You'} · Owner</Text>
         <Text variant="caption" tone="muted">
           Always receives chats. Turn calls off to route them to your team only.
         </Text>
@@ -455,6 +493,9 @@ export default function ManageScreen() {
               ))}
             </View>
           </Card>
+        </>
+      ) : null}
+
         </>
       ) : null}
 

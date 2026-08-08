@@ -34,8 +34,38 @@ export const nowIso = (): string => new Date().toISOString();
  * Tools' "switch identity" signs in as the target for real using this known
  * credential. Only works for accounts created with it (the seed set + any made
  * through Dev Tools' "Add a test account").
+ *
+ * ⚠️ NEVER hardcode the value here. This module ships in the app bundle, so a
+ * literal would be readable by anyone who downloads the app — and combined with
+ * the fact that every account's login email is derived from its phone
+ * (`phoneToEmail`), a known shared password is account takeover for every
+ * account created with it.
+ *
+ * It therefore comes from `EXPO_PUBLIC_SEED_PASSWORD`, which only ever lives in
+ * a local, gitignored `.env` — production builds (eas.json) do not set it, so
+ * there is nothing to inline. `__DEV__` is a build-time literal, so in a
+ * release bundle this whole expression folds to `''` and the dev-only branch is
+ * eliminated outright.
  */
-export const TEST_PASSWORD = 'localo123';
+export const TEST_PASSWORD = __DEV__ ? (process.env.EXPO_PUBLIC_SEED_PASSWORD ?? '') : '';
+
+/**
+ * Gate a development-only tool. Throws in a release build (where the whole
+ * feature should be unreachable anyway) and explains the missing setup in dev.
+ * Called by the impersonation paths so they can never run in production even if
+ * a screen forgets to check `DEV_TOOLS_ENABLED`.
+ */
+export function assertDevTool(action: string): void {
+  if (!__DEV__) {
+    throw new Error(`${action} is a development-only tool and is disabled in this build.`);
+  }
+  if (!TEST_PASSWORD) {
+    throw new Error(
+      `${action} needs EXPO_PUBLIC_SEED_PASSWORD set in your local .env (see .env.example), ` +
+        'then restart the dev server.',
+    );
+  }
+}
 
 /** A unique synthetic phone for a Dev-Tools test account (11-digit, 78-prefixed
  * so it never collides with the seeded 9812340001–10 range). */
@@ -78,11 +108,109 @@ export async function notify(
   }
 }
 
-/** Read a profile row's domain User, or null when it doesn't exist yet. */
+/**
+ * Fields that live in `profiles_private`, not the world-readable `profiles`
+ * card (migration 0007). Contact details and preferences — never part of the
+ * public directory.
+ */
+export const PRIVATE_PROFILE_KEYS = ['phone', 'email', 'mutedNotifications'] as const;
+
+/**
+ * Read the private half of a profile: contact details and preferences. RLS
+ * returns a row only for the account itself or a platform super-admin, so for
+ * anyone else this is simply empty — which is the point.
+ *
+ * Best-effort: a project that hasn't run 0007 has no such table, and that must
+ * degrade to "no private fields", never break a profile read.
+ */
+export async function fetchPrivateProfile(id: string): Promise<Partial<User>> {
+  try {
+    const { data, error } = await sb()
+      .from('profiles_private')
+      .select('data')
+      .eq('id', id)
+      .maybeSingle();
+    if (error || !data) return {};
+    return (data.data ?? {}) as Partial<User>;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The private halves of many profiles at once, keyed by id. RLS filters the
+ * result to what the caller may actually see — their own row, plus everything
+ * if they're a super-admin — so this is safe to call with any id list: an
+ * ordinary user simply gets a near-empty map back.
+ */
+export async function fetchPrivateProfiles(
+  ids: string[],
+): Promise<Map<string, Partial<User>>> {
+  const out = new Map<string, Partial<User>>();
+  if (ids.length === 0) return out;
+  try {
+    const { data, error } = await sb()
+      .from('profiles_private')
+      .select('id, data')
+      .in('id', ids);
+    if (error || !data) return out;
+    for (const row of data as { id: string; data: Partial<User> | null }[]) {
+      out.set(row.id, row.data ?? {});
+    }
+  } catch {
+    /* table missing (pre-0007) — no private fields, which is the safe answer */
+  }
+  return out;
+}
+
+/**
+ * Read a profile as a domain User, or null when it doesn't exist yet.
+ *
+ * `profiles` holds the PUBLIC directory card (name, isProfilePublic, avatar);
+ * phone/email/mutes live in `profiles_private`. Both are read and merged here,
+ * so callers keep getting one `User` — but the private half comes back empty
+ * unless you're that user (or a super-admin), enforced by RLS rather than by
+ * anything this client does.
+ */
 export async function fetchProfile(id: string): Promise<User | null> {
-  const { data, error } = await sb().from('profiles').select('data').eq('id', id).maybeSingle();
+  const [{ data, error }, privateFields] = await Promise.all([
+    sb().from('profiles').select('data').eq('id', id).maybeSingle(),
+    fetchPrivateProfile(id),
+  ]);
   if (error) throw error;
-  return data ? (data.data as User) : null;
+  return data ? ({ ...(data.data as User), ...privateFields } as User) : null;
+}
+
+/**
+ * Is this user a platform super-admin? The grant lives in `platform_admins`
+ * (migration 0006), whose only policy is "read your own row" — so this answers
+ * truthfully for the signed-in user and always false for anyone else, which is
+ * exactly what we want to expose.
+ *
+ * Best-effort: a project that hasn't run 0006 yet has no such table, and the
+ * error must not block sign-in — it just means nobody is an admin.
+ */
+export async function fetchIsSuperAdmin(userId: string): Promise<boolean> {
+  try {
+    const { data, error } = await sb()
+      .from('platform_admins')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (error) return false;
+    return !!data;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stamp the DERIVED super-admin flag onto a session user. `isSuperAdmin` is
+ * never stored on the profile (a trigger strips it) — it is read from
+ * `platform_admins` each time we establish who is signed in.
+ */
+export async function withAdminFlag(user: User): Promise<User> {
+  return { ...user, isSuperAdmin: await fetchIsSuperAdmin(user.id) };
 }
 
 /** A minimal User when the profile row hasn't been created yet (trigger lag). */

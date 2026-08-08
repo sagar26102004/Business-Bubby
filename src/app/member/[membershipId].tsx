@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Membership, MembershipPayment } from '@/domain/types';
-import { canAccessService } from '@/domain/access';
+import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney } from '@/lib/money';
@@ -72,8 +72,8 @@ export default function MemberDetailScreen() {
       repos.memberships.listPayments(membership.id),
     ]);
     const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
-    const isMember = currentUser?.id === business.ownerId || !!meEmployee;
-    const canAccess = canAccessService(business, meEmployee, currentUser?.id, 'members');
+    const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
+    const canAccess = canAccessService(business, meEmployee, currentUser, 'members');
     return { membership, business, payments, isMember, canAccess };
   }, [membershipId, currentUser?.id]);
 

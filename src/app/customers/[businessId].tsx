@@ -9,7 +9,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { CustomerSummary } from '@/data/repositories';
-import { canAccessService } from '@/domain/access';
+import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney } from '@/lib/money';
@@ -78,7 +78,7 @@ export default function CustomersScreen() {
   const { business, employees, customers } = data;
   const isOwner = currentUser?.id === business.ownerId;
   const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
-  const isMember = isOwner || !!meEmployee;
+  const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
 
   if (!isMember) {
     return (
@@ -88,7 +88,7 @@ export default function CustomersScreen() {
       </Screen>
     );
   }
-  if (!canAccessService(business, meEmployee, currentUser?.id, 'customers')) {
+  if (!canAccessService(business, meEmployee, currentUser, 'customers')) {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Customers' }} />

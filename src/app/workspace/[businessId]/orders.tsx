@@ -11,7 +11,7 @@ import type { TableSeat } from '@/data/repositories';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { commerceVocab } from '@/domain/catalog';
-import { canAccessService } from '@/domain/access';
+import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import {
   FULFILLMENT_META,
   ORDER_STATUS_META,
@@ -46,8 +46,8 @@ export default function WorkspaceOrdersScreen() {
       repos.orders.tableStatus(business.id),
     ]);
     const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
-    const isMember = currentUser?.id === business.ownerId || !!meEmployee;
-    const canAccess = canAccessService(business, meEmployee, currentUser?.id, 'orders');
+    const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
+    const canAccess = canAccessService(business, meEmployee, currentUser, 'orders');
     return { business, isMember, canAccess, orders, seats };
   }, [businessId, currentUser?.id]);
 

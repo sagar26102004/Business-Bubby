@@ -17,7 +17,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { LogEntry } from '@/domain/types';
-import { canAccessService } from '@/domain/access';
+import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice } from '@/lib/money';
@@ -70,8 +70,8 @@ export default function WorkspaceLogbookScreen() {
       repos.logbook.listForBusiness(business.id),
     ]);
     const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
-    const isMember = currentUser?.id === business.ownerId || !!meEmployee;
-    const canUse = canAccessService(business, meEmployee, currentUser?.id, 'logbook');
+    const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
+    const canUse = canAccessService(business, meEmployee, currentUser, 'logbook');
     return { business, isMember, canUse, entries };
   }, [businessId, currentUser?.id]);
 

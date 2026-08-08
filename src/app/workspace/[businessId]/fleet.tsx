@@ -8,7 +8,7 @@
 import { Alert, StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { getVehicleKind } from '@/domain/catalog';
-import { canAccessService } from '@/domain/access';
+import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { startBackgroundShare, stopBackgroundShare } from '@/lib/backgroundLocation';
@@ -34,8 +34,8 @@ export default function WorkspaceFleetScreen() {
     ]);
     const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
     const isOwner = currentUser?.id === business.ownerId;
-    const isMember = isOwner || !!meEmployee;
-    const canAccess = canAccessService(business, meEmployee, currentUser?.id, 'fleet');
+    const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
+    const canAccess = canAccessService(business, meEmployee, currentUser, 'fleet');
     return { business, vehicles, items, sharing, meEmployee, isOwner, isMember, canAccess };
   }, [businessId, currentUser?.id]);
 

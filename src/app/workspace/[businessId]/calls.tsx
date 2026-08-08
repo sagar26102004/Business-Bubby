@@ -11,7 +11,7 @@
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Call } from '@/domain/types';
-import { isManagerOrOwner } from '@/domain/access';
+import { isBusinessTeamMember, isManagerOrOwner } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Card, EmptyView, ErrorView, LoadingView, Screen, Tag, Text } from '@/components/ui';
@@ -97,9 +97,9 @@ export default function WorkspaceCallsScreen() {
     const employees = await repos.employees.listByBusiness(business.id);
     const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
     const isOwner = currentUser?.id === business.ownerId;
-    const isMember = isOwner || !!meEmployee;
+    const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
     // Same audience as the chats tile: whoever handles the business's contact.
-    const canManageAll = isManagerOrOwner(business, meEmployee, currentUser?.id);
+    const canManageAll = isManagerOrOwner(business, meEmployee, currentUser);
     const hasChatAccess = isOwner || (meEmployee ? (business.chatRecipientIds ?? []).includes(meEmployee.id) : false);
     const takesCalls = isOwner
       ? business.ownerHandlesCalls !== false

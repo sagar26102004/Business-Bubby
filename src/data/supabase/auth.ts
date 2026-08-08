@@ -12,10 +12,12 @@ import { getSupabase } from '@/lib/supabase';
 import { clearCache } from '@/lib/queryCache';
 import {
   TEST_PASSWORD,
+  assertDevTool,
   fallbackUser,
   fetchProfile,
   niceAuthError,
   phoneToEmail,
+  withAdminFlag,
 } from './shared';
 
 export function createSupabaseAuth(): AuthRepository {
@@ -32,7 +34,11 @@ export function createSupabaseAuth(): AuthRepository {
         return { id: session.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
       }
       const profile = await fetchProfile(session.user.id);
-      return profile ?? fallbackUser(session.user.id, session.user.user_metadata?.name);
+      // `isSuperAdmin` is derived from platform_admins, never from the profile
+      // document (which the user can rewrite) — see domain/superAdmin.ts.
+      return withAdminFlag(
+        profile ?? fallbackUser(session.user.id, session.user.user_metadata?.name),
+      );
     },
 
     async signIn(phoneOrEmail: string, password?: string): Promise<User> {
@@ -42,7 +48,7 @@ export function createSupabaseAuth(): AuthRepository {
       });
       if (error) throw new Error(niceAuthError(error.message));
       const profile = await fetchProfile(data.user.id);
-      return profile ?? fallbackUser(data.user.id, data.user.user_metadata?.name);
+      return withAdminFlag(profile ?? fallbackUser(data.user.id, data.user.user_metadata?.name));
     },
 
     async signUp(input: SignUpInput): Promise<User> {
@@ -70,7 +76,7 @@ export function createSupabaseAuth(): AuthRepository {
       if (!userId) throw new Error('Sign-up did not return an account. Please try again.');
 
       const profile = await fetchProfile(userId);
-      return profile ?? fallbackUser(userId, input.name);
+      return withAdminFlag(profile ?? fallbackUser(userId, input.name));
     },
 
     async signOut(): Promise<void> {
@@ -82,10 +88,16 @@ export function createSupabaseAuth(): AuthRepository {
       // Real auth has no service-role impersonation on the client, so instead we
       // do a genuine sign-in as the target user with the shared seed password.
       // This only works for the seeded test accounts (created with TEST_PASSWORD).
+      // Hard-gated: impersonation must never be reachable in a release build.
+      assertDevTool('Switching identity');
       const profile = await fetchProfile(userId);
       if (!profile?.phone) {
+        // Phone lives in `profiles_private` (migration 0007) and RLS hands it
+        // over only to the account itself or a platform super-admin — so this
+        // is the expected answer for an ordinary account, not a broken read.
         throw new Error(
-          "Can't switch to this account — it has no phone on file to sign in with.",
+          "Can't switch to this account — its phone number isn't visible to you. " +
+            'Identity switching needs a platform super-admin account.',
         );
       }
       const { data, error } = await sb.auth.signInWithPassword({
@@ -93,13 +105,15 @@ export function createSupabaseAuth(): AuthRepository {
         password: TEST_PASSWORD,
       });
       if (error) {
+        // Deliberately does NOT echo the password — error text ends up in Metro
+        // logs, crash reporters and screenshots.
         throw new Error(
-          `Can't switch to ${profile.name} — this only works for seeded test accounts (password "${TEST_PASSWORD}"). Sign in manually instead.`,
+          `Can't switch to ${profile.name} — this only works for seeded test accounts created with the shared dev password. Sign in manually instead.`,
         );
       }
       await clearCache();
       const fresh = await fetchProfile(data.user.id);
-      return fresh ?? fallbackUser(data.user.id, data.user.user_metadata?.name);
+      return withAdminFlag(fresh ?? fallbackUser(data.user.id, data.user.user_metadata?.name));
     },
 
     async signInGuest(): Promise<User> {
@@ -112,7 +126,7 @@ export function createSupabaseAuth(): AuthRepository {
           return { id: existing.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
         }
         const profile = await fetchProfile(existing.id);
-        return profile ?? fallbackUser(existing.id, existing.user_metadata?.name);
+        return withAdminFlag(profile ?? fallbackUser(existing.id, existing.user_metadata?.name));
       }
       const { data, error } = await sb.auth.signInAnonymously();
       if (error || !data.user) {

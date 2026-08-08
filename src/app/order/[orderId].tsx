@@ -84,7 +84,7 @@ export default function OrderDetailScreen() {
   const isOwner = currentUser?.id === business.ownerId;
   const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
   const isMember = isOwner || !!meEmployee;
-  const canScan = canScanFor(business, currentUser?.id, meEmployee);
+  const canScan = canScanFor(business, currentUser, meEmployee);
   const viewerId = currentUser?.id ?? 'guest';
   const isCustomer = order.customerId === viewerId;
 
