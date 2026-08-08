@@ -50,7 +50,7 @@
         {
           "color": "#141414",
           "sounds": [
-            "./assets/call-ringtone.wav"
+            "./assets/call_ringtone.wav"
           ]
         }
       ]

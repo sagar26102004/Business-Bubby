@@ -70,7 +70,11 @@ async function ensureCallChannel(): Promise<void> {
     // to come from the file's length — there is no loop setting. Bundled into
     // res/raw by the expo-notifications plugin (`sounds` in app.json); named
     // WITHOUT a path, exactly as the plugin installs it.
-    sound: 'call-ringtone.wav',
+    //
+    // ⚠️ The UNDERSCORE is load-bearing. This becomes an Android resource name,
+    // which must match [a-z][a-z0-9_]* — a hyphen fails prebuild outright
+    // ("Resource name is not valid"), so never rename this to call-ringtone.
+    sound: 'call_ringtone.wav',
     vibrationPattern: [0, 700, 550, 700, 2050],
     enableVibrate: true,
     enableLights: true,
