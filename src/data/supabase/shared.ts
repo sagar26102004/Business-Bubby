@@ -8,7 +8,7 @@
  * RLS can decide who sees what.
  */
 import type { AppNotification, User } from '@/domain/types';
-import { getSupabase } from '@/lib/supabase';
+import { getSupabase, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 /** The shared client. Thin accessor so repos read `sb()` like the mock reads its arrays. */
@@ -27,6 +27,104 @@ export function uuid(): string {
 }
 
 export const nowIso = (): string => new Date().toISOString();
+
+/**
+ * SERVER-ANCHORED CLOCK.
+ *
+ * Some logic compares a timestamp written by ONE device against the clock of
+ * ANOTHER (the ring timeout is the sharp case: the caller stamps `startedAt`,
+ * every business member's poll decides whether it has rung out). A device whose
+ * clock is off by more than the window then makes that decision wrongly for
+ * everyone — a phone running ~39s fast expired every incoming call on its first
+ * poll, so the caller saw "No answer" within two seconds and the phone never
+ * rang at all. Phone clocks drift, and we do not control them.
+ *
+ * So elapsed time is measured against the DATABASE's clock, not the device's:
+ * `offsetMs` is how far this device is from the server, learned from the `Date`
+ * header that every PostgREST response carries. It's cheap (one HEAD request,
+ * re-checked every few minutes) and it degrades to the local clock — i.e. to
+ * exactly the old behaviour — when the probe fails.
+ */
+let offsetMs = 0;
+let lastSyncAt = 0;
+let lastAttemptAt = 0;
+let inFlight: Promise<void> | null = null;
+const CLOCK_REFRESH_MS = 5 * 60_000;
+/** Floor between attempts, so a failing probe can't ride every 2s call poll. */
+const CLOCK_RETRY_MS = 15_000;
+
+/**
+ * Learn this device's offset from the server clock. Cheap and idempotent: it
+ * no-ops while a recent reading stands, and concurrent callers share one probe.
+ * Best-effort — a failed probe leaves the last known offset in place.
+ */
+export async function syncServerClock(): Promise<void> {
+  if (!SUPABASE_URL || Date.now() - lastSyncAt < CLOCK_REFRESH_MS) return;
+  if (Date.now() - lastAttemptAt < CLOCK_RETRY_MS) return;
+  if (inFlight) return inFlight;
+  lastAttemptAt = Date.now();
+  inFlight = (async () => {
+    const sentAt = Date.now();
+    const serverMs = await readServerTime();
+    if (serverMs !== null) {
+      // The reading landed somewhere inside the round trip; charge half of it
+      // to the response leg so a slow network doesn't read as clock drift.
+      offsetMs = serverMs - (sentAt + (Date.now() - sentAt) / 2);
+      lastSyncAt = Date.now();
+    }
+    inFlight = null;
+  })();
+  return inFlight;
+}
+
+/**
+ * The server's current time in ms, or null if it can't be read (offline, or
+ * neither source available) — in which case the caller keeps the local clock.
+ *
+ * Two sources, because neither alone covers both platforms:
+ *  1. `server_now()` — a one-line SQL function (migration 0010). Works on web
+ *     AND native, but only once that migration has been applied.
+ *  2. The `Date` response header. Needs no migration, but browsers only expose
+ *     CORS-safelisted headers and `Date` isn't one — so this is the native path.
+ */
+async function readServerTime(): Promise<number | null> {
+  try {
+    const { data, error } = await sb().rpc('server_now');
+    if (!error && typeof data === 'string') {
+      const ms = new Date(data).getTime();
+      if (!Number.isNaN(ms)) return ms;
+    }
+  } catch {
+    /* function not deployed yet — fall through to the header */
+  }
+  try {
+    // Reads the header, not the body: an unauthorised response carries `Date`
+    // just the same, so this needs no valid session.
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+      method: 'HEAD',
+      headers: { apikey: SUPABASE_ANON_KEY },
+    });
+    const header = res.headers.get('date');
+    if (header) {
+      const ms = new Date(header).getTime();
+      if (!Number.isNaN(ms)) return ms;
+    }
+  } catch {
+    /* offline */
+  }
+  return null;
+}
+
+/**
+ * `Date.now()` corrected onto the server's clock. Use this for any elapsed-time
+ * decision made about a timestamp another device wrote. Refreshes the offset in
+ * the background; the first call returns the local clock, which is why callers
+ * that care (the ring sweep) await `syncServerClock()` first.
+ */
+export function serverNow(): number {
+  void syncServerClock();
+  return Date.now() + offsetMs;
+}
 
 /**
  * Shared password for the seeded / Dev-Tools test accounts (see CLAUDE.md —

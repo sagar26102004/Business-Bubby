@@ -69,7 +69,23 @@ export function useCallAudio(callId: string, active: boolean, muted: boolean): C
     (async () => {
       try {
         // Native needs the WebRTC globals + audio session first; web is a no-op.
-        if (Platform.OS !== 'web') await prepareNativeAudio();
+        if (Platform.OS !== 'web') {
+          await prepareNativeAudio();
+          // Belt and braces. `livekit-client` below is the WEB SDK: on React
+          // Native it only works because registerGlobals() installs WebRTC and
+          // DOM shims. If that didn't happen — Expo Go, a build without the
+          // native module, or an environment probe that guessed wrong — the
+          // import dies deep inside the SDK with "Property 'document' doesn't
+          // exist", which reads to the user like a broken call rather than a
+          // missing native module. Assert the globals are really there instead
+          // of trusting prepareNativeAudio to have thrown.
+          if (typeof (globalThis as { RTCPeerConnection?: unknown }).RTCPeerConnection === 'undefined') {
+            throw new Error(
+              'Live audio needs a dev build — this app has no WebRTC native module. ' +
+                'The call still connects, but audio stays simulated.',
+            );
+          }
+        }
 
         const { Room: RoomCtor, RoomEvent, Track } = await import('livekit-client');
         // The token comes from an edge function that imports the LiveKit +
@@ -87,11 +103,19 @@ export function useCallAudio(callId: string, active: boolean, muted: boolean): C
         if (cancelled) return;
 
         const room = new RoomCtor();
-        // Play remote audio: on web attach() creates an <audio> element and
-        // starts playback; on native react-native-webrtc routes it through the
-        // active audio session automatically.
+        // Play remote audio. On WEB ONLY: attach() creates an <audio> element
+        // (livekit-client does `document.createElement`) and starts playback.
+        //
+        // ⚠️ Never call attach() on native. There is no DOM, so it throws
+        // "Property 'document' doesn't exist" — and because the remote track is
+        // subscribed while `room.connect()` is still settling (the other party
+        // is already in the room publishing), that throw surfaced as a failed
+        // CONNECTION: the phone answered the call and then reported "Couldn't
+        // connect the audio". react-native-webrtc already routes subscribed
+        // audio through the active audio session, so attaching is both
+        // impossible and unnecessary here.
         room.on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
-          if (track.kind === Track.Kind.Audio) track.attach();
+          if (Platform.OS === 'web' && track.kind === Track.Kind.Audio) track.attach();
         });
 
         await room.connect(url, token);
@@ -99,16 +123,35 @@ export function useCallAudio(callId: string, active: boolean, muted: boolean): C
           await room.disconnect();
           return;
         }
-        await room.localParticipant.setMicrophoneEnabled(!muted);
         roomRef.current = room;
+        // Connected means you can HEAR the other side — report it now.
+        // Publishing the microphone is a SEPARATE step that can stall
+        // indefinitely (a browser sitting on its mic-permission prompt is the
+        // usual cause), and awaiting it here pinned the UI at "Connecting
+        // audio…" while the call timer was already counting and the room was
+        // plainly connected. A mic that fails is worth saying out loud, but it
+        // must not masquerade as a dead call.
         setStatus('live');
+        try {
+          await room.localParticipant.setMicrophoneEnabled(!muted);
+        } catch (micErr) {
+          if (cancelled) return;
+          const micMsg = micErr instanceof Error ? micErr.message : String(micErr);
+          setState({
+            status: 'live',
+            message: `They can be heard, but your microphone isn’t on — ${micMsg}`,
+          });
+        }
       } catch (err) {
         if (cancelled) return;
         const msg = err instanceof Error ? err.message : String(err);
         // A missing native module (Expo Go) or an unconfigured server isn't
         // something the user can fix mid-call — show the graceful demo state.
+        // `document`/`window` land here when livekit-client (a web SDK) runs on
+        // React Native without the registerGlobals() shims — a missing dev
+        // build, not a fault the user can act on mid-call.
         const soft =
-          /not configured|needs the|not available|rtcpeerconnection|native|expo go|cannot find/i.test(
+          /not configured|needs the|not available|rtcpeerconnection|native|expo go|cannot find|\bdocument\b|\bwindow\b/i.test(
             msg,
           );
         setStatus(soft ? 'unavailable' : 'error', msg);

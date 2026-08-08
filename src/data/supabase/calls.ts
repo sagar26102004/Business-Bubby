@@ -6,7 +6,7 @@
  */
 import type { Business, Call, CallParticipant, Employee, User } from '@/domain/types';
 import type { CallRepository } from '@/data/repositories';
-import { sb, uuid, nowIso, uuidOrNull, notify } from './shared';
+import { sb, uuid, nowIso, uuidOrNull, notify, serverNow, syncServerClock } from './shared';
 
 const RING_TIMEOUT_MS = 30_000;
 
@@ -83,9 +83,21 @@ async function notifyMissedCall(call: Call): Promise<void> {
   );
 }
 
-/** Expire a single ringing call that rang out. Persists + notifies if it did. */
-async function sweepOne(call: Call): Promise<Call> {
-  if (call.status === 'ringing' && Date.now() - new Date(call.startedAt).getTime() > RING_TIMEOUT_MS) {
+/**
+ * Expire a single ringing call that rang out. Persists + notifies if it did.
+ *
+ * ⚠️ The age of a call is measured from the row's SERVER `created_at` against
+ * the SERVER's clock (see shared.serverNow) — never from one device's
+ * `data.startedAt` against another device's `Date.now()`. Every business member
+ * polls this, so with device clocks a member whose phone ran fast expired every
+ * incoming call on its first poll: the caller got "No answer" in two seconds and
+ * that phone never rang, because the sweep beat the ringing check below.
+ * `createdAt` is optional only so a caller that didn't select the column still
+ * works; it then falls back to the document's own timestamp.
+ */
+async function sweepOne(call: Call, createdAt?: string): Promise<Call> {
+  const startedMs = new Date(createdAt ?? call.startedAt).getTime();
+  if (call.status === 'ringing' && serverNow() - startedMs > RING_TIMEOUT_MS) {
     call.status = 'missed';
     call.endedAt = nowIso();
     await saveCall(call);
@@ -94,11 +106,15 @@ async function sweepOne(call: Call): Promise<Call> {
   return call;
 }
 
-async function loadCall(id: string): Promise<Call> {
-  const { data, error } = await sb().from('calls').select('data').eq('id', id).maybeSingle();
+async function loadCall(id: string): Promise<{ call: Call; createdAt: string }> {
+  const { data, error } = await sb()
+    .from('calls')
+    .select('data, created_at')
+    .eq('id', id)
+    .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error(`Call ${id} not found`);
-  return data.data as Call;
+  return { call: data.data as Call, createdAt: data.created_at as string };
 }
 
 export function createSupabaseCalls(): CallRepository {
@@ -171,14 +187,21 @@ export function createSupabaseCalls(): CallRepository {
     },
 
     async getById(callId: string): Promise<Call | null> {
-      const { data, error } = await sb().from('calls').select('data').eq('id', callId).maybeSingle();
+      // Anchor to the server clock before judging whether the ring timed out.
+      await syncServerClock();
+      const { data, error } = await sb()
+        .from('calls')
+        .select('data, created_at')
+        .eq('id', callId)
+        .maybeSingle();
       if (error) throw error;
       if (!data) return null;
-      return sweepOne(data.data as Call);
+      return sweepOne(data.data as Call, data.created_at as string);
     },
 
     async join(callId: string, participantId: string): Promise<Call> {
-      const call = await sweepOne(await loadCall(callId));
+      const { call: loaded, createdAt } = await loadCall(callId);
+      const call = await sweepOne(loaded, createdAt);
       if (call.status !== 'ringing' && call.status !== 'active') {
         throw new Error('This call has already ended.');
       }
@@ -196,7 +219,8 @@ export function createSupabaseCalls(): CallRepository {
     },
 
     async decline(callId: string, participantId: string): Promise<Call> {
-      const call = await sweepOne(await loadCall(callId));
+      const { call: loaded, createdAt } = await loadCall(callId);
+      const call = await sweepOne(loaded, createdAt);
       const p = call.participants.find((x) => x.id === participantId && x.side === 'business');
       if (p && p.state === 'ringing') p.state = 'declined';
       const anyoneLeft = call.participants.some(
@@ -211,7 +235,8 @@ export function createSupabaseCalls(): CallRepository {
     },
 
     async leave(callId: string, participantId: string): Promise<Call> {
-      const call = await sweepOne(await loadCall(callId));
+      const { call: loaded, createdAt } = await loadCall(callId);
+      const call = await sweepOne(loaded, createdAt);
       const p = call.participants.find((x) => x.id === participantId);
       if (!p) throw new Error('You are not part of this call.');
       const now = nowIso();
@@ -239,13 +264,17 @@ export function createSupabaseCalls(): CallRepository {
       // `status` lives inside the `data` jsonb (there is no top-level column) —
       // filter on the jsonb path, not a bare `status` column (that errors 42703
       // and the poll silently sees no calls, so the receiver never rings).
+      // The sweep below decides whether a call has rung out, so establish the
+      // server clock FIRST. Without it a device running fast expires every
+      // incoming call before the ringing check and simply never rings.
+      await syncServerClock();
       const { data, error } = await sb()
         .from('calls')
-        .select('data')
+        .select('data, created_at')
         .in('data->>status', ['ringing', 'active']);
       if (error) throw error;
       for (const row of data ?? []) {
-        const swept = await sweepOne(row.data as Call);
+        const swept = await sweepOne(row.data as Call, row.created_at as string);
         if (
           (swept.status === 'ringing' || swept.status === 'active') &&
           swept.customerId !== userId &&
@@ -262,15 +291,18 @@ export function createSupabaseCalls(): CallRepository {
       // `created_at` is a real column (the jsonb `startedAt` is written at the
       // same moment), so the window is filtered in SQL. RLS already limits the
       // rows to this business's members and the caller themselves.
+      await syncServerClock();
       const { data, error } = await sb()
         .from('calls')
-        .select('data')
+        .select('data, created_at')
         .eq('business_id', businessId)
         .gte('created_at', since)
         .order('created_at', { ascending: false });
       if (error) throw error;
       // Sweep so a call that rang out reads as "missed" in the log.
-      const rows = await Promise.all((data ?? []).map((r) => sweepOne(r.data as Call)));
+      const rows = await Promise.all(
+        (data ?? []).map((r) => sweepOne(r.data as Call, r.created_at as string)),
+      );
       return rows.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
     },
 

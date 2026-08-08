@@ -11,7 +11,7 @@
  * the phone rings even when the app is closed, without touching this UI.
  */
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { AppState, Pressable, StyleSheet, View } from 'react-native';
 import { router } from 'expo-router';
 import type { Call } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -38,12 +38,27 @@ export function IncomingCallGate() {
       repos.calls
         .getIncomingForUser(currentUser.id)
         .then((c) => active && setCall(c))
-        .catch(() => {});
+        .catch((err: unknown) => {
+          // A failing poll used to be swallowed in total silence, so a phone
+          // that never rang looked identical to one with nothing to ring for.
+          // Say so in dev; still never surface it to a user mid-browse.
+          if (__DEV__) {
+            console.warn('[IncomingCallGate] incoming-call poll failed:', err);
+          }
+        });
     load();
     const timer = setInterval(load, POLL_MS);
+    // The JS timer is frozen while the app is backgrounded (and on a locked
+    // phone), so a call that starts while you're in another app is only noticed
+    // once you come back. Poll the instant we're foregrounded again, rather
+    // than waiting out the rest of the tick — the ring window is only 30s.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') load();
+    });
     return () => {
       active = false;
       clearInterval(timer);
+      sub.remove();
     };
   }, [repos, currentUser?.id]);
 

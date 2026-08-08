@@ -184,11 +184,20 @@ function AudioStatusNote({ audio }: { audio: CallAudioState }) {
   const { status, message } = audio;
   if (status === 'live') {
     return (
-      <View style={styles.audioNote}>
-        <View style={[styles.stateDot, { backgroundColor: colors.success }]} />
-        <Text variant="caption" weight="semibold" style={{ color: colors.success }}>
-          Live audio connected
-        </Text>
+      <View>
+        <View style={styles.audioNote}>
+          <View style={[styles.stateDot, { backgroundColor: colors.success }]} />
+          <Text variant="caption" weight="semibold" style={{ color: colors.success }}>
+            Live audio connected
+          </Text>
+        </View>
+        {/* Connected, but the mic didn't publish — say so, or the user talks
+            into a call nobody can hear. */}
+        {message ? (
+          <Text variant="caption" style={[styles.demoNote, { color: colors.danger }]}>
+            {message}
+          </Text>
+        ) : null}
       </View>
     );
   }
