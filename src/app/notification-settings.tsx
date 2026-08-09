@@ -6,6 +6,7 @@
 import { StyleSheet } from 'react-native';
 import { Stack } from 'expo-router';
 import { Screen, Text } from '@/components/ui';
+import { CallPopupPermission } from '@/features/notifications/CallPopupPermission';
 import { MuteSettings } from '@/features/notifications/MuteSettings';
 import { spacing } from '@/theme/theme';
 
@@ -13,6 +14,8 @@ export default function NotificationSettingsScreen() {
   return (
     <Screen scroll>
       <Stack.Screen options={{ title: 'Notifications' }} />
+      {/* Renders nothing unless this device is withholding the call popup. */}
+      <CallPopupPermission />
       <Text variant="subheading" weight="bold">
         What you get alerted about
       </Text>

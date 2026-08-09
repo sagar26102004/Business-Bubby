@@ -24,6 +24,8 @@ interface CallNotificationNative {
     timeoutMs: number,
   ): Promise<void>;
   dismiss(callId: string): Promise<void>;
+  canUseFullScreenIntent(): Promise<boolean>;
+  openFullScreenIntentSettings(): Promise<void>;
 }
 
 /**
@@ -51,6 +53,10 @@ export function isCallNotificationAvailable(): boolean {
  * Show the incoming-call popup. `answerUri` is a deep link into the app (built
  * with expo-linking, so the scheme is defined in one place); `timeoutMs` should
  * be the call's ring window so Android clears a call nobody answered.
+ *
+ * Returns whether anything was actually posted, so the caller can fall back to
+ * a plain expo-notifications alert. Getting this wrong is expensive: a silent
+ * `false` that nobody checks means the phone never rings at all.
  */
 export async function showIncomingCall(input: {
   callId: string;
@@ -59,9 +65,9 @@ export async function showIncomingCall(input: {
   channelId: string;
   answerUri: string;
   timeoutMs: number;
-}): Promise<void> {
+}): Promise<boolean> {
   const mod = native();
-  if (!mod) return;
+  if (!mod) return false;
   try {
     await mod.showIncomingCall(
       input.callId,
@@ -71,8 +77,45 @@ export async function showIncomingCall(input: {
       input.answerUri,
       input.timeoutMs,
     );
+    return true;
   } catch {
-    /* never let a notification failure surface as a broken call */
+    // Never let a notification failure surface as a broken call — but do say so,
+    // so the caller can still ring some other way.
+    return false;
+  }
+}
+
+/**
+ * Whether Android will let this app post the real call popup.
+ *
+ * Android 14 turned USE_FULL_SCREEN_INTENT into a per-app switch that is only
+ * ON by default for apps Play classifies as calling apps — so for most installs
+ * this is FALSE until the user flips it themselves, and the popup falls back to
+ * a banner with Answer/Decline buttons. `null` means the question doesn't apply
+ * here (web, Expo Go, or a build without the module).
+ */
+export async function canUseFullScreenIntent(): Promise<boolean | null> {
+  const mod = native();
+  if (!mod) return null;
+  try {
+    return await mod.canUseFullScreenIntent();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Open the system screen holding that switch. There is no runtime dialog for
+ * this permission — Android made it a manual toggle on purpose, so taking the
+ * user to it is the most any app can do.
+ */
+export async function openFullScreenIntentSettings(): Promise<void> {
+  const mod = native();
+  if (!mod) return;
+  try {
+    await mod.openFullScreenIntentSettings();
+  } catch {
+    /* the settings screen is missing on this ROM — nothing to fall back to */
   }
 }
 

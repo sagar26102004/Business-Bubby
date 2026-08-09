@@ -14,8 +14,13 @@
  */
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
+import {
+  canUseFullScreenIntent,
+  openFullScreenIntentSettings,
+} from '../../../modules/call-notification';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import type { Repositories } from '@/data/repositories';
 import { configureNotificationHandler, getPushToken } from './push';
@@ -25,6 +30,36 @@ import { configureNotificationHandler, getPushToken } from './push';
 import { registerIncomingCallTask } from './incomingCallTask';
 
 configureNotificationHandler();
+
+/** Remembers that we've already offered this, so it's an ask and not a nag. */
+const CALL_POPUP_PROMPT_KEY = 'localo.callPopupPrompted';
+
+/**
+ * Offer to enable the full-screen call popup — ONCE per install.
+ *
+ * Android 14 ships USE_FULL_SCREEN_INTENT switched off for apps Play doesn't
+ * classify as calling apps, and gives no runtime dialog for it, so the app can
+ * only point at the setting. Asked here because this is the moment we know the
+ * person can actually receive calls (signed in, registering a device).
+ *
+ * Anyone who says no can still turn it on later from Notifications settings —
+ * see CallPopupPermission — and calls keep ringing regardless.
+ */
+async function offerCallPopupOnce(): Promise<void> {
+  if ((await canUseFullScreenIntent()) !== false) return;
+  if (await AsyncStorage.getItem(CALL_POPUP_PROMPT_KEY)) return;
+  // Written before the alert, not after: a dismissed prompt must not come back
+  // on the next launch just because nothing was tapped.
+  await AsyncStorage.setItem(CALL_POPUP_PROMPT_KEY, '1');
+  Alert.alert(
+    'Show calls full screen?',
+    "Android needs your permission before an incoming call can take over the screen like a phone call. Without it calls still ring with Answer and Decline — they just look like an ordinary notification.",
+    [
+      { text: 'Not now', style: 'cancel' },
+      { text: 'Open settings', onPress: () => void openFullScreenIntentSettings() },
+    ],
+  );
+}
 
 /** The callId a call notification carries, or null if it isn't one. */
 function callIdOf(response: Notifications.NotificationResponse | null): string | null {
@@ -61,6 +96,9 @@ export function PushRegistrar() {
       await registerIncomingCallTask();
       const token = await getPushToken();
       if (!active || !token) return;
+      // This device can be rung now — so it's the right moment to ask whether
+      // that ring may take over the screen.
+      await offerCallPopupOnce().catch(() => {});
       try {
         await repos.push.register(token, Platform.OS);
         registered.current = token;
