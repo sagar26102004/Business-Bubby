@@ -139,9 +139,15 @@ export function PushRegistrar() {
       router.push(`/call/session/${callId}`);
     };
 
+    // There are no OS notifications to respond to in a browser tab, and asking
+    // THROWS there rather than returning nothing — synchronously, out of an
+    // effect, which takes the whole page down with it. Nothing below this line
+    // has a web equivalent.
+    if (Platform.OS === 'web') return;
+
     // Cold start: the tap that launched the app isn't delivered to the listener
     // below, so ask for it explicitly.
-    void Notifications.getLastNotificationResponseAsync().then(handle);
+    void Notifications.getLastNotificationResponseAsync().then(handle).catch(() => {});
     const sub = Notifications.addNotificationResponseReceivedListener((r) => void handle(r));
     return () => sub.remove();
   }, []);

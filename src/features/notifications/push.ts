@@ -80,6 +80,9 @@ export function configureNotificationHandler(): void {
  * the wrong place at the wrong time.
  */
 export async function dismissCallNotifications(callId: string): Promise<void> {
+  // A browser tab never posted one, and asking is an error there rather than
+  // an empty list.
+  if (Platform.OS === 'web') return;
   try {
     const presented = await Notifications.getPresentedNotificationsAsync();
     await Promise.all(
