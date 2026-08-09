@@ -25,7 +25,7 @@ import androidx.core.app.Person
  * the push itself (see the manifest).
  */
 object CallNotifications {
-  /** Shared with CallMessagingService so one adb filter shows the whole path. */
+  /** `adb logcat -s LocaloCall` follows everything this file decides. */
   private const val TAG = "LocaloCall"
 
   private const val PREFS = "localo.callNotification"
