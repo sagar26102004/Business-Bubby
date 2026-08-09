@@ -32,15 +32,21 @@ android {
  * npm package version, which is read from the package itself rather than
  * pinned — a pinned one silently goes stale on the next `expo install`.
  */
-def expoNotificationsDependency = {
+def expoNotificationsDependency() {
   def linked = findProject(':expo-notifications')
-  if (linked != null) return linked
+  if (linked != null) {
+    return linked
+  }
+  // Spelled out rather than a ternary: Groovy ends the statement at the newline
+  // before a leading `?`, so a wrapped ternary silently parses as something
+  // else entirely.
   def manifest = file("${rootDir}/../node_modules/expo-notifications/package.json")
-  def version = manifest.exists()
-    ? new groovy.json.JsonSlurper().parseText(manifest.text).version
-    : '57.0.9'
+  def version = '57.0.9'
+  if (manifest.exists()) {
+    version = new groovy.json.JsonSlurper().parseText(manifest.text).version
+  }
   return "host.exp.exponent:expo.modules.notifications:${version}"
-}()
+}
 
 dependencies {
   // NotificationCompat.CallStyle landed in androidx.core 1.9.0. React Native
@@ -56,6 +62,6 @@ dependencies {
   // mean this module gets a vote on which Firebase version wins. It shouldn't:
   // google-services aligns those, and a module that only borrows a base class
   // has no business moving them.
-  compileOnly expoNotificationsDependency
+  compileOnly expoNotificationsDependency()
   compileOnly "com.google.firebase:firebase-messaging:25.0.1"
 }
