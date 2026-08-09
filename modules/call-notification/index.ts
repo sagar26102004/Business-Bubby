@@ -26,6 +26,9 @@ interface CallNotificationNative {
   dismiss(callId: string): Promise<void>;
   canUseFullScreenIntent(): Promise<boolean>;
   openFullScreenIntentSettings(): Promise<void>;
+  setAnswerUriTemplate(template: string): Promise<void>;
+  /** What to substitute the call id for inside that template. */
+  callIdPlaceholder: string;
 }
 
 /**
@@ -82,6 +85,30 @@ export async function showIncomingCall(input: {
     // Never let a notification failure surface as a broken call — but do say so,
     // so the caller can still ring some other way.
     return false;
+  }
+}
+
+/**
+ * Teach the native side how to deep-link into a call.
+ *
+ * ⚠️ REQUIRED for the popup to work while the app is closed. The push arrives
+ * at a Kotlin service with no JavaScript running, so the Answer button's
+ * destination cannot be built at that moment — the app's URL scheme lives in
+ * app.json and is known only to expo-linking. `build(placeholder)` is called
+ * with the token to put where the call id goes; the result is stored once and
+ * reused for every call after.
+ *
+ * No-ops where the native module isn't present, like everything else here.
+ */
+export async function setAnswerUriTemplate(
+  build: (placeholder: string) => string,
+): Promise<void> {
+  const mod = native();
+  if (!mod) return;
+  try {
+    await mod.setAnswerUriTemplate(build(mod.callIdPlaceholder));
+  } catch {
+    /* the popup falls back to Expo's plain notification */
   }
 }
 

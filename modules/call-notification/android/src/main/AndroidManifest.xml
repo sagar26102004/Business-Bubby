@@ -5,17 +5,36 @@
     sitting silently behind the lock. On Android 14+ this is granted at install
     only to apps whose core function is calling or alarms; Localo qualifies
     (in-app voice calls), but it must be declared to Google Play. Without the
-    grant nothing breaks — Android simply demotes it to a heads-up banner.
+    grant nothing breaks — the popup falls back to a heads-up notification that
+    still carries Answer and Decline.
   -->
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
   <application>
     <!--
+      Draws the call popup the instant a push lands, without waiting for
+      JavaScript — which is what makes it work while the app is CLOSED.
+
+      PRIORITY IS THE WHOLE TRICK. expo-notifications registers its own
+      FirebaseMessagingService at android:priority="-1", deliberately low so an
+      app can put itself in front; FCM delivers to the highest-priority service
+      that matches. Ours extends theirs and calls super for anything that isn't
+      a call, so ordinary notifications are untouched. Drop this priority and
+      calls silently go back to being a bare, buttonless banner.
+    -->
+    <service
+      android:name="expo.modules.callnotification.CallMessagingService"
+      android:exported="false">
+      <intent-filter android:priority="1">
+        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+      </intent-filter>
+    </service>
+
+    <!--
       Handles the Decline pill without opening the app. Not exported: only our
       own PendingIntent may trigger it, so no other app can dismiss a user's
       incoming call.
-    -->
-    <!--
+
       FULLY QUALIFIED on purpose. A relative ".CallActionReceiver" is resolved
       against a package name at manifest-merge time, and this library manifest
       is merged into an app whose namespace is com.localo.app — if it ever

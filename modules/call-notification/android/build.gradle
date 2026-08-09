@@ -23,4 +23,12 @@ dependencies {
   // in the graph, so naming a floor here can only guarantee the API exists —
   // it can never downgrade what RN picked.
   implementation "androidx.core:core-ktx:1.13.1"
+
+  // CallMessagingService extends expo-notifications' own FirebaseMessagingService
+  // so that everything which ISN'T a call keeps being handled by Expo. Both
+  // projects are autolinked into the same Gradle build (`expo-notifications` is
+  // the project name expo-modules-autolinking gives it), and firebase-messaging
+  // is what RemoteMessage itself comes from.
+  implementation project(':expo-notifications')
+  implementation 'com.google.firebase:firebase-messaging:25.0.1'
 }

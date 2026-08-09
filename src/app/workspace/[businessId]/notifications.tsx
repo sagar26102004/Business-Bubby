@@ -12,6 +12,7 @@ import { isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
+import { CallAlertsCheck } from '@/features/notifications/CallAlertsCheck';
 import { MuteSettings } from '@/features/notifications/MuteSettings';
 import { spacing } from '@/theme/theme';
 
@@ -61,6 +62,11 @@ export default function WorkspaceNotificationsScreen() {
   return (
     <Screen scroll>
       <Stack.Screen options={{ title: 'Notifications' }} />
+      {/*
+        Shown to the people who ANSWER calls, where a phone that can't ring is
+        an actual business problem. Renders nothing on a healthy device.
+      */}
+      <CallAlertsCheck />
       <Text variant="subheading" weight="bold">
         Alerts from {business.name}
       </Text>

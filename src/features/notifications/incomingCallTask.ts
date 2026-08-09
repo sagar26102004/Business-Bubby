@@ -14,7 +14,7 @@
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import * as Linking from 'expo-linking';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { showIncomingCall } from '../../../modules/call-notification';
 import { CALL_CATEGORY_ID, CALL_CHANNEL_ID, CALL_RING_MS } from './push';
 
@@ -116,6 +116,9 @@ async function ringWithPlainNotification(payload: CallPayload): Promise<void> {
 
 TaskManager.defineTask(INCOMING_CALL_TASK, async ({ data, error }) => {
   if (error || Platform.OS !== 'android') return;
+  // The app is on screen, so IncomingCallGate is already showing the call and
+  // ringing. A popup over the top of it is just one more thing to dismiss.
+  if (AppState.currentState === 'active') return;
   const payload = extractCallPayload(data);
   if (!payload) return;
   const shown = await showIncomingCall({

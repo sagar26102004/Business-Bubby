@@ -20,6 +20,7 @@ import { router } from 'expo-router';
 import {
   canUseFullScreenIntent,
   openFullScreenIntentSettings,
+  setAnswerUriTemplate,
 } from '../../../modules/call-notification';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import type { Repositories } from '@/data/repositories';
@@ -27,7 +28,7 @@ import { configureNotificationHandler, getPushToken } from './push';
 // Importing for effect: the task must be DEFINED at module scope, because a
 // headless launch for a background notification runs the module graph and
 // nothing else — there is no React tree to define it from.
-import { registerIncomingCallTask } from './incomingCallTask';
+import { answerUrlFor, registerIncomingCallTask } from './incomingCallTask';
 
 configureNotificationHandler();
 
@@ -92,6 +93,11 @@ export function PushRegistrar() {
     }
 
     (async () => {
+      // Hand the deep-link shape to the native side FIRST. A push that lands
+      // while the app is closed is drawn by Kotlin, which has no way to build
+      // this itself — and a stored template outlives the process, so doing it
+      // here means it is ready long before anyone calls.
+      await setAnswerUriTemplate(answerUrlFor);
       // Route background call pushes to the task that draws the system popup.
       await registerIncomingCallTask();
       const token = await getPushToken();
