@@ -38,6 +38,37 @@ gives real accounts and sessions with **no paid SMS provider**. The `name` and
 `profiles` row by the `handle_new_user` trigger. Phone OTP can be layered on
 later without changing the schema.
 
+## Edge functions
+
+```
+supabase functions deploy call-ring
+supabase functions deploy call-decline --no-verify-jwt
+supabase functions deploy dynamic-responder
+```
+
+⚠️ **`call-decline` MUST be deployed with `--no-verify-jwt`.** It is called from
+a broadcast receiver in an app that isn't running, which has no session to sign
+with — it authenticates by the device's own push token instead (see the header
+comment in that function for why that is sufficient). Deployed with the default
+JWT verification, every decline is rejected at the gateway before the function
+runs, and the only symptom is Decline quietly going back to letting the call
+ring out.
+
+`call-ring` is what makes a **closed** app ring at all. If phones only ring
+while Localo is open, check in this order:
+
+1. **FCM credentials.** Android pushes go out through Firebase, and Expo needs
+   the project's **FCM V1 service account key** uploaded — `google-services.json`
+   in the app is only half of it. Without it every push fails with
+   `InvalidCredentials`, which `call-ring` now reports verbatim (Account →
+   "📞 Call alerts on this phone" → last call you placed). Check with
+   `eas credentials` → Android → *Push Notifications: FCM V1*.
+2. **A registered device.** "no registered devices" means nobody's token is in
+   `push_tokens` — the callee must have signed in on that phone at least once
+   since the feature shipped, and granted the notification permission.
+3. **Battery optimisation**, which stops delivery outright on aggressive ROMs.
+   The in-app check offers the settings screen.
+
 ## Notes / to harden before launch
 
 - Notification rows are inserted client-side for other users (permissive

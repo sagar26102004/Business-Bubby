@@ -45,6 +45,7 @@ interface CallNotificationNative {
   isIgnoringBatteryOptimizations(): Promise<boolean>;
   openBatterySettings(): Promise<void>;
   setAnswerUriTemplate(template: string): Promise<void>;
+  setDeclineEndpoint(url: string, pushToken: string): Promise<void>;
   /** What to substitute the call id for inside that template. */
   callIdPlaceholder: string;
 }
@@ -187,6 +188,31 @@ export async function setAnswerUriTemplate(
     await mod.setAnswerUriTemplate(build(mod.callIdPlaceholder));
   } catch {
     /* answering falls back to opening the app's home screen */
+  }
+}
+
+/**
+ * Give the native side what it needs to DECLINE a call server-side.
+ *
+ * ⚠️ REQUIRED for Decline to mean anything when the app is closed. That button
+ * is handled in Kotlin on purpose — refusing a call must not open the app — so
+ * it has no session and no Supabase client. `url` is the call-decline function
+ * and `pushToken` is this device's push address, which that function accepts as
+ * proof of which device is speaking. Without this pair, Decline can only
+ * silence the phone and the caller keeps ringing until the call times out.
+ *
+ * No-ops where the native module isn't present, like everything else here.
+ */
+export async function setDeclineEndpoint(
+  url: string,
+  pushToken: string,
+): Promise<void> {
+  const mod = native();
+  if (!mod) return;
+  try {
+    await mod.setDeclineEndpoint(url, pushToken);
+  } catch {
+    /* declining falls back to letting the call ring out into the missed log */
   }
 }
 

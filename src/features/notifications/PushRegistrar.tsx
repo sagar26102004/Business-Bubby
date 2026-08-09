@@ -23,7 +23,9 @@ import {
   openFullScreenIntentSettings,
   openOverlaySettings,
   setAnswerUriTemplate,
+  setDeclineEndpoint,
 } from '../../../modules/call-notification';
+import { SUPABASE_URL } from '@/lib/supabase';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import type { Repositories } from '@/data/repositories';
 import { answerUrlFor, configureNotificationHandler, getPushToken } from './push';
@@ -110,6 +112,13 @@ export function PushRegistrar() {
       try {
         await repos.push.register(token, Platform.OS);
         registered.current = token;
+        // Only now is the token a credential the server will recognise, so the
+        // decline endpoint is handed over AFTER registration succeeds — storing
+        // it first would leave a phone that failed to register able to post
+        // declines the function can only reject.
+        if (SUPABASE_URL) {
+          await setDeclineEndpoint(`${SUPABASE_URL}/functions/v1/call-decline`, token);
+        }
       } catch {
         // Table missing, offline, Path B routes not built yet — the app keeps
         // working, it just won't ring while closed.

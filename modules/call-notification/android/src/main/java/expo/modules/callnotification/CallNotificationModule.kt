@@ -72,6 +72,19 @@ class CallNotificationModule : Module() {
     Constants("callIdPlaceholder" to CallNotifications.CALL_ID_PLACEHOLDER)
 
     /**
+     * Teach the native side how to DECLINE a call with no app running.
+     *
+     * The Decline pill is handled entirely in Kotlin so that refusing a call
+     * never drags you into the app — which also means it has no Supabase client
+     * and no session to authenticate with. Both halves of that are supplied
+     * here: the endpoint to post to, and this device's push token, which the
+     * function accepts as proof that this is the device being rung.
+     */
+    AsyncFunction("setDeclineEndpoint") { url: String, pushToken: String ->
+      CallNotifications.storeDeclineEndpoint(context, url, pushToken)
+    }
+
+    /**
      * What happened to the last few call pushes — written by the push service
      * while the app was closed, so this is the only way to see it.
      */

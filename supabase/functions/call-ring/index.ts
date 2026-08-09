@@ -46,6 +46,23 @@ interface Participant {
   state: 'ringing' | 'joined' | 'left' | 'declined';
 }
 
+/**
+ * One entry from Expo's /push/send response — the fate of ONE message.
+ *
+ * `status: 'ok'` means Expo took it, not that a phone showed it; the delivery
+ * answer proper is a receipt fetched later (Expo suggests ~15 minutes), which
+ * is far too slow to help a call that rings for 30 seconds. The ticket is the
+ * only feedback available in time, and it is enough to separate the failures
+ * that are permanent (bad credentials, dead token) from a phone that simply
+ * didn't react.
+ */
+interface Ticket {
+  status: 'ok' | 'error';
+  id?: string;
+  message?: string;
+  details?: { error?: string };
+}
+
 interface Call {
   id: string;
   businessName: string;
@@ -156,7 +173,64 @@ Deno.serve(async (req: Request) => {
     const result = await res.json().catch(() => null);
     if (!res.ok) return json({ error: 'Push service rejected the request', result }, 502);
 
-    return json({ sent: messages.length, result });
+    // ⚠️ A 200 HERE DOES NOT MEAN ANYONE'S PHONE RANG. Expo answers every
+    // /push/send with 200 and a PER-MESSAGE ticket, and a message it could not
+    // accept comes back as `{ status: 'error' }` inside that otherwise happy
+    // response. Reporting `messages.length` as "sent" — which this used to do —
+    // therefore claimed success for the two failures that actually happen:
+    //
+    //   • InvalidCredentials — no FCM V1 key uploaded for this EAS project, so
+    //     Expo has nothing to hand the message to. EVERY Android push fails and
+    //     the app cheerfully says it pushed to N devices.
+    //   • DeviceNotRegistered — the token belongs to an install that is gone
+    //     (reinstall, cleared data, app uninstalled). Permanently silent.
+    //
+    // Both look exactly like "the phone ignored it" from the caller's side,
+    // which is a completely different problem with a completely different fix.
+    // So read the tickets and say which it was.
+    const tickets: Ticket[] = Array.isArray((result as { data?: unknown })?.data)
+      ? ((result as { data: Ticket[] }).data)
+      : [];
+
+    // Tickets come back in the order the messages went out, which is the only
+    // thing tying a failure back to the token that caused it.
+    const failures = tickets
+      .map((ticket, i) => ({ ticket, token: tokens[i] }))
+      .filter((x) => x.ticket?.status === 'error');
+
+    // A token whose device is gone will never work again — every future call
+    // would waste a message and, worse, keep this diagnostic reporting a device
+    // that cannot ring. Expo's own guidance is to stop sending to it, so drop
+    // the row. ONLY for DeviceNotRegistered: InvalidCredentials is a project
+    // misconfiguration, and deleting perfectly good tokens over it would turn a
+    // five-minute fix into a re-registration hunt across every phone.
+    const dead = failures
+      .filter((x) => x.ticket.details?.error === 'DeviceNotRegistered')
+      .map((x) => x.token);
+    if (dead.length > 0) {
+      await admin.from('push_tokens').delete().in('token', dead);
+    }
+
+    const accepted = tickets.filter((t) => t?.status === 'ok').length;
+    // Distinct messages only: ten phones failing for one reason is one fact.
+    const reasons = [...new Set(failures.map((x) => x.ticket.message).filter(Boolean))];
+
+    return json({
+      // `sent` now means ACCEPTED BY EXPO, not "handed to fetch".
+      sent: accepted,
+      attempted: messages.length,
+      failed: failures.length,
+      // Verbatim from Expo — its messages name the fix ("Unable to retrieve the
+      // FCM server key…"), and paraphrasing them would lose exactly that.
+      failures: reasons,
+      reason:
+        accepted === 0 && reasons.length > 0
+          ? reasons.join('; ')
+          : accepted === 0
+            ? 'the push service accepted nothing and gave no reason'
+            : undefined,
+      result,
+    });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }

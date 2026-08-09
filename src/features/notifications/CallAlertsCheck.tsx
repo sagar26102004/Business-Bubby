@@ -199,9 +199,19 @@ export function CallAlertsCheck() {
   };
 
   const lastPush = getLastRingPush();
+  /**
+   * What the server made of the last call placed from this device.
+   *
+   * `sent` counts devices the push service ACCEPTED, so it can be short of
+   * `attempted` — the half-failure that used to be invisible, and the one that
+   * matters when a business has two phones and only one rings.
+   */
   const lastPushLine = lastPush
     ? lastPush.sent
-      ? `pushed to ${lastPush.sent} device${lastPush.sent === 1 ? '' : 's'}`
+      ? `pushed to ${lastPush.sent} device${lastPush.sent === 1 ? '' : 's'}` +
+        (lastPush.attempted && lastPush.attempted > lastPush.sent
+          ? ` of ${lastPush.attempted} — the rest were refused: ${(lastPush.failures ?? []).join('; ')}`
+          : '')
       : (lastPush.reason ?? 'the server rang nobody and said nothing')
     : null;
 

@@ -13,20 +13,38 @@
  */
 export interface RingPushResult {
   at: string;
-  /** How many devices the server pushed to, when it said. */
+  /** How many devices the push service ACCEPTED the message for. */
   sent?: number;
+  /** How many it was asked to ring — `sent` short of this means partial failure. */
+  attempted?: number;
   /** Why it sent none: "no registered devices", "not ringing", an error… */
   reason?: string;
+  /**
+   * What the push service said about the messages it refused, verbatim.
+   *
+   * Worth keeping word-for-word because these sentences name their own fix —
+   * "Unable to retrieve the FCM server key" means credentials are missing from
+   * the EAS project, which no amount of fiddling on the phone will ever cure.
+   */
+  failures?: string[];
 }
 
 let last: RingPushResult | null = null;
 
 export function recordRingPush(result: unknown): void {
-  const body = (result ?? {}) as { sent?: number; reason?: string; error?: string };
+  const body = (result ?? {}) as {
+    sent?: number;
+    attempted?: number;
+    reason?: string;
+    error?: string;
+    failures?: string[];
+  };
   last = {
     at: new Date().toISOString(),
     sent: typeof body.sent === 'number' ? body.sent : undefined,
+    attempted: typeof body.attempted === 'number' ? body.attempted : undefined,
     reason: body.reason ?? body.error,
+    failures: Array.isArray(body.failures) && body.failures.length > 0 ? body.failures : undefined,
   };
 }
 

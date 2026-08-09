@@ -15,6 +15,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
+import org.json.JSONObject
 
 /**
  * Everything the Android side knows about drawing an incoming call.
@@ -42,6 +43,8 @@ object CallNotifications {
 
   private const val PREFS = "localo.callNotification"
   private const val KEY_ANSWER_URI = "answerUriTemplate"
+  private const val KEY_DECLINE_URL = "declineUrl"
+  private const val KEY_PUSH_TOKEN = "pushToken"
 
   /** Replaced with the call id in the stored deep-link template. */
   const val CALL_ID_PLACEHOLDER = "__CALL_ID__"
@@ -88,6 +91,71 @@ object CallNotifications {
     context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
       .getString(KEY_ANSWER_URI, null)
       ?.replace(CALL_ID_PLACEHOLDER, callId)
+
+  /**
+   * Remember how to tell the SERVER a call was declined.
+   *
+   * Same reasoning as the answer URI above, for the same reason: the project's
+   * function URL and this device's push token are both known only to JS, and
+   * the code that needs them runs in a process with no JS in it. Handed over
+   * once at registration (PushRegistrar) and kept where a headless broadcast
+   * receiver can still read them.
+   *
+   * The push token doubles as the credential — see the call-decline function
+   * for why that is both sufficient and tightly bounded.
+   */
+  fun storeDeclineEndpoint(context: Context, url: String, pushToken: String) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putString(KEY_DECLINE_URL, url)
+      .putString(KEY_PUSH_TOKEN, pushToken)
+      .apply()
+  }
+
+  /**
+   * Tell the server this call was declined. Blocking — CALL IT OFF THE MAIN
+   * THREAD (CallActionReceiver holds the broadcast open with goAsync while this
+   * runs).
+   *
+   * Best effort by design. If it fails, the call simply rings out and lands in
+   * the missed log, which is exactly the behaviour this replaces — so a network
+   * error costs nothing that wasn't already lost, and must never be allowed to
+   * stop the phone going quiet.
+   */
+  fun postDecline(context: Context, callId: String): String {
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val url = prefs.getString(KEY_DECLINE_URL, null)
+    val pushToken = prefs.getString(KEY_PUSH_TOKEN, null)
+    if (url.isNullOrBlank() || pushToken.isNullOrBlank()) {
+      return "decline not sent: this device never registered for calls"
+    }
+
+    return try {
+      val connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+        requestMethod = "POST"
+        setRequestProperty("Content-Type", "application/json")
+        doOutput = true
+        // A broadcast receiver gets roughly ten seconds in total before the
+        // system may kill the process, so fail fast rather than hang and lose
+        // the notification-clearing work queued behind this.
+        connectTimeout = 4000
+        readTimeout = 4000
+      }
+      try {
+        val body = JSONObject()
+          .put("callId", callId)
+          .put("pushToken", pushToken)
+          .toString()
+        connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        val code = connection.responseCode
+        if (code in 200..299) "decline sent" else "decline refused by server (HTTP $code)"
+      } finally {
+        connection.disconnect()
+      }
+    } catch (t: Throwable) {
+      "decline not sent: ${t.javaClass.simpleName} ${t.message.orEmpty()}"
+    }
+  }
 
   /**
    * A stable notification id per call, so a repeated push for the SAME call

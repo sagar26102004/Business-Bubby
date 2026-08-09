@@ -61,4 +61,63 @@ re-derivation from the Supabase diff is required:
 - **DB/migration:** none.
 - **Verify:** `cd backend && npm run typecheck && npm run build`.
 
+## [SYNC-020] Ring push must report Expo's tickets, not assume success
+
+- **Area:** CallRepository / calls — the push that rings a closed app
+- **Supabase change:** `supabase/functions/call-ring/index.ts` now reads the per-message
+  tickets Expo returns instead of reporting `messages.length` as "sent". Expo answers every
+  `/push/send` with HTTP 200 and a `data: Ticket[]` array in which an individual message can
+  still be `{ status: 'error', message, details: { error } }` — so the old count claimed
+  success for the two failures that actually happen: `InvalidCredentials` (no FCM V1 key on
+  the EAS project, so every Android push fails) and `DeviceNotRegistered` (token belongs to a
+  gone install). Both are indistinguishable from "the phone ignored it" without this.
+- **Domain/interface:** none. `src/features/notifications/ringPushLog.ts` gained optional
+  `attempted` / `failures` fields on `RingPushResult` (already done, shared by both backends),
+  and `CallAlertsCheck` renders them.
+- **Path B — backend/:** `backend/src/services/calls.ts` → `ringDevices()`. After the
+  `fetch` to `https://exp.host/--/api/v2/push/send`, parse the response body's `data` array
+  index-aligned with the tokens sent (Expo preserves order):
+  - delete `push_tokens` rows whose ticket has `details.error === 'DeviceNotRegistered'`
+    (ONLY that error — never prune on `InvalidCredentials`, which is a project
+    misconfiguration and would destroy good tokens);
+  - return `{ sent: <count of status==='ok'>, attempted: <messages.length>, failed,
+    failures: <distinct ticket.message strings>, reason }`, where `reason` is the joined
+    failure messages when nothing was accepted.
+  Keep Expo's messages verbatim — they name their own fix.
+- **Path B — src/data/api/:** none (the ring is fired server-side; the client just records
+  whatever JSON comes back through `recordRingPush`).
+- **DB/migration:** none.
+- **Verify:** `cd backend && npm run typecheck && npm run build`.
+
+## [SYNC-021] Decline from a closed app must reach the server
+
+- **Area:** CallRepository / calls — the Decline button on the incoming-call notification
+- **Supabase change:** new edge function `supabase/functions/call-decline/index.ts`, deployed
+  with `--no-verify-jwt`. Body `{ callId, pushToken }`. A killed app has no session, so the
+  device's Expo push token IS the credential: the function looks it up in `push_tokens` with
+  the service role to resolve the user, requires that user to be a `side: 'business'`
+  participant whose `state === 'ringing'` on that call, then applies exactly the same
+  transition as `decline()` in `src/data/supabase/calls.ts` (set the participant to
+  `declined`; if no business participant is left `ringing` or `joined`, set the call to
+  `declined` when it was ringing / `ended` when it was active, stamping `endedAt`).
+  Previously the Kotlin receiver only silenced the phone locally, so the caller kept ringing
+  for the rest of the 30s window and the call landed in the missed log — declining and
+  ignoring were indistinguishable from the caller's side.
+- **Domain/interface:** none. Native side (`modules/call-notification`) gained
+  `setDeclineEndpoint(url, pushToken)`, called from `PushRegistrar` after
+  `repos.push.register` succeeds — both already done and backend-agnostic apart from the URL.
+- **Path B — backend/:** add `POST /calls/:callId/decline-by-device` (no auth middleware —
+  it must work without a JWT) in the calls router, delegating to a new
+  `declineByDevice(callId, pushToken)` in `backend/src/services/calls.ts` with the logic
+  above. Authz is the push-token lookup itself; do NOT let it fall through to the normal
+  `decline` guard, which expects an authenticated user. Document it in Swagger, noting that
+  the push token is the credential and why.
+- **Path B — src/data/api/:** none directly, BUT `PushRegistrar` builds the decline URL from
+  `SUPABASE_URL`. When Path B is selected it must instead point at
+  `${EXPO_PUBLIC_API_URL}/calls/decline-by-device`-shaped route — thread the base URL through
+  so the native side is told the right endpoint for the active backend.
+- **DB/migration:** none (`push_tokens` from 0011 is enough).
+- **Verify:** `cd backend && npm run typecheck && npm run build`.
+
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
+
