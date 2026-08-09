@@ -37,6 +37,28 @@ const LEGACY_CALL_CHANNEL_ID = 'calls';
  */
 export const CALL_CATEGORY_ID = 'incoming_call';
 
+/**
+ * Why this device isn't registered to be rung, if it isn't.
+ *
+ * Registration is deliberately best-effort — a push problem must never break
+ * the app — which for a long time meant the failure went into an empty `catch`
+ * and the phone simply stayed silent forever with nothing anywhere saying so.
+ * The server reported "no registered devices" while the phone's own check said
+ * it was registered, and neither side could name the missing step. So keep the
+ * reason. In memory, not on disk: it is re-derived on every launch, and a stale
+ * one would be worse than none.
+ */
+let lastRegistration: string | null = null;
+
+/** `null` clears it — call that on success, so a fixed phone stops accusing itself. */
+export function recordRegistration(reason: string | null): void {
+  lastRegistration = reason;
+}
+
+export function getLastRegistration(): string | null {
+  return lastRegistration;
+}
+
 /** Deep link that answers a call: the session screen joins on `answer=1`. */
 export function answerUrlFor(callId: string): string {
   return Linking.createURL(`/call/session/${callId}`, { queryParams: { answer: '1' } });

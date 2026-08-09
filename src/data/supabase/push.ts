@@ -25,6 +25,24 @@ export function createSupabasePush(): PushRepository {
       if (error) throw error;
     },
 
+    async isRegistered(token: string): Promise<boolean> {
+      const userId = await currentUserId();
+      if (!userId || !token) return false;
+      // RLS already limits SELECT to your own rows, so a row coming back is
+      // proof of BOTH halves at once: the token is stored, and it is stored
+      // against the account asking. `user_id` is matched explicitly anyway —
+      // relying on a policy to enforce what the caller means is how a policy
+      // change quietly turns a check into a lie.
+      const { data, error } = await sb()
+        .from('push_tokens')
+        .select('token')
+        .eq('token', token)
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) return false;
+      return !!data;
+    },
+
     async unregister(token: string): Promise<void> {
       if (!token) return;
       // RLS scopes the delete to the caller's own rows, so a stale token

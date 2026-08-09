@@ -72,13 +72,40 @@ interface Call {
   participants: Participant[];
 }
 
+/**
+ * ⚠️ WITHOUT THESE, A CALL PLACED FROM A BROWSER NEVER RINGS ANYONE.
+ *
+ * `supabase.functions.invoke` sends Authorization/apikey/content-type, which
+ * makes the browser send a CORS PREFLIGHT (an OPTIONS request) first. A
+ * function that neither answers OPTIONS nor returns these headers fails that
+ * preflight, so the real POST is never sent at all — and supabase-js surfaces
+ * it as the maddeningly generic "Failed to send a request to the Edge
+ * Function", which reads exactly like the function being down or undeployed.
+ *
+ * The failure is invisible from the phone's side: the call still connects
+ * (LiveKit's token comes from `dynamic-responder`, which HAS had these headers
+ * all along), the callee's app still finds the call by polling if it happens to
+ * be open — and the push, the one thing that wakes a CLOSED app, is silently
+ * never requested. React Native does not enforce CORS, so this broke web
+ * callers only, which is precisely the case that is easiest to test with.
+ */
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   });
 
 Deno.serve(async (req: Request) => {
+  // Answered before anything else — a preflight carries no body and no auth,
+  // so every check below would reject it.
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+
   try {
     const authHeader = req.headers.get('Authorization') ?? '';
     if (!authHeader) return json({ error: 'Not signed in' }, 401);

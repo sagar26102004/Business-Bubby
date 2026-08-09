@@ -2817,6 +2817,11 @@ class MockPushRepository implements PushRepository {
     await delay(30);
     pushTokens.delete(token);
   }
+
+  async isRegistered(token: string): Promise<boolean> {
+    await delay(30);
+    return pushTokens.has(token);
+  }
 }
 
 class MockLogbookRepository implements LogbookRepository {

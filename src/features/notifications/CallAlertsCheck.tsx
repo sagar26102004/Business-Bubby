@@ -34,7 +34,13 @@ import {
   showCallScreen,
   showIncomingCall,
 } from '../../../modules/call-notification';
-import { CALL_CATEGORY_ID, CALL_CHANNEL_ID, getPushToken } from './push';
+import { useRepositories } from '@/data/DataProvider';
+import {
+  CALL_CATEGORY_ID,
+  CALL_CHANNEL_ID,
+  getLastRegistration,
+  getPushToken,
+} from './push';
 import { getLastRingPush } from './ringPushLog';
 
 /** Identifies each row, so the buttons below can key off a fixed name. */
@@ -43,6 +49,7 @@ type CheckId =
   | 'channel'
   | 'category'
   | 'token'
+  | 'registered'
   | 'module'
   | 'callScreen'
   | 'battery';
@@ -60,6 +67,7 @@ const TEST_RING_MS = 15_000;
 
 export function CallAlertsCheck() {
   const colors = useColors();
+  const repos = useRepositories();
   const [checks, setChecks] = useState<Check[] | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -84,6 +92,14 @@ export function CallAlertsCheck() {
           getRingLog(),
         ]);
 
+      // Asked AFTER the token, because it is a question about that token. A
+      // failure here is a "no" — the point of the row is that we could not
+      // confirm the server will ring this phone, and an unreachable server
+      // cannot confirm it either.
+      const registered = token
+        ? await repos.push.isRegistered(token).catch(() => false)
+        : false;
+
       const next: Check[] = [
         {
           id: 'permission',
@@ -105,11 +121,29 @@ export function CallAlertsCheck() {
         },
         {
           id: 'token',
-          label: 'Registered for calls while closed',
+          label: 'This phone has a push address',
           ok: !!token,
           // The token changes on every install, so a phone that was reinstalled
           // and not signed into is registered under an address that is gone.
           fix: 'This phone has no push address. Sign in again — a reinstall invalidates the old one.',
+        },
+        {
+          id: 'registered',
+          // ⚠️ THE ONE ABOVE IS NOT THIS ONE. Minting a token happens entirely
+          // on the device; storing it happens on the server and can fail on its
+          // own — silently, because a registration error must never break the
+          // app, and not at all when you are browsing as a guest. A phone that
+          // passes the row above and fails this one looks completely healthy
+          // and is never rung, which is exactly the hole this check exists to
+          // close: the server said "no registered devices" while the phone
+          // said it was registered, and both were telling the truth.
+          label: 'Your account will be rung on this phone',
+          ok: registered === true,
+          // Prefer what actually went wrong over the generic advice — the
+          // registrar now keeps the reason instead of discarding it.
+          fix:
+            getLastRegistration() ??
+            'This phone has an address but the server has not stored it against your account. Make sure you are SIGNED IN (not browsing as a guest), then reopen this screen.',
         },
         {
           id: 'module',
@@ -134,7 +168,7 @@ export function CallAlertsCheck() {
       setChecks(next);
       setLog(entries);
     })();
-  }, []);
+  }, [repos]);
 
   useEffect(() => {
     run();

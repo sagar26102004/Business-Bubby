@@ -45,13 +45,28 @@ interface Call {
   endedAt?: string;
 }
 
+/**
+ * Kotlin doesn't enforce CORS, so the caller this function was written for
+ * never needed these. They are here anyway because the absence of them on
+ * `call-ring` cost days: a browser preflight failing looks identical to the
+ * function not existing. Cheap insurance against the same trap if anything on
+ * the web side ever calls this.
+ */
+const cors = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...cors, 'Content-Type': 'application/json' },
   });
 
 Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+
   try {
     const { callId, pushToken } = (await req.json()) as {
       callId?: string;

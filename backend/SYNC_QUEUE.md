@@ -88,6 +88,11 @@ re-derivation from the Supabase diff is required:
   whatever JSON comes back through `recordRingPush`).
 - **DB/migration:** none.
 - **Verify:** `cd backend && npm run typecheck && npm run build`.
+- **Not applicable to Path B:** the same commit added CORS headers + an `OPTIONS` handler to
+  `call-ring`, whose absence meant a browser preflight failed and the ring push was never
+  sent from web callers at all. That is a Supabase-edge-function transport bug only — Path B
+  fires its ring inside the Express server, with no browser hop to preflight. Just make sure
+  the API's own CORS middleware keeps covering the routes the web app calls.
 
 ## [SYNC-021] Decline from a closed app must reach the server
 
@@ -118,6 +123,32 @@ re-derivation from the Supabase diff is required:
   so the native side is told the right endpoint for the active backend.
 - **DB/migration:** none (`push_tokens` from 0011 is enough).
 - **Verify:** `cd backend && npm run typecheck && npm run build`.
+
+## [SYNC-022] `PushRepository.isRegistered` — prove the SERVER will ring this phone
+
+- **Area:** PushRepository / push_tokens
+- **Supabase change:** `src/data/supabase/push.ts` gained `isRegistered(token)` — selects
+  `push_tokens` by `token` AND `user_id = <caller>` and returns whether a row came back
+  (errors return false: the row asserts confirmation, and an unreachable server confirms
+  nothing). No migration; the existing RLS SELECT policy already scopes to own rows.
+- **Domain/interface:** `src/data/repositories.ts` → `PushRepository.isRegistered(token:
+  string): Promise<boolean>` (shared, done). Mock implemented in
+  `src/data/mock/mockRepositories.ts` (`pushTokens.has(token)`).
+- **Why:** `CallAlertsCheck` showed "Registered for calls while closed ✅" purely because
+  `getPushToken()` returned a token — a device-side fact. Registration is a SEPARATE
+  server-side write that `PushRegistrar` swallows on failure and skips entirely for guest /
+  anonymous sessions. So a phone could look fully healthy while `call-ring` reported "no
+  registered devices", with both sides telling the truth. The check is now split into "This
+  phone has a push address" and "Your account will be rung on this phone".
+- **Path B — backend/:** add `GET /push/tokens/:token/registered` returning a bare boolean.
+  Authz: authenticated user only; it must answer for the CALLING user's own token —
+  `select … where token = :token and user_id = <jwt user>` — never a bare token lookup, or it
+  becomes an oracle for whether someone else's device is registered.
+- **Path B — src/data/api/:** already added —
+  `isRegistered: (token) => http.get<boolean>('/push/tokens/'+seg(token)+'/registered')`.
+  Just make the route exist.
+- **DB/migration:** none.
+- **Verify:** `cd backend && npm run typecheck && npm run build`; app `npx tsc --noEmit`.
 
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
 

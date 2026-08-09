@@ -858,6 +858,18 @@ export interface PushRepository {
   register(token: string, platform: string): Promise<void>;
   /** Detach a token — on sign-out, so the next user doesn't get their calls. */
   unregister(token: string): Promise<void>;
+  /**
+   * Is this token stored on the SERVER, against the user asking?
+   *
+   * The device being able to mint a push token and the server having agreed to
+   * ring it are two different facts, and the call-alerts check used to test only
+   * the first while claiming the second. Registration can fail silently — a
+   * guest session skips it entirely, and a rejected write is swallowed so a
+   * notification problem never breaks the app — leaving a phone that looks
+   * registered, isn't, and is never rung. This is the question that actually
+   * matters, asked of the only party who knows the answer.
+   */
+  isRegistered(token: string): Promise<boolean>;
 }
 
 /** One offering (or tag) to record into the growing collection. */

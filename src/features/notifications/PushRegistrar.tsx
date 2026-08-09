@@ -28,7 +28,12 @@ import {
 import { SUPABASE_URL } from '@/lib/supabase';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import type { Repositories } from '@/data/repositories';
-import { answerUrlFor, configureNotificationHandler, getPushToken } from './push';
+import {
+  answerUrlFor,
+  configureNotificationHandler,
+  getPushToken,
+  recordRegistration,
+} from './push';
 
 configureNotificationHandler();
 
@@ -92,6 +97,12 @@ export function PushRegistrar() {
     // A guest is a caller, never a callee — nothing would ever be pushed to
     // them, so don't ask for notification permission they don't need.
     if (!currentUser || currentUser.isAnonymous) {
+      // Named rather than passed over in silence: "browsing as a guest" is the
+      // single likeliest reason a healthy-looking phone is never rung, and it
+      // is invisible from the server — which just sees nobody registered.
+      recordRegistration(
+        'You are browsing as a guest. Sign in on this phone so calls can be sent to it.',
+      );
       const stale = registered.current;
       registered.current = null;
       if (stale) void repos.push.unregister(stale).catch(() => {});
@@ -105,7 +116,13 @@ export function PushRegistrar() {
       // here means it is ready long before anyone calls.
       await setAnswerUriTemplate(answerUrlFor);
       const token = await getPushToken();
-      if (!active || !token) return;
+      if (!active) return;
+      if (!token) {
+        recordRegistration(
+          'This phone could not get a push address (notification permission refused, or this build has no Firebase credentials).',
+        );
+        return;
+      }
       // This device can be rung now — so it's the right moment to ask whether
       // that ring may take over the screen.
       await offerCallPopupOnce().catch(() => {});
@@ -119,9 +136,15 @@ export function PushRegistrar() {
         if (SUPABASE_URL) {
           await setDeclineEndpoint(`${SUPABASE_URL}/functions/v1/call-decline`, token);
         }
-      } catch {
-        // Table missing, offline, Path B routes not built yet — the app keeps
-        // working, it just won't ring while closed.
+        recordRegistration(null);
+      } catch (err) {
+        // Table missing, offline, RLS refusing the write, Path B routes not
+        // built yet — the app keeps working, it just won't ring while closed.
+        // KEEP THE REASON. Swallowing it silently is what made "no registered
+        // devices" unexplainable from the phone for as long as it was.
+        recordRegistration(
+          err instanceof Error ? err.message : 'the server refused this phone’s push address',
+        );
       }
     })();
 

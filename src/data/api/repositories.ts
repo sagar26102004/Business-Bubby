@@ -388,6 +388,8 @@ export function createApiPush(): PushRepository {
     register: (token: string, platform: string) =>
       http.post<void>('/push/tokens', { token, platform }),
     unregister: (token: string) => http.del<void>(`/push/tokens/${seg(token)}`),
+    isRegistered: (token: string) =>
+      http.get<boolean>(`/push/tokens/${seg(token)}/registered`),
   };
 }
 
