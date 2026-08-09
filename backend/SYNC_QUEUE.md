@@ -149,6 +149,13 @@ re-derivation from the Supabase diff is required:
   Just make the route exist.
 - **DB/migration:** none.
 - **Verify:** `cd backend && npm run typecheck && npm run build`; app `npx tsc --noEmit`.
+- **Also in the same change (frontend, backend-agnostic — no Path B work, just don't undo it):**
+  `register()` on the Supabase side now THROWS instead of returning quietly when there is no
+  session or no token; `PushRegistrar` retries on every app foreground until a token sticks
+  (it was a single silent attempt at cold start, so one throw on a network-less launch left
+  the phone permanently unreachable); and `CallAlertsCheck` grew a "Register this phone now"
+  button that prints the server's own error. Path B's `POST /push/tokens` should likewise
+  answer with a real error status rather than a silent 200 when it cannot resolve the user.
 
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
 

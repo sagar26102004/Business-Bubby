@@ -15,7 +15,7 @@
 import { useEffect, useRef } from 'react';
 import * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, Platform } from 'react-native';
+import { Alert, AppState, Platform } from 'react-native';
 import { router } from 'expo-router';
 import {
   canDrawOverlays,
@@ -31,6 +31,7 @@ import type { Repositories } from '@/data/repositories';
 import {
   answerUrlFor,
   configureNotificationHandler,
+  describeError,
   getPushToken,
   recordRegistration,
 } from './push';
@@ -109,7 +110,19 @@ export function PushRegistrar() {
       return;
     }
 
-    (async () => {
+    /**
+     * One attempt at making this phone reachable.
+     *
+     * ⚠️ RETRIED, because it used to be a single shot at cold start and every
+     * failure was permanent. `getPushToken` needs a round trip to Expo's
+     * servers, so a launch with no network yet — the normal case for an app
+     * opened the moment the phone wakes — returned null, the effect returned,
+     * and nothing ever tried again. The phone then stayed unreachable until it
+     * was reinstalled, while the call-alerts check (which asks for a token
+     * itself, later, with the network up) showed a cheerful tick. That is the
+     * exact shape of "the check says registered and the server says no devices".
+     */
+    const attempt = async (): Promise<void> => {
       // Hand the deep-link shape to the native side FIRST. A push that lands
       // while the app is closed is drawn by Kotlin, which has no way to build
       // this itself — and a stored template outlives the process, so doing it
@@ -119,7 +132,7 @@ export function PushRegistrar() {
       if (!active) return;
       if (!token) {
         recordRegistration(
-          'This phone could not get a push address (notification permission refused, or this build has no Firebase credentials).',
+          'This phone could not get a push address (notification permission refused, no network at the time, or this build has no Firebase credentials). It will try again when you reopen the app.',
         );
         return;
       }
@@ -142,14 +155,23 @@ export function PushRegistrar() {
         // built yet — the app keeps working, it just won't ring while closed.
         // KEEP THE REASON. Swallowing it silently is what made "no registered
         // devices" unexplainable from the phone for as long as it was.
-        recordRegistration(
-          err instanceof Error ? err.message : 'the server refused this phone’s push address',
-        );
+        recordRegistration(describeError(err));
       }
-    })();
+    };
+
+    void attempt();
+
+    // Try again every time the app comes back to the front, until it sticks.
+    // Foreground is the right trigger: it is when the network is most likely to
+    // be up, and it costs nothing once `registered.current` is set. Without a
+    // retry the whole feature hangs on one throw at launch that nobody sees.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && active && !registered.current) void attempt();
+    });
 
     return () => {
       active = false;
+      sub.remove();
     };
   }, [repos, currentUser?.id, currentUser?.isAnonymous]);
 

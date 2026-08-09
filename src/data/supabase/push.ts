@@ -14,8 +14,19 @@ export function createSupabasePush(): PushRepository {
   return {
     async register(token: string, platform: string): Promise<void> {
       const userId = await currentUserId();
-      // A guest has no inbox to ring — nothing to register.
-      if (!userId || !token) return;
+      // ⚠️ THROW, DO NOT RETURN. This used to no-op quietly on a missing
+      // session, which made a failed registration indistinguishable from a
+      // successful one: the caller recorded success, the phone showed itself as
+      // registered, and the server had no row — the exact contradiction that
+      // made "no registered devices" impossible to chase from the device. The
+      // caller already treats registration as best-effort, so an exception here
+      // costs nothing except that the reason finally gets written down.
+      if (!token) throw new Error('This phone has no push address to register.');
+      if (!userId) {
+        throw new Error(
+          'No signed-in session was available when this phone tried to register for calls.',
+        );
+      }
       const { error } = await sb()
         .from('push_tokens')
         .upsert(

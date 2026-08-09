@@ -38,6 +38,7 @@ import { useRepositories } from '@/data/DataProvider';
 import {
   CALL_CATEGORY_ID,
   CALL_CHANNEL_ID,
+  describeError,
   getLastRegistration,
   getPushToken,
 } from './push';
@@ -181,6 +182,39 @@ export function CallAlertsCheck() {
   }, [run]);
 
   /**
+   * Register this phone against the signed-in account, right now, and report
+   * the outcome in words.
+   *
+   * Deliberately calls the repository directly rather than nudging the
+   * registrar: the question being answered is "what does the server say when
+   * this exact device asks", and an answer that travelled through another
+   * component's error handling is a weaker answer.
+   */
+  const registerNow = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const token = await getPushToken();
+      if (!token) {
+        setTestResult('This phone could not get a push address, so there is nothing to register.');
+        return;
+      }
+      await repos.push.register(token, Platform.OS);
+      const ok = await repos.push.isRegistered(token).catch(() => false);
+      setTestResult(
+        ok
+          ? 'Registered. This phone will now be rung for calls to your account.'
+          : 'The write was accepted but the server still has no record of this phone — which points at the account the app is signed in as.',
+      );
+    } catch (err) {
+      setTestResult(`Could not register: ${describeError(err)}`);
+    } finally {
+      setTesting(false);
+      run();
+    }
+  };
+
+  /**
    * Ring this phone right now, through exactly the path a real call uses.
    *
    * Answer points at a call id that doesn't exist, because there is no call
@@ -312,6 +346,24 @@ export function CallAlertsCheck() {
         <Text variant="caption" tone="muted" style={styles.body}>
           Last call you placed from this device: {lastPushLine}.
         </Text>
+      ) : null}
+
+      {/*
+        Registering by hand, and SAYING WHAT HAPPENED.
+
+        The automatic attempt runs at launch and reports failures into the row
+        above, but a button that provokes the error on demand — with the network
+        up and someone watching — is what turns "the server says no devices"
+        from a standoff into a sentence. Shown only while the phone is not
+        registered, because it is a repair, not a routine.
+      */}
+      {failed('registered') && !!checks.find((c) => c.id === 'token')?.ok ? (
+        <Button
+          title={testing ? 'Registering…' : 'Register this phone now'}
+          onPress={() => void registerNow()}
+          disabled={testing}
+          style={styles.button}
+        />
       ) : null}
 
       <Button

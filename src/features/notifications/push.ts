@@ -55,6 +55,43 @@ export function recordRegistration(reason: string | null): void {
   lastRegistration = reason;
 }
 
+/**
+ * Turn whatever was thrown into a sentence worth reading.
+ *
+ * ⚠️ `err instanceof Error` IS NOT ENOUGH, and assuming it was cost a whole
+ * debugging round. supabase-js rejects with a **PostgrestError** — a plain
+ * object carrying `message` / `code` / `details` / `hint`, which is NOT an
+ * instance of Error. Every such failure therefore fell through to the generic
+ * fallback, and the phone reported "the server refused this phone's push
+ * address" while the one fact that would have explained it (the Postgres code
+ * and message) was discarded on the floor.
+ *
+ * So: read `message` off anything that has one, and carry the code with it —
+ * `42501` is RLS, `23503` a missing profile row, `PGRST301` an expired JWT, and
+ * those three demand completely different fixes.
+ */
+export function describeError(err: unknown): string {
+  if (typeof err === 'string' && err.trim()) return err;
+  if (err && typeof err === 'object') {
+    const e = err as { message?: unknown; code?: unknown; details?: unknown; hint?: unknown };
+    const parts = [
+      typeof e.message === 'string' && e.message ? e.message : '',
+      typeof e.details === 'string' && e.details ? e.details : '',
+      typeof e.hint === 'string' && e.hint ? e.hint : '',
+    ].filter(Boolean);
+    const code = typeof e.code === 'string' && e.code ? ` [${e.code}]` : '';
+    if (parts.length > 0) return `${parts.join(' — ')}${code}`;
+    // Nothing readable on it: dump it rather than invent a reason, because an
+    // invented one is what sent us round this loop in the first place.
+    try {
+      return `${JSON.stringify(err)}`.slice(0, 300);
+    } catch {
+      /* circular — fall through */
+    }
+  }
+  return 'the server gave no reason';
+}
+
 export function getLastRegistration(): string | null {
   return lastRegistration;
 }
