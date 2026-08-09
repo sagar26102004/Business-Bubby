@@ -12,20 +12,10 @@ import expo.modules.kotlin.modules.ModuleDefinition
  * JS exists to ask. This module is what the RUNNING app uses: to dismiss a
  * popup once the call is answered elsewhere, to hand over the deep-link
  * template, and to report whether the system will let us draw the real thing.
- *
- * It also tracks whether the app is on screen, which is what stops a popup
- * appearing on top of the in-app call screen.
  */
 class CallNotificationModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("CallNotification")
-
-    // Whether to draw a popup at all is decided by these two lines. While the
-    // app is visible the in-app gate owns incoming calls; the moment it isn't,
-    // the notification does. A killed process runs neither, so the flag stays
-    // false — exactly what a closed app should report.
-    OnActivityEntersForeground { CallNotifications.appInForeground = true }
-    OnActivityEntersBackground { CallNotifications.appInForeground = false }
 
     /**
      * Show the incoming-call notification.

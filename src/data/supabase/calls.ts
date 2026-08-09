@@ -7,6 +7,10 @@
 import type { Business, Call, CallParticipant, Employee, User } from '@/domain/types';
 import type { CallRepository } from '@/data/repositories';
 import { sb, uuid, nowIso, uuidOrNull, notify, serverNow, syncServerClock } from './shared';
+import {
+  recordRingPush,
+  recordRingPushFailure,
+} from '@/features/notifications/ringPushLog';
 
 const RING_TIMEOUT_MS = 30_000;
 
@@ -190,9 +194,17 @@ export function createSupabaseCalls(): CallRepository {
       // a push that fails (function not deployed, no FCM credentials, nobody
       // registered) must never stop the call itself from being placed — the
       // caller still rings anyone who does have the app open.
+      // The outcome is still not awaited, but it IS recorded — "no registered
+      // devices" and "the push went out and the phone ignored it" look
+      // identical from here otherwise, and that difference is most of the work
+      // when a phone doesn't ring.
       void sb()
         .functions.invoke('call-ring', { body: { callId: call.id } })
-        .catch(() => {});
+        .then(({ data, error }) => {
+          if (error) recordRingPushFailure(error);
+          else recordRingPush(data);
+        })
+        .catch(recordRingPushFailure);
 
       return call;
     },

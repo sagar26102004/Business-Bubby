@@ -1,11 +1,15 @@
 package expo.modules.callnotification
 
+import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.Person
@@ -19,21 +23,8 @@ import androidx.core.app.Person
  * dead). Anything either of them needs has to work without a React context.
  */
 object CallNotifications {
-  /**
-   * Whether one of our activities is on screen right now.
-   *
-   * Kept here rather than asked of ActivityManager because a false positive
-   * costs a missed call. The driver location-sharing foreground service is
-   * enough to make ActivityManager report our process as "foreground" while
-   * the user stares at their home screen — we would suppress the popup and the
-   * call would ring into nothing.
-   *
-   * Defaults to false, which is the safe direction: a dead process shows the
-   * popup, and only a running app that has told us it is visible suppresses it.
-   */
-  @Volatile
-  @JvmStatic
-  var appInForeground: Boolean = false
+  /** Shared with CallMessagingService so one adb filter shows the whole path. */
+  private const val TAG = "LocaloCall"
 
   private const val PREFS = "localo.callNotification"
   private const val KEY_ANSWER_URI = "answerUriTemplate"
@@ -137,6 +128,60 @@ object CallNotifications {
     )
   }
 
+  /**
+   * Make sure the channel we're about to post on exists.
+   *
+   * ⚠️ A NOTIFICATION SENT TO A MISSING CHANNEL IS DROPPED IN SILENCE. Android
+   * logs one line and shows nothing — no error, no fallback, no crash. The
+   * channel is normally created by JS at sign-in, which means it does NOT exist
+   * on a phone where the app was reinstalled and not yet opened, or where the
+   * user signed out. Those are exactly the phones we most need to ring, so
+   * create it here too rather than assume.
+   *
+   * Settings are frozen at creation, so this deliberately mirrors
+   * `ensureCallChannel` in src/features/notifications/push.ts. Whichever side
+   * gets there first wins and the other becomes a no-op.
+   */
+  private fun ensureChannel(context: Context, channelId: String) {
+    if (Build.VERSION.SDK_INT < 26) return
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+      ?: return
+    if (manager.getNotificationChannel(channelId) != null) return
+
+    Log.d(TAG, "channel $channelId was missing; creating it natively")
+    val channel = NotificationChannel(
+      channelId,
+      "Incoming calls",
+      NotificationManager.IMPORTANCE_HIGH
+    ).apply {
+      description = "Rings when someone calls your business."
+      // The bundled 32s ring if it's there (Android plays a channel's sound
+      // once per notification, so ringing for the whole window comes from the
+      // file's length), otherwise the phone's own ringtone.
+      val bundled = context.resources
+        .getIdentifier("call_ringtone", "raw", context.packageName)
+      val sound = if (bundled != 0) {
+        Uri.parse("android.resource://${context.packageName}/raw/call_ringtone")
+      } else {
+        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+      }
+      setSound(
+        sound,
+        AudioAttributes.Builder()
+          .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+          .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+          .build()
+      )
+      enableVibration(true)
+      vibrationPattern = longArrayOf(0, 700, 550, 700, 2050)
+      enableLights(true)
+      // A phone call is the one thing that earns an interruption.
+      setBypassDnd(true)
+      lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+    }
+    manager.createNotificationChannel(channel)
+  }
+
   /** PendingIntent for Decline, handled in-process so the app never opens. */
   private fun declineIntent(context: Context, callId: String, requestCode: Int): PendingIntent {
     val intent = Intent(context, CallActionReceiver::class.java).apply {
@@ -207,7 +252,15 @@ object CallNotifications {
       .addAction(android.R.drawable.sym_action_call, "Answer", answer)
       .build()
 
+    ensureChannel(context, channelId)
+
     val manager = NotificationManagerCompat.from(context)
+    if (!manager.areNotificationsEnabled()) {
+      // Nothing we post can be seen. Say so instead of reporting success, so
+      // the caller can fall back rather than believe the phone is ringing.
+      Log.w(TAG, "notifications are disabled for this app; cannot ring")
+      return false
+    }
     return try {
       if (canUseFullScreenIntent(context)) {
         val styled = base()

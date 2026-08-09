@@ -47,13 +47,13 @@ class CallMessagingService : ExpoFirebaseMessagingService() {
       return
     }
 
-    // The app is on screen: IncomingCallGate is already showing the full
-    // answer/decline UI and ringing. A second popup on top of it would just be
-    // something else to dismiss.
-    if (CallNotifications.appInForeground) {
-      Log.d(TAG, "call ${call.callId} arrived with the app open; the in-app screen has it")
-      return
-    }
+    // Deliberately NOT skipped when the app is on screen. An earlier version
+    // held a "is the app in the foreground" flag and returned here, so that the
+    // popup never landed on top of IncomingCallGate — which meant one stale
+    // flag was all it took to silence every call, with nothing to show for it.
+    // Posting always and letting the gate clear it (it does, the moment it
+    // renders) can at worst flash a notification for a second. That is a much
+    // cheaper mistake than a phone that never rings.
 
     // A missing template is survivable: `show` falls back to opening the app.
     val answerUri = CallNotifications.answerUriFor(applicationContext, call.callId)

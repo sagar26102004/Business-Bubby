@@ -94,6 +94,15 @@ export function IncomingCallGate() {
   useEffect(() => {
     if (isRinging && call) {
       poppedId.current = call.id;
+      // This screen IS the call now, so clear anything the notification layer
+      // put up for it. The push fires unconditionally — deciding not to post
+      // because the app "looked open" is how a call ends up silent — so the
+      // tidying happens here, where being on screen is a fact rather than a
+      // guess.
+      if (AppState.currentState === 'active') {
+        void dismissIncomingCall(call.id);
+        void dismissCallNotifications(call.id);
+      }
     } else if (poppedId.current) {
       const id = poppedId.current;
       void dismissIncomingCall(id);
