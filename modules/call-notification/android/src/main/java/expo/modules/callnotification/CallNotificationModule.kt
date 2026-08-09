@@ -7,11 +7,14 @@ import expo.modules.kotlin.modules.ModuleDefinition
 /**
  * The JavaScript face of the incoming-call notification (Android only).
  *
- * The rendering itself lives in `CallNotifications`, because the important
- * caller is `CallMessagingService` — a push arriving at a CLOSED app, where no
- * JS exists to ask. This module is what the RUNNING app uses: to dismiss a
- * popup once the call is answered elsewhere, to hand over the deep-link
- * template, and to report whether the system will let us draw the real thing.
+ * Used by the running app to dismiss a popup once the call is answered
+ * elsewhere, to ring the phone from the call-alerts check, and to report
+ * whether the system will let us draw a real call screen at all.
+ *
+ * A push arriving at a CLOSED app is currently drawn by expo-notifications
+ * rather than here — see the manifest for why. The rendering stays in
+ * `CallNotifications` (not inlined into this module) precisely so that a
+ * messaging service can call it again the day that changes.
  */
 class CallNotificationModule : Module() {
   override fun definition() = ModuleDefinition {

@@ -17,10 +17,12 @@ import androidx.core.app.Person
 /**
  * Builds and posts the incoming-call notification.
  *
- * Lives in a plain object, not in the Expo module, because it has TWO callers
- * that could not be further apart: the module (JS asked for it) and
- * CallMessagingService (a push arrived and there is no JS at all — the app is
- * dead). Anything either of them needs has to work without a React context.
+ * Lives in a plain object rather than inside the Expo module so that it needs
+ * no React context to run: it was written for a FirebaseMessagingService
+ * handling a push at a dead app, and it is kept that way so it can be used
+ * from one again. Today its only caller is the module — the "ring this phone
+ * now" check — while real incoming calls are drawn by expo-notifications from
+ * the push itself (see the manifest).
  */
 object CallNotifications {
   /** Shared with CallMessagingService so one adb filter shows the whole path. */

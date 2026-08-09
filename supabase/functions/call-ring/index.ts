@@ -123,8 +123,8 @@ Deno.serve(async (req: Request) => {
       // popup didn't appear on a closed app, data-only meant there was nothing
       // to fall back to: the phone rang showing an empty notification with no
       // way to answer. A plainer notification that works beats a beautiful one
-      // that might not. CallMessagingService consumes the message before Expo
-      // ever sees it when it can, so there is no double notification.
+      // that might not — and this is the one that has been seen ringing a
+      // locked phone, with Answer and Decline on it, on real devices.
       title: `📞 ${call.customerName}`,
       body: `Incoming call for ${call.businessName}`,
       sound: 'default',

@@ -22,38 +22,10 @@ dependencies {
   // already pulls a newer core in, and Gradle resolves to the HIGHEST version
   // in the graph, so naming a floor here can only guarantee the API exists —
   // it can never downgrade what RN picked.
-  implementation "androidx.core:core-ktx:1.13.1"
-
-  // CallMessagingService extends expo-notifications' own FirebaseMessagingService
-  // so that everything which ISN'T a call keeps being handled by Expo.
   //
-  // ⚠️ HOW expo-notifications IS CONSUMED DEPENDS ON THE MACHINE. Autolinking
-  // links a module as a Gradle PROJECT only when it has to build it from
-  // source; where a prebuilt artifact exists — as on EAS — it is instead a
-  // Maven dependency and `:expo-notifications` does not exist at all. Naming
-  // the project unconditionally builds locally and fails on EAS with "Project
-  // with path ':expo-notifications' could not be found", so ask first.
-  def notificationsProject = findProject(':expo-notifications')
-  if (notificationsProject != null) {
-    implementation notificationsProject
-  } else {
-    // The coordinates autolinking publishes it under (see the `publication`
-    // block in `expo-modules-autolinking resolve --json`). The version has to
-    // be EXACT: the local Maven repo is registered with a content filter for
-    // this one version, so a range or a `+` would never resolve. Read from
-    // package.json rather than hardcoded, so an Expo upgrade can't leave a
-    // stale number behind.
-    def modulePackage = new File(projectDir, '../../../node_modules/expo-notifications/package.json')
-    if (!modulePackage.exists()) {
-      throw new GradleException(
-        "call-notification needs expo-notifications, but it was neither linked as a Gradle " +
-        "project nor found at ${modulePackage}. Is expo-notifications installed?"
-      )
-    }
-    def notificationsVersion = new groovy.json.JsonSlurper().parse(modulePackage).version
-    implementation "host.exp.exponent:expo.modules.notifications:${notificationsVersion}"
-  }
-
-  // Where RemoteMessage itself comes from.
-  implementation 'com.google.firebase:firebase-messaging:25.0.1'
+  // Deliberately the ONLY dependency. This module used to pull in
+  // expo-notifications and firebase-messaging so it could subclass Expo's
+  // messaging service; that service is gone (see the manifest), and with it the
+  // Maven-versus-Gradle-project problem that broke an EAS build.
+  implementation "androidx.core:core-ktx:1.13.1"
 }

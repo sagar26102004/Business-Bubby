@@ -12,23 +12,28 @@
 
   <application>
     <!--
-      Draws the call popup the instant a push lands, without waiting for
-      JavaScript — which is what makes it work while the app is CLOSED.
+      ⚠️ THERE IS DELIBERATELY NO FirebaseMessagingService HERE.
 
-      PRIORITY IS THE WHOLE TRICK. expo-notifications registers its own
-      FirebaseMessagingService at android:priority="-1", deliberately low so an
-      app can put itself in front; FCM delivers to the highest-priority service
-      that matches. Ours extends theirs and calls super for anything that isn't
-      a call, so ordinary notifications are untouched. Drop this priority and
-      calls silently go back to being a bare, buttonless banner.
+      One lived here: it outranked expo-notifications' own service and drew the
+      CallStyle popup in Kotlin the moment a push landed, so a closed app got a
+      real call screen. It never worked on a closed app, and because it consumed
+      the message, expo-notifications never got to draw its own — so the phone
+      rang with nothing to press, or went silent.
+
+      Three builds settled it. The two that ring correctly (4fff0b9 with no
+      service at all, 76655bf where the service bailed on almost everything and
+      handed the message back) both end up with expo-notifications drawing the
+      notification. The one that stayed silent, e3d4675, is the one where the
+      service never handed anything back. Whatever is wrong is inside that
+      service, and until a logcat from a phone running it says what, the
+      message belongs to Expo: the push carries a title and the incoming_call
+      category, so Android renders it with Answer and Decline, on the lock
+      screen, without any native code from us.
+
+      CallNotifications is still here and still posts the popup — the call
+      alerts check rings the phone through it — so re-enabling this is a
+      manifest entry away once we can see why it went quiet.
     -->
-    <service
-      android:name="expo.modules.callnotification.CallMessagingService"
-      android:exported="false">
-      <intent-filter android:priority="100">
-        <action android:name="com.google.firebase.MESSAGING_EVENT" />
-      </intent-filter>
-    </service>
 
     <!--
       Handles the Decline pill without opening the app. Not exported: only our
