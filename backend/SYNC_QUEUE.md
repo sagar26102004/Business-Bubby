@@ -147,7 +147,11 @@ re-derivation from the Supabase diff is required:
 - **Path B — src/data/api/:** already added —
   `isRegistered: (token) => http.get<boolean>('/push/tokens/'+seg(token)+'/registered')`.
   Just make the route exist.
-- **DB/migration:** none.
+- **DB/migration:** `supabase/migrations/0012_push_tokens_handset_handover.sql` — SHARED DB,
+  apply once. Makes the `push_tokens` UPDATE policy's `using` permissive so an upsert can
+  reassign a token from the account that previously used that handset (it was failing with
+  42501 "(USING expression)", which is why no device was ever registered). Path B connects
+  privileged and bypasses RLS, so it needs no code change — but do not "tidy" the policy back.
 - **Verify:** `cd backend && npm run typecheck && npm run build`; app `npx tsc --noEmit`.
 - **Also in the same change (frontend, backend-agnostic — no Path B work, just don't undo it):**
   `register()` on the Supabase side now THROWS instead of returning quietly when there is no
