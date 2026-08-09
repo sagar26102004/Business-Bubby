@@ -18,6 +18,7 @@ import type { Call } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { Avatar, Text } from '@/components/ui';
 import { dismissIncomingCall } from '../../../modules/call-notification';
+import { dismissCallNotifications } from '../notifications/push';
 import { palette, radius, spacing, useColors } from '@/theme/theme';
 
 const POLL_MS = 2000;
@@ -80,17 +81,23 @@ export function IncomingCallGate() {
   const isRinging = !!call && call.status === 'ringing' && call.id !== dismissedId;
   const player = useAudioPlayer(RINGTONE);
 
-  // Clear the SYSTEM call popup (posted by the background task while the app
-  // was closed) as soon as this call stops ringing — answered here, answered by
-  // a teammate, cancelled, or rang out. Without this the phone would keep
-  // showing "incoming call" for a call that no longer exists. Keyed on the id
-  // so it fires on the transition, not on every poll.
+  // Clear whatever announced this call while the app was closed, as soon as it
+  // stops ringing — answered here, answered by a teammate, cancelled, or rang
+  // out. Without this the phone keeps showing "incoming call" for a call that
+  // no longer exists. Keyed on the id so it fires on the transition, not on
+  // every poll.
+  //
+  // BOTH paths are cleared because either could have drawn it: the native
+  // service posts the call popup, and if it didn't run, expo-notifications
+  // posted its own from the push. Whichever isn't there is a no-op.
   const poppedId = useRef<string | null>(null);
   useEffect(() => {
     if (isRinging && call) {
       poppedId.current = call.id;
     } else if (poppedId.current) {
-      void dismissIncomingCall(poppedId.current);
+      const id = poppedId.current;
+      void dismissIncomingCall(id);
+      void dismissCallNotifications(id);
       poppedId.current = null;
     }
   }, [isRinging, call?.id]);

@@ -31,7 +31,12 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
  * without bumping it here sends every ring to a channel that no longer exists.
  */
 const CALL_CHANNEL_ID = 'calls_v2';
-/** Must match CALL_CATEGORY_ID — this is what puts Accept/Decline on the popup. */
+/**
+ * Must match CALL_CATEGORY_ID — this is what puts Accept/Decline on the
+ * notification Android renders by itself, i.e. the fallback for every case
+ * where the app's own service doesn't draw the call popup. The category is
+ * registered on the device at sign-in (src/features/notifications/push.ts).
+ */
 const CALL_CATEGORY_ID = 'incoming_call';
 
 interface Participant {
@@ -108,15 +113,21 @@ Deno.serve(async (req: Request) => {
 
     const messages = tokens.map((to) => ({
       to,
-      // ⚠️ DELIBERATELY NO title/body — this is a DATA-ONLY message.
+      // ⚠️ THE SAFETY NET. These two lines are what Android falls back to
+      // rendering if the app's own notification service doesn't handle the
+      // message — and combined with `categoryId` below, that fallback still
+      // carries Accept and Decline.
       //
-      // A push carrying title/body makes Android render its own plain banner,
-      // which cannot be restyled: no avatar, no coloured Answer/Decline pills,
-      // and it collapses after a few seconds. Sending data only means Android
-      // draws nothing and instead wakes the app's background task, which posts
-      // the real system CallStyle popup (see src/features/notifications/
-      // incomingCallTask.ts). Adding a title here silently reverts the feature.
-      //
+      // It was data-only for exactly one build, so that Android would draw
+      // nothing and leave the field to the native CallStyle popup. When that
+      // popup didn't appear on a closed app, data-only meant there was nothing
+      // to fall back to: the phone rang showing an empty notification with no
+      // way to answer. A plainer notification that works beats a beautiful one
+      // that might not. CallMessagingService consumes the message before Expo
+      // ever sees it when it can, so there is no double notification.
+      title: `📞 ${call.customerName}`,
+      body: `Incoming call for ${call.businessName}`,
+      sound: 'default',
       // `high` is what lets Android deliver to an app that isn't running.
       priority: 'high',
       channelId: CALL_CHANNEL_ID,

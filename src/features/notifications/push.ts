@@ -13,6 +13,7 @@
  */
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
+import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
 
 /**
@@ -36,27 +37,62 @@ const LEGACY_CALL_CHANNEL_ID = 'calls';
  */
 export const CALL_CATEGORY_ID = 'incoming_call';
 
-/**
- * How long a call rings. MUST match RING_TIMEOUT_MS in the call repositories —
- * it's the `setTimeoutAfter` on the native popup, so a value that's too long
- * leaves a phantom "incoming call" on screen after the call is already dead.
- */
-export const CALL_RING_MS = 30_000;
+/** Deep link that answers a call: the session screen joins on `answer=1`. */
+export function answerUrlFor(callId: string): string {
+  return Linking.createURL(`/call/session/${callId}`, { queryParams: { answer: '1' } });
+}
+
+/** True for a notification that is announcing an incoming call. */
+function isCallNotification(notification: Notifications.Notification): boolean {
+  const data = notification.request.content.data as { kind?: string } | undefined;
+  return data?.kind === 'incoming_call';
+}
 
 /**
  * Show the alert even when the app happens to be in the FOREGROUND. Android's
  * default is to suppress it, which would mean a call arriving while you're on
  * another screen makes no sound at all.
+ *
+ * Calls are the exception: IncomingCallGate is already on screen with the
+ * answer and decline buttons, ringing. Letting the notification through as well
+ * would put a banner over the top of the very thing it is telling you about.
  */
 export function configureNotificationHandler(): void {
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async (notification) => {
+      const isCall = isCallNotification(notification);
+      return {
+        shouldPlaySound: !isCall,
+        shouldSetBadge: false,
+        shouldShowBanner: !isCall,
+        shouldShowList: !isCall,
+      };
+    },
   });
+}
+
+/**
+ * Clear any notification announcing this call — answered here, answered by a
+ * teammate, declined, cancelled or rang out.
+ *
+ * Matches on the callId the payload carries rather than dismissing everything,
+ * so an unrelated order or chat alert sitting in the shade survives being in
+ * the wrong place at the wrong time.
+ */
+export async function dismissCallNotifications(callId: string): Promise<void> {
+  try {
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(
+      presented
+        .filter((n) => {
+          const data = n.request.content.data as { callId?: string } | undefined;
+          return data?.callId === callId;
+        })
+        .map((n) => Notifications.dismissNotificationAsync(n.request.identifier)),
+    );
+  } catch {
+    /* nothing presented, or the platform can't enumerate — not worth surfacing */
+  }
 }
 
 /**

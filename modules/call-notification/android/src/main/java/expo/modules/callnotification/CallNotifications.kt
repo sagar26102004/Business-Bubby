@@ -106,13 +106,27 @@ object CallNotifications {
     context.startActivity(intent)
   }
 
-  /** PendingIntent that opens the app at a deep link. */
-  private fun openAppIntent(context: Context, uri: String, requestCode: Int): PendingIntent {
-    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
-      // Scope to our own app so the chooser never appears.
-      setPackage(context.packageName)
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-    }
+  /**
+   * PendingIntent that opens the app at a deep link — or just opens the app,
+   * when we were never told what the deep link looks like.
+   *
+   * The fallback matters more than it sounds. Answering used to be abandoned
+   * entirely if the URI was missing, which handed the whole notification back
+   * to Expo and produced a ring with no buttons on it. Landing on the home
+   * screen with the call still ringing is worse than a deep link and far better
+   * than not being able to answer at all — IncomingCallGate takes over the
+   * moment the app is open.
+   */
+  private fun openAppIntent(context: Context, uri: String?, requestCode: Int): PendingIntent? {
+    val intent = if (uri != null) {
+      Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
+        // Scope to our own app so the chooser never appears.
+        setPackage(context.packageName)
+      }
+    } else {
+      context.packageManager.getLaunchIntentForPackage(context.packageName)
+    } ?: return null
+    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     return PendingIntent.getActivity(
       context,
       requestCode,
@@ -138,21 +152,28 @@ object CallNotifications {
     )
   }
 
+  /**
+   * Post the incoming-call notification. Returns whether anything was shown,
+   * so a caller that has another way to ring can use it instead of assuming.
+   */
   fun show(
     context: Context,
     callId: String,
     callerName: String,
     businessName: String,
     channelId: String,
-    answerUri: String,
+    answerUri: String?,
     timeoutMs: Int
-  ) {
+  ): Boolean {
     val id = notificationId(callId)
     // CallStyle renders this person as the caller: their name is the headline
     // and their initial fills the avatar.
     val caller = Person.Builder().setName(callerName).setImportant(true).build()
 
-    val answer = openAppIntent(context, answerUri, id)
+    // Only truly impossible if the app has no launcher activity, which cannot
+    // happen for us — but a null here would mean a notification you can't act
+    // on, so say so rather than posting one.
+    val answer = openAppIntent(context, answerUri, id) ?: return false
     val decline = declineIntent(context, callId, id + 1)
 
     /** Everything both variants share. */
@@ -187,7 +208,7 @@ object CallNotifications {
       .build()
 
     val manager = NotificationManagerCompat.from(context)
-    try {
+    return try {
       if (canUseFullScreenIntent(context)) {
         val styled = base()
           .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, decline, answer))
@@ -199,9 +220,11 @@ object CallNotifications {
       } else {
         manager.notify(id, plain())
       }
+      true
     } catch (e: SecurityException) {
       // POST_NOTIFICATIONS revoked between our permission check and here.
       // Nothing to do but stay silent — never crash the app over a notification.
+      false
     } catch (e: Exception) {
       // Any OEM or version that rejects CallStyle for a reason we didn't predict
       // must still ring with usable buttons — a ring you can't answer is worse
@@ -209,7 +232,9 @@ object CallNotifications {
       // defence, and it runs on devices we cannot test.
       try {
         manager.notify(id, plain())
+        true
       } catch (ignored: Exception) {
+        false
       }
     }
   }
