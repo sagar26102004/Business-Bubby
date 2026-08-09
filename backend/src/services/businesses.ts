@@ -191,10 +191,26 @@ export const businessService = {
     await prisma.productMessage.deleteMany({ where: { businessId, productId } });
   },
 
+  /**
+   * Update a business.
+   *
+   * ⚠️ OWNERSHIP IS NOT PATCHABLE. `requireBusinessMember` on the route never
+   * inspects who owns the listing, so without this a staff member could
+   * `PATCH {"ownerId": "<me>"}` and simply take the shop — the app reads
+   * `data.ownerId`, so rewriting the document alone was enough. Ownership moves
+   * only through `reassignOwner`, and the document is force-synced to the
+   * `owner_id` COLUMN on every write so the two can never drift apart.
+   */
   async update(id: string, patch: Partial<Business>): Promise<Business> {
+    const row = await prisma.business.findUnique({ where: { id }, select: { ownerId: true } });
+    if (!row) throw notFound(`Business ${id} not found`);
     const business = await findBusiness(id);
     if (!business) throw notFound(`Business ${id} not found`);
-    Object.assign(business, patch);
+    const { ownerId: _ignoredOwner, id: _ignoredId, ...safePatch } = patch;
+    Object.assign(business, safePatch);
+    // The column is the single source of truth for who owns this listing.
+    business.ownerId = row.ownerId;
+    business.id = id;
     if (patch.products) business.products = withProductIds(patch.products);
     const saved = await saveBusiness(business);
     // Capture new offerings when the listing's tags/menu/services/products change.

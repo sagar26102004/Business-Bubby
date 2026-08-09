@@ -15,7 +15,7 @@ async function loadOrder(id: string) {
 
 ordersRouter.post('/', requireAuth, route(async (req) => {
   await requireCustomerOrMember(req.body.businessId, req.body.customerId, optionalUserId(req));
-  return orderService.create(req.body);
+  return orderService.create(req.body, optionalUserId(req));
 }));
 
 ordersRouter.get('/business/:businessId', requireAuth, route(async (req) => {
@@ -62,7 +62,7 @@ ordersRouter.post('/:id/proposal', requireAuth, route(async (req) => {
 ordersRouter.post('/:id/append', requireAuth, route(async (req) => {
   const order = await loadOrder(req.params.id);
   await requireCustomerOrMember(order.businessId, order.customerId, optionalUserId(req));
-  return orderService.appendLines(req.params.id, req.body.lines);
+  return orderService.appendLines(req.params.id, req.body.lines, optionalUserId(req));
 }));
 
 ordersRouter.post('/:id/move-to-billing', requireAuth, route(async (req) => {

@@ -17,6 +17,7 @@ import { bizChatRouter } from './bizChat';
 import { membershipsRouter } from './memberships';
 import { productThreadsRouter } from './productThreads';
 import { logbookRouter } from './logbook';
+import { pushRouter } from './push';
 
 export const api = Router();
 
@@ -37,3 +38,4 @@ api.use('/biz-chat', bizChatRouter);
 api.use('/memberships', membershipsRouter);
 api.use('/product-threads', productThreadsRouter);
 api.use('/logbook', logbookRouter);
+api.use('/push', pushRouter);

@@ -6,6 +6,7 @@ import { newUuid } from '@/lib/ids';
 import { asData, isUuid, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
 import { formatMoney } from '@/lib/money';
 import { notFound } from '@/http/errors';
+import { isBusinessMember } from '@/authz';
 import { notify } from './notify';
 import { acceptOrder, isOrderStillOpen, orderSummary } from './orderUtils';
 
@@ -76,9 +77,57 @@ const buildLine = (l: NewOrderLineInput) => ({
   included: true,
 });
 
+/**
+ * What the BUSINESS says this line costs, looked up in its own catalogue by
+ * name (case-insensitive across menu, products, services, rentals and party
+ * packages). Returns undefined when the business doesn't list it.
+ */
+function catalogPrice(business: Business | null, name: string): string | undefined {
+  if (!business) return undefined;
+  const wanted = name.trim().toLowerCase();
+  const pools: Array<Array<{ name: string; price?: string }> | undefined> = [
+    business.menu,
+    business.products,
+    business.services,
+    business.rentals,
+    business.partyPackages,
+  ];
+  for (const pool of pools) {
+    const hit = pool?.find((i) => i.name.trim().toLowerCase() === wanted);
+    if (hit?.price) return hit.price;
+  }
+  return undefined;
+}
+
+/**
+ * Build an order line whose PRICE the customer cannot dictate.
+ *
+ * A customer used to be able to send any `price` they liked. Because an
+ * accepted dine-in tab stays open by design and "Move to billing" bills
+ * straight from `order.lines`, a line priced "₹0" became a ₹0 bill that the
+ * business never re-checked — it had already approved the order. So for a
+ * non-member actor the price is taken from the business's own catalogue, and
+ * the client's value is used only for something the business doesn't list
+ * (a custom/ad-hoc line, which a human prices during the proposal anyway).
+ *
+ * `offerPrice` is deliberately kept: that is the customer OFFERING a price,
+ * which the business explicitly accepts or counters. It never bills by itself.
+ */
+function buildTrustedLine(l: NewOrderLineInput, business: Business | null, trusted: boolean) {
+  const line = buildLine(l);
+  if (trusted) return line;
+  return { ...line, price: catalogPrice(business, l.name) ?? l.price };
+}
+
 export const orderService = {
-  async create(input: NewOrderInput): Promise<Order> {
+  /**
+   * Place an order. `actorId` is the authenticated caller — when they are NOT a
+   * member of the business, line prices are re-derived from the catalogue
+   * rather than trusted from the request (see buildTrustedLine).
+   */
+  async create(input: NewOrderInput, actorId?: string | null): Promise<Order> {
     const business = await findBusiness(input.businessId);
+    const trusted = await isBusinessMember(input.businessId, actorId ?? null);
     const tableNumber =
       input.fulfillment === 'dine_in'
         ? assignTable(
@@ -94,7 +143,7 @@ export const orderService = {
       businessId: input.businessId,
       customerId: input.customerId,
       customerName: input.customerName,
-      lines: input.lines.map(buildLine),
+      lines: input.lines.map((l) => buildTrustedLine(l, business, trusted)),
       fulfillment: input.fulfillment,
       tableNumber,
       party: input.party,
@@ -318,14 +367,20 @@ export const orderService = {
     return order;
   },
 
-  async appendLines(id: string, lines: NewOrderLineInput[]): Promise<Order> {
+  /**
+   * Add a round to an open tab. Same price rule as `create`: a customer cannot
+   * append a line at a price of their choosing.
+   */
+  async appendLines(id: string, lines: NewOrderLineInput[], actorId?: string | null): Promise<Order> {
     const order = await mustFind(id);
     if (order.billId) throw new Error('This order was already billed — place a new order instead.');
     if (order.status !== 'requested' && order.status !== 'accepted') {
       throw new Error('This order is not open anymore — place a new order instead.');
     }
     if (lines.length === 0) throw new Error('Pick at least one item to add.');
-    order.lines.push(...lines.map(buildLine));
+    const appendBusiness = await findBusiness(order.businessId);
+    const trusted = await isBusinessMember(order.businessId, actorId ?? null);
+    order.lines.push(...lines.map((l) => buildTrustedLine(l, appendBusiness, trusted)));
     order.status = 'requested';
     order.responseMessage = undefined;
     await saveOrder(order);

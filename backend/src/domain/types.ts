@@ -44,7 +44,17 @@ export interface User {
   avatarUrl?: string;
   bio?: string;
   isProfilePublic: boolean;
-  /** Platform super-admin (see lib/superAdmin) — mirrored onto the profile. */
+  /**
+   * Silenced notification families, as `"<businessId>:<category>"` keys
+   * (`*` = everywhere). Private — lives in `profiles_private`, not the
+   * world-readable directory card.
+   */
+  mutedNotifications?: string[];
+  /**
+   * Platform super-admin. DERIVED per request from `platform_admins`
+   * (see lib/superAdmin) — never stored on the profile, because the profile is
+   * user-writable and this is an authorization decision.
+   */
   isSuperAdmin?: boolean;
 }
 
@@ -118,6 +128,53 @@ export interface Deal {
   price?: string;
   wasPrice?: string;
   emoji?: string;
+}
+
+export type OfferLineKind = 'menu' | 'service' | 'product' | 'rental' | 'custom';
+
+/**
+ * One thing included in an `Offer`, picked from what the business already
+ * lists. `price` is the item's NORMAL price captured at the moment it was
+ * picked, so the offer can show what the bundle would otherwise cost even
+ * after the underlying item is repriced.
+ */
+export interface OfferLine {
+  kind: OfferLineKind;
+  name: string;
+  /** The item's normal price label when picked, e.g. "₹120". */
+  price?: string;
+  /** How many of it the offer includes. Defaults to 1. */
+  quantity?: number;
+}
+
+/**
+ * An OFFER — the business's own promotion: some of what it already sells,
+ * bundled at a special price. Rides inside the Business document, so it needs
+ * no table, no endpoint and no migration; the plain `PATCH /businesses/:id`
+ * persists it.
+ *
+ * Deliberately a superset of `Deal` (tag/title/price/wasPrice/emoji), so
+ * promoting an offer onto the Home "Deals near you" carousel later needs no
+ * reshaping of the data.
+ */
+export interface Offer {
+  id: string;
+  title: string;
+  description?: string;
+  /** Shout label on the card, e.g. "COMBO", "40% OFF". */
+  tag?: string;
+  emoji?: string;
+  /** What's included — picked from the business's own offerings. */
+  lines: OfferLine[];
+  /** What the customer pays for the bundle, e.g. "₹99". */
+  price?: string;
+  /** Normal total of `lines`, shown struck through. */
+  wasPrice?: string;
+  /** Off = kept in the workspace but hidden from customers. */
+  active: boolean;
+  /** ISO date the offer stops showing. Undefined = runs until switched off. */
+  endsAt?: string;
+  createdAt: string;
 }
 
 export interface MenuItem {
@@ -311,6 +368,7 @@ export interface Business {
   menu?: MenuItem[];
   partyPackages?: PartyPackage[];
   deals?: Deal[];
+  offers?: Offer[];
   portfolio?: PortfolioItem[];
   services?: ServiceItem[];
   products?: ProductItem[];

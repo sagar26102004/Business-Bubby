@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { BusinessQuery } from '@/domain/contracts';
 import { route } from '@/http/handler';
 import { optionalAuth, requireAuth, userId, optionalUserId } from '@/http/context';
-import { requireBusinessMember, requireSuperAdmin } from '@/authz';
+import { requireBusinessManager, requireBusinessMember, requireSuperAdmin } from '@/authz';
 import { businessService } from '@/services/businesses';
 
 export const businessesRouter = Router();
@@ -46,8 +46,26 @@ businessesRouter.post('/:id/reassign-owner', requireAuth, route(async (req) => {
   return businessService.reassignOwner(req.params.id, req.body.newOwnerId);
 }));
 
+/**
+ * Keys that decide who can answer calls, read chats, and what the workspace
+ * can do. Staff may edit the listing, but rewiring the TEAM is manager+ work —
+ * otherwise a staff member could quietly make themselves the only call handler.
+ * (`ownerId` needs no entry here: the service refuses to patch it at all.)
+ */
+const MANAGER_ONLY_KEYS = [
+  'employeeIds',
+  'callHandlerIds',
+  'chatRecipientIds',
+  'scanHandlerIds',
+  'modules',
+] as const;
+
 businessesRouter.patch('/:id', requireAuth, route(async (req) => {
   await requireBusinessMember(req.params.id, optionalUserId(req));
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  if (MANAGER_ONLY_KEYS.some((k) => k in body)) {
+    await requireBusinessManager(req.params.id, optionalUserId(req));
+  }
   return businessService.update(req.params.id, req.body);
 }));
 

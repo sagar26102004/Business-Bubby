@@ -29,10 +29,27 @@ export const employeeService = {
     return rowsData<Business>(await prisma.business.findMany({ where: { id: { in: ids } } }));
   },
 
-  async update(id: string, patch: Partial<Employee>): Promise<Employee> {
+  /**
+   * Update a team member's row.
+   *
+   * ⚠️ RANK AND IDENTITY ARE OWNER-ONLY. `level` lives inside the employee
+   * document and this route is member-level, so without this guard any staff
+   * member could `PATCH {"level":"manager"}` on their OWN row and promote
+   * themselves — and with `userId` writable they could point a row at a
+   * different account. `privileged` is true only for the business owner or a
+   * platform super-admin; everyone else keeps the stored values.
+   */
+  async update(id: string, patch: Partial<Employee>, privileged = false): Promise<Employee> {
     const existing = await this.getById(id);
     if (!existing) throw notFound(`Employee ${id} not found`);
-    const next = { ...existing, ...patch, id, businessId: existing.businessId };
+    const safePatch = { ...patch };
+    if (!privileged) {
+      delete safePatch.level;
+      delete safePatch.userId;
+    }
+    // businessId can never move, for anyone — a row belongs to one business.
+    delete (safePatch as { businessId?: string }).businessId;
+    const next = { ...existing, ...safePatch, id, businessId: existing.businessId };
     await prisma.employee.update({
       where: { id },
       data: { userId: uuidOrNull(next.userId), data: toJson(next) },

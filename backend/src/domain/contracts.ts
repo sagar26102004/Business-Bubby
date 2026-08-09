@@ -232,8 +232,19 @@ export interface NewBizMessageInput {
 
 export interface NewMembershipInput {
   businessId: string;
+  /**
+   * The paying account. A user id when the payer has a Localo account; a
+   * `walkin:<lowercased name>` key (the same key CustomerRepository uses) when
+   * they don't — the business still tracks and bills them by name, the plan
+   * just reaches no Subscriptions tab.
+   *
+   * ⚠️ Never validate this as a uuid. `uuidOrNull()` at the Prisma write turns
+   * a non-uuid key into a NULL scoping column, which is exactly the intent.
+   */
   customerId: string;
   customerName: string;
+  /** Who actually uses the plan, when it isn't the payer (e.g. their child). */
+  enrolleeName?: string;
   planName: string;
   pricePerMonth: number;
 }

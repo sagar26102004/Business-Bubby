@@ -7,8 +7,12 @@ import { newUuid } from '@/lib/ids';
 import { asData, rowsData, toJson, uuidOrNull } from '@/lib/data';
 import { forbidden, HttpError, notFound } from '@/http/errors';
 import { notify } from './notify';
+import { pushService } from './push';
 
 const RING_TIMEOUT_MS = 30_000;
+
+/** Default window of the workspace call log: the last 7 days. */
+const CALL_LOG_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 async function saveCall(call: Call): Promise<void> {
   await prisma.call.update({
@@ -33,7 +37,19 @@ async function notifyMissedCall(call: Call): Promise<void> {
   );
 }
 
-/** Expire one call if it rang out. Persists + notifies. Returns the call. */
+/**
+ * Expire one call if it rang out. Persists + notifies. Returns the call.
+ *
+ * ⚠️ Both sides of this comparison must come from THIS machine. `startedAt` is
+ * stamped by `start()` on the server, so `Date.now()` is a valid yardstick.
+ *
+ * Path A learned this the hard way: there the caller's DEVICE stamped
+ * `startedAt` and every business member's poll judged it against THEIR clock, so
+ * a phone running ~39s fast expired brand-new calls on its first poll — the
+ * caller saw "No answer" within two seconds and that phone never rang at all.
+ * If a client-supplied timestamp ever reaches this function, switch it to the
+ * row's server `createdAt` instead of comparing clocks that don't agree.
+ */
 async function sweepCall(call: Call): Promise<Call> {
   if (call.status === 'ringing' && Date.now() - new Date(call.startedAt).getTime() > RING_TIMEOUT_MS) {
     call.status = 'missed';
@@ -42,6 +58,59 @@ async function sweepCall(call: Call): Promise<Call> {
     await notifyMissedCall(call);
   }
   return call;
+}
+
+const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+/** Must match CALL_CHANNEL_ID in src/features/notifications/push.ts. */
+const CALL_CHANNEL_ID = 'calls_v2';
+/** Must match CALL_CATEGORY_ID — puts Accept/Decline on the notification. */
+const CALL_CATEGORY_ID = 'incoming_call';
+
+/**
+ * Wake the phones of everyone this call is ringing.
+ *
+ * In-app polling only finds a call while the app is OPEN, so without this a
+ * business that closed Localo never learns anyone rang. The push is only the
+ * doorbell — the call itself is unchanged.
+ *
+ * DATA-ONLY on purpose: a payload carrying title/body makes Android render its
+ * own plain banner, which can't be restyled. Sending data only means the app's
+ * background task wakes and posts the real system call popup instead.
+ *
+ * Best-effort by contract — never throws into `start()`. A push that fails
+ * (nobody registered, Expo down, no network) must not stop a call being placed;
+ * anyone with the app open still rings from the poll.
+ */
+async function ringDevices(call: Call): Promise<void> {
+  try {
+    const targets = call.participants
+      .filter((p) => p.side === 'business' && p.state === 'ringing')
+      .map((p) => p.id);
+    const tokens = await pushService.tokensFor(targets);
+    if (tokens.length === 0) return;
+    const messages = tokens.map((to) => ({
+      to,
+      priority: 'high',
+      channelId: CALL_CHANNEL_ID,
+      categoryId: CALL_CATEGORY_ID,
+      // A ring is worthless once answered elsewhere or timed out.
+      ttl: RING_TIMEOUT_MS / 1000,
+      data: {
+        callId: call.id,
+        kind: 'incoming_call',
+        callerName: call.customerName,
+        businessName: call.businessName,
+      },
+      _contentAvailable: true,
+    }));
+    await fetch(EXPO_PUSH_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(messages),
+    });
+  } catch {
+    /* the call still stands — see the contract above */
+  }
 }
 
 /** Expire every ringing call past the timeout (used on reads that scan calls). */
@@ -125,6 +194,9 @@ export const callService = {
         data: toJson(call),
       },
     });
+    // Wake any handler whose app is closed. Deliberately not awaited: a slow or
+    // failing push must not hold up (or fail) placing the call.
+    void ringDevices(call);
     return call;
   },
 
@@ -221,6 +293,27 @@ export const callService = {
       canSubscribe: true,
     });
     return { token: await at.toJwt(), url: config.livekitUrl };
+  },
+
+  /**
+   * The workspace call log: every call this business received in the window,
+   * newest first. Answered, missed and declined alike.
+   *
+   * Sweeps ring-timeouts first so a call that rang out reads as "missed" here
+   * rather than as a permanently ringing ghost — the same rule every other read
+   * path applies.
+   */
+  async listForBusiness(businessId: string, sinceIso?: string): Promise<Call[]> {
+    await sweepRinging();
+    const since = sinceIso ?? new Date(Date.now() - CALL_LOG_WINDOW_MS).toISOString();
+    const rows = await prisma.call.findMany({
+      where: { businessId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows
+      .map((row) => asData<Call>(row))
+      .filter((c) => c.startedAt >= since)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
   },
 
   async getIncomingForUser(userId: string): Promise<Call | null> {

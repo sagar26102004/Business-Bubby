@@ -249,3 +249,44 @@ model CatalogEntry {
   @@index([kind])
   @@map("catalog_entries")
 }
+
+// profiles_private — the private half of a profile (migration 0007): phone,
+// email and mutedNotifications. `profiles` is a PUBLIC directory card
+// (`profiles_read` is `using (true)`), and RLS is row-level so it cannot hide a
+// field — hence the split table rather than a column.
+//
+// ⚠️ Prisma connects with the privileged URL and BYPASSES RLS, so the API must
+// enforce the split itself: never return this half for anyone but the account
+// itself or a super-admin (see services/users.ts).
+model ProfilePrivate {
+  id        String   @id @db.Uuid
+  data      Json
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("profiles_private")
+}
+
+// platform_admins — the super-admin grant (migration 0006). Deliberately its
+// own table with NO write policy: the previous design read the flag out of the
+// user-writable profile document, so anyone could promote themselves.
+model PlatformAdmin {
+  userId    String   @id @map("user_id") @db.Uuid
+  note      String?
+  grantedAt DateTime @default(now()) @map("granted_at")
+
+  @@map("platform_admins")
+}
+
+// push_tokens — one row per DEVICE (migration 0011), so a closed app can still
+// be told a call is ringing. `token` is the primary key, so re-registering a
+// handset reassigns it to the current account instead of duplicating.
+model PushToken {
+  token     String   @id
+  userId    String   @map("user_id") @db.Uuid
+  platform  String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@index([userId])
+  @@map("push_tokens")
+}

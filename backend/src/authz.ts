@@ -44,6 +44,31 @@ export async function requireBusinessMember(businessId: string, uid: string | nu
   }
 }
 
+/** Does this user own the business? Non-throwing counterpart of requireOwner. */
+export async function isBusinessOwner(businessId: string, uid: string | null): Promise<boolean> {
+  if (!uid) return false;
+  return (await prisma.business.count({ where: { id: businessId, ownerId: uid } })) > 0;
+}
+
+/**
+ * Owner, or an employee whose row says `level === 'manager'`. Rank lives inside
+ * the employee `data` document, so it can only be read out of the JSON.
+ */
+export async function isBusinessManager(businessId: string, uid: string | null): Promise<boolean> {
+  if (!uid) return false;
+  const owns = await prisma.business.count({ where: { id: businessId, ownerId: uid } });
+  if (owns > 0) return true;
+  const rows = await prisma.employee.findMany({ where: { businessId, userId: uid } });
+  return rows.some((r) => (r.data as { level?: string }).level === 'manager');
+}
+
+/** Throw 403 unless the user is a manager or the owner (or a super-admin). */
+export async function requireBusinessManager(businessId: string, uid: string | null): Promise<void> {
+  if (await isBusinessManager(businessId, uid)) return;
+  if (await isSuperAdmin(uid)) return;
+  throw forbidden('Only a manager or the owner can do this.');
+}
+
 /** Throw 403 unless the user is the business owner. */
 export async function requireOwner(businessId: string, uid: string | null): Promise<void> {
   if (!uid) throw forbidden();

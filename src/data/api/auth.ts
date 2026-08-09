@@ -19,14 +19,29 @@ import {
 } from '@/data/supabase/shared';
 import { http, seg } from './client';
 
-/** Read a profile via the API, falling back when the row isn't ready yet. */
+/**
+ * Read a profile via the API, falling back when the row isn't ready yet, and
+ * stamp the DERIVED super-admin flag — the Path B twin of Path A's
+ * `withAdminFlag`.
+ *
+ * `isSuperAdmin` is deliberately NOT stored on the profile any more: the
+ * profile is user-writable, so a stored flag was self-granting. The server
+ * answers it per session from `platform_admins` instead. Every
+ * session-establishing call funnels through here, so this is the one place it
+ * needs doing.
+ *
+ * Best-effort: an older API without the route just leaves the flag unset, i.e.
+ * NOT an admin — failing closed is the only safe direction for a privilege.
+ */
 async function fetchProfileViaApi(id: string, name?: string): Promise<User> {
-  try {
-    const user = await http.get<User | null>(`/users/${seg(id)}`);
-    return user ?? fallbackUser(id, name);
-  } catch {
-    return fallbackUser(id, name);
-  }
+  const [user, isSuperAdmin] = await Promise.all([
+    http.get<User | null>(`/users/${seg(id)}`).catch(() => null),
+    http
+      .get<{ isSuperAdmin?: boolean }>('/users/me/is-super-admin')
+      .then((r) => r.isSuperAdmin === true)
+      .catch(() => false),
+  ]);
+  return { ...(user ?? fallbackUser(id, name)), isSuperAdmin };
 }
 
 export function createApiAuth(): AuthRepository {
@@ -89,8 +104,13 @@ export function createApiAuth(): AuthRepository {
       assertDevTool('Switching identity');
       const profile = await http.get<User | null>(`/users/${seg(userId)}`);
       if (!profile?.phone) {
+        // `phone` lives in `profiles_private` and the API hands it over only to
+        // the account itself or a platform super-admin — so for an ordinary
+        // account this is the EXPECTED answer, not a broken read. Say that,
+        // rather than implying the account has no phone number.
         throw new Error(
-          "Can't switch to this account — it has no phone on file to sign in with.",
+          "Can't switch to this account — its phone number isn't visible to you. " +
+            'Identity switching needs a platform super-admin account.',
         );
       }
       const { data, error } = await sb.auth.signInWithPassword({
