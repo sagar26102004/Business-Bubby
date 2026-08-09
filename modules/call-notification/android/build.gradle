@@ -17,15 +17,45 @@ android {
   }
 }
 
+/**
+ * How to depend on expo-notifications from a LOCAL Expo module.
+ *
+ * ⚠️ THIS BROKE AN EAS BUILD ONCE — `Project with path ':expo-notifications'
+ * could not be found`. Locally, `npx expo prebuild` autolinks every Expo module
+ * as a Gradle subproject, so `project(':expo-notifications')` resolves. On EAS
+ * it does not: autolinking publishes the modules as Maven artifacts into
+ * android/local-maven-repo instead (SettingsManager only calls linkProject when
+ * a module is NOT set to `usePublication`), so the subproject simply isn't
+ * there and the build fails at configuration time.
+ *
+ * So: ask which world we're in. The Maven coordinate's version is always the
+ * npm package version, which is read from the package itself rather than
+ * pinned — a pinned one silently goes stale on the next `expo install`.
+ */
+def expoNotificationsDependency = {
+  def linked = findProject(':expo-notifications')
+  if (linked != null) return linked
+  def manifest = file("${rootDir}/../node_modules/expo-notifications/package.json")
+  def version = manifest.exists()
+    ? new groovy.json.JsonSlurper().parseText(manifest.text).version
+    : '57.0.9'
+  return "host.exp.exponent:expo.modules.notifications:${version}"
+}()
+
 dependencies {
   // NotificationCompat.CallStyle landed in androidx.core 1.9.0. React Native
   // already pulls a newer core in, and Gradle resolves to the HIGHEST version
   // in the graph, so naming a floor here can only guarantee the API exists —
   // it can never downgrade what RN picked.
-  //
-  // Deliberately the ONLY dependency. This module used to pull in
-  // expo-notifications and firebase-messaging so it could subclass Expo's
-  // messaging service; that service is gone (see the manifest), and with it the
-  // Maven-versus-Gradle-project problem that broke an EAS build.
   implementation "androidx.core:core-ktx:1.13.1"
+
+  // compileOnly, not implementation, for BOTH of these. CallMessagingService
+  // subclasses ExpoFirebaseMessagingService, so the classes must be on the
+  // compile classpath — but the app already ships both at runtime (it depends
+  // on expo-notifications directly), and pulling them in properly here would
+  // mean this module gets a vote on which Firebase version wins. It shouldn't:
+  // google-services aligns those, and a module that only borrows a base class
+  // has no business moving them.
+  compileOnly expoNotificationsDependency
+  compileOnly "com.google.firebase:firebase-messaging:25.0.1"
 }

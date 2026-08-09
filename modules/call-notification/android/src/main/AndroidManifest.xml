@@ -1,39 +1,56 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
   <!--
-    Lets the incoming-call notification take over a LOCKED screen instead of
-    sitting silently behind the lock. On Android 14+ this is granted at install
-    only to apps whose core function is calling or alarms; Localo qualifies
-    (in-app voice calls), but it must be declared to Google Play. Without the
-    grant nothing breaks — the popup falls back to a heads-up notification that
-    still carries Answer and Decline.
+    Lets an incoming call take over a LOCKED screen instead of sitting silently
+    behind the lock. On Android 14+ this is granted at install only to apps
+    whose core function is calling or alarms; Localo qualifies (in-app voice
+    calls), but it must be declared to Google Play, and until then the user
+    grants it by hand. Without it we fall back to the overlay route, and failing
+    that to an ordinary ringing notification with Answer and Decline.
   -->
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <!-- The vibration that comes with a ring. -->
+  <uses-permission android:name="android.permission.VIBRATE" />
 
   <application>
     <!--
-      ⚠️ THERE IS DELIBERATELY NO FirebaseMessagingService HERE.
+      Receives the incoming-call push.
 
-      One lived here: it outranked expo-notifications' own service and drew the
-      CallStyle popup in Kotlin the moment a push landed, so a closed app got a
-      real call screen. It never worked on a closed app, and because it consumed
-      the message, expo-notifications never got to draw its own — so the phone
-      rang with nothing to press, or went silent.
-
-      Three builds settled it. The two that ring correctly (4fff0b9 with no
-      service at all, 76655bf where the service bailed on almost everything and
-      handed the message back) both end up with expo-notifications drawing the
-      notification. The one that stayed silent, e3d4675, is the one where the
-      service never handed anything back. Whatever is wrong is inside that
-      service, and until a logcat from a phone running it says what, the
-      message belongs to Expo: the push carries a title and the incoming_call
-      category, so Android renders it with Answer and Decline, on the lock
-      screen, without any native code from us.
-
-      CallNotifications is still here and still posts the popup — the call
-      alerts check rings the phone through it — so re-enabling this is a
-      manifest entry away once we can see why it went quiet.
+      Priority beats the -1 that expo-notifications registers its own service
+      with — deliberately low on their side, precisely so an app can take over.
+      We do take over, and then hand the message straight back by calling super
+      first thing; see the long comment in CallMessagingService for why that
+      order is the entire point and must not be "tidied up".
     -->
+    <service
+      android:name="expo.modules.callnotification.CallMessagingService"
+      android:exported="false">
+      <intent-filter android:priority="100">
+        <action android:name="com.google.firebase.MESSAGING_EVENT" />
+      </intent-filter>
+    </service>
+
+    <!--
+      The full-screen call screen.
+
+      showWhenLocked/turnScreenOn are the manifest half of what the activity
+      also asks for in code: the system needs to know BEFORE launching it that
+      this may appear over the lock screen, or it queues it behind the keyguard
+      instead.
+
+      Its own empty taskAffinity keeps it out of the app's task, so answering
+      opens the real app cleanly rather than stacking on top of a call screen;
+      excludeFromRecents stops a call that rang out from being left in Recents.
+    -->
+    <activity
+      android:name="expo.modules.callnotification.IncomingCallActivity"
+      android:exported="false"
+      android:launchMode="singleTop"
+      android:taskAffinity=""
+      android:excludeFromRecents="true"
+      android:showWhenLocked="true"
+      android:turnScreenOn="true"
+      android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
 
     <!--
       Handles the Decline pill without opening the app. Not exported: only our

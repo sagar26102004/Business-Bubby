@@ -18,8 +18,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert, Platform } from 'react-native';
 import { router } from 'expo-router';
 import {
+  canDrawOverlays,
   canUseFullScreenIntent,
   openFullScreenIntentSettings,
+  openOverlaySettings,
   setAnswerUriTemplate,
 } from '../../../modules/call-notification';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -32,28 +34,34 @@ configureNotificationHandler();
 const CALL_POPUP_PROMPT_KEY = 'localo.callPopupPrompted';
 
 /**
- * Offer to enable the full-screen call popup — ONCE per install.
+ * Offer to enable the full-screen call screen — ONCE per install.
  *
- * Android 14 ships USE_FULL_SCREEN_INTENT switched off for apps Play doesn't
- * classify as calling apps, and gives no runtime dialog for it, so the app can
- * only point at the setting. Asked here because this is the moment we know the
- * person can actually receive calls (signed in, registering a device).
+ * There are two unrelated system switches that each allow it, so this only asks
+ * when BOTH are off. Android 14 ships USE_FULL_SCREEN_INTENT off for apps Play
+ * doesn't classify as calling apps, and gives no runtime dialog for either one,
+ * so all an app can do is point at the setting. Asked here because this is the
+ * moment we know the person can actually receive calls (signed in, registering
+ * a device).
  *
- * Anyone who says no can still turn it on later from Notifications settings —
- * see CallPopupPermission — and calls keep ringing regardless.
+ * Anyone who says no can still turn it on later — see CallAlertsCheck, which
+ * offers both switches — and calls keep ringing regardless.
  */
 async function offerCallPopupOnce(): Promise<void> {
-  if ((await canUseFullScreenIntent()) !== false) return;
+  const [fullScreen, overlay] = await Promise.all([canUseFullScreenIntent(), canDrawOverlays()]);
+  if (fullScreen !== false || overlay === true) return;
   if (await AsyncStorage.getItem(CALL_POPUP_PROMPT_KEY)) return;
   // Written before the alert, not after: a dismissed prompt must not come back
   // on the next launch just because nothing was tapped.
   await AsyncStorage.setItem(CALL_POPUP_PROMPT_KEY, '1');
   Alert.alert(
     'Show calls full screen?',
-    "Android needs your permission before an incoming call can take over the screen like a phone call. Without it calls still ring with Answer and Decline — they just look like an ordinary notification.",
+    "Android needs your permission before an incoming call can take over the screen like a phone call. Either switch below is enough. Without one, calls still ring with Answer and Decline — they just look like an ordinary notification.",
     [
       { text: 'Not now', style: 'cancel' },
-      { text: 'Open settings', onPress: () => void openFullScreenIntentSettings() },
+      // Both offered because they are separate switches on separate screens and
+      // which one a given phone will actually grant is impossible to predict.
+      { text: 'Over other apps', onPress: () => void openOverlaySettings() },
+      { text: 'Full screen', onPress: () => void openFullScreenIntentSettings() },
     ],
   );
 }

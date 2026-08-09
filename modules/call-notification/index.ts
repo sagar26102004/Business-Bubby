@@ -1,13 +1,19 @@
 /**
- * Native incoming-call notification (Android only).
+ * Native incoming calls (Android only).
  *
- * Renders the SYSTEM call popup — round avatar, "Incoming call", and coloured
- * Decline / Answer pills — which stays up for the whole ring and takes over a
- * locked screen. `expo-notifications` can't produce that: it has no CallStyle
- * and no full-screen intent, so a JS-only notification is always a plain banner
- * with text buttons that collapses after a few seconds.
+ * Two things live behind this wrapper. The one that matters is the WhatsApp
+ * style CALL SCREEN — a full-screen activity that wakes the display, draws over
+ * the lock screen and offers Answer and Decline — which Android will only let
+ * an app show if one of two unrelated permissions has been granted. The other
+ * is the SYSTEM call notification (CallStyle: round avatar, coloured pills),
+ * used for ringing on demand and as a fallback.
  *
- * Everything except the rendering stays in TypeScript, so this wrapper is
+ * `expo-notifications` can produce neither: no CallStyle, no full-screen
+ * intent, no activity. What it CAN do is post the ordinary ringing notification
+ * with Accept/Decline buttons, and that is the floor everything here sits on
+ * top of — see CallMessagingService.
+ *
+ * Everything except the drawing stays in TypeScript, so this wrapper is
  * deliberately thin — and no-ops anywhere the native module isn't present (web,
  * Expo Go, or a build made before the module existed), because a missing
  * notification must never take the app down with it.
@@ -22,10 +28,22 @@ interface CallNotificationNative {
     channelId: string,
     answerUri: string,
     timeoutMs: number,
-  ): Promise<void>;
+  ): Promise<boolean>;
+  showCallScreen(
+    callId: string,
+    callerName: string,
+    businessName: string,
+    timeoutMs: number,
+  ): Promise<string>;
   dismiss(callId: string): Promise<void>;
+  getRingLog(): Promise<string[]>;
+  clearRingLog(): Promise<void>;
   canUseFullScreenIntent(): Promise<boolean>;
   openFullScreenIntentSettings(): Promise<void>;
+  canDrawOverlays(): Promise<boolean>;
+  openOverlaySettings(): Promise<void>;
+  isIgnoringBatteryOptimizations(): Promise<boolean>;
+  openBatterySettings(): Promise<void>;
   setAnswerUriTemplate(template: string): Promise<void>;
   /** What to substitute the call id for inside that template. */
   callIdPlaceholder: string;
@@ -47,15 +65,15 @@ function native(): CallNotificationNative | null {
   }
 }
 
-/** True when this build can actually draw the system call popup. */
+/** True when this build has the native call screen and popup in it at all. */
 export function isCallNotificationAvailable(): boolean {
   return native() !== null;
 }
 
 /**
- * Show the incoming-call popup. `answerUri` is a deep link into the app (built
- * with expo-linking, so the scheme is defined in one place); `timeoutMs` should
- * be the call's ring window so Android clears a call nobody answered.
+ * Show the incoming-call notification. `answerUri` is a deep link into the app
+ * (built with expo-linking, so the scheme is defined in one place); `timeoutMs`
+ * should be the call's ring window so Android clears a call nobody answered.
  *
  * Returns whether anything was actually posted, so the caller can fall back to
  * a plain expo-notifications alert. Getting this wrong is expensive: a silent
@@ -72,7 +90,7 @@ export async function showIncomingCall(input: {
   const mod = native();
   if (!mod) return false;
   try {
-    await mod.showIncomingCall(
+    return await mod.showIncomingCall(
       input.callId,
       input.callerName,
       input.businessName,
@@ -80,7 +98,6 @@ export async function showIncomingCall(input: {
       input.answerUri,
       input.timeoutMs,
     );
-    return true;
   } catch {
     // Never let a notification failure surface as a broken call — but do say so,
     // so the caller can still ring some other way.
@@ -89,10 +106,71 @@ export async function showIncomingCall(input: {
 }
 
 /**
+ * Put the full-screen call screen up, exactly as an incoming push would.
+ *
+ * Resolves to the same sentence the native side writes into the ring log —
+ * which route worked, or why neither did. Meant to be shown to the user
+ * verbatim in the call-alerts check: this is the one thing they can test
+ * without a second phone and a real call.
+ */
+export async function showCallScreen(input: {
+  callId: string;
+  callerName: string;
+  businessName: string;
+  timeoutMs: number;
+}): Promise<string | null> {
+  const mod = native();
+  if (!mod) return null;
+  try {
+    return await mod.showCallScreen(
+      input.callId,
+      input.callerName,
+      input.businessName,
+      input.timeoutMs,
+    );
+  } catch (err) {
+    return err instanceof Error ? err.message : null;
+  }
+}
+
+/**
+ * What happened to the last few call pushes.
+ *
+ * ⚠️ THIS IS THE ONLY WINDOW INTO THE THING THAT ACTUALLY BREAKS. A call
+ * arriving at a closed app runs entirely in Kotlin, with no JS, no console and
+ * — when it goes wrong — no notification either, so every failure looks
+ * identical from the outside: the phone stays quiet. The native side writes
+ * each decision to disk as it happens; this reads it back afterwards.
+ *
+ * Newest first. Empty on any platform without the module, and empty ALSO means
+ * something: if a call was placed and nothing is here, the push never reached
+ * the device, which is a completely different problem from failing to draw it.
+ */
+export async function getRingLog(): Promise<string[]> {
+  const mod = native();
+  if (!mod) return [];
+  try {
+    return await mod.getRingLog();
+  } catch {
+    return [];
+  }
+}
+
+export async function clearRingLog(): Promise<void> {
+  const mod = native();
+  if (!mod) return;
+  try {
+    await mod.clearRingLog();
+  } catch {
+    /* nothing written yet */
+  }
+}
+
+/**
  * Teach the native side how to deep-link into a call.
  *
- * ⚠️ REQUIRED for the popup to work while the app is closed. The push arrives
- * at a Kotlin service with no JavaScript running, so the Answer button's
+ * ⚠️ REQUIRED for answering a call that arrived while the app was closed. The
+ * push lands in Kotlin with no JavaScript running, so the Answer button's
  * destination cannot be built at that moment — the app's URL scheme lives in
  * app.json and is known only to expo-linking. `build(placeholder)` is called
  * with the token to put where the call id goes; the result is stored once and
@@ -108,18 +186,18 @@ export async function setAnswerUriTemplate(
   try {
     await mod.setAnswerUriTemplate(build(mod.callIdPlaceholder));
   } catch {
-    /* the popup falls back to Expo's plain notification */
+    /* answering falls back to opening the app's home screen */
   }
 }
 
 /**
- * Whether Android will let this app post the real call popup.
+ * Whether Android will let this app post a full-screen intent — one of the two
+ * routes to a call screen.
  *
  * Android 14 turned USE_FULL_SCREEN_INTENT into a per-app switch that is only
  * ON by default for apps Play classifies as calling apps — so for most installs
- * this is FALSE until the user flips it themselves, and the popup falls back to
- * a banner with Answer/Decline buttons. `null` means the question doesn't apply
- * here (web, Expo Go, or a build without the module).
+ * this is FALSE until the user flips it themselves. `null` means the question
+ * doesn't apply here (web, Expo Go, or a build without the module).
  */
 export async function canUseFullScreenIntent(): Promise<boolean | null> {
   const mod = native();
@@ -134,7 +212,7 @@ export async function canUseFullScreenIntent(): Promise<boolean | null> {
 /**
  * Open the system screen holding that switch. There is no runtime dialog for
  * this permission — Android made it a manual toggle on purpose, so taking the
- * user to it is the most any app can do.
+ * user to it is the most any app can do. Same for the two below.
  */
 export async function openFullScreenIntentSettings(): Promise<void> {
   const mod = native();
@@ -146,7 +224,63 @@ export async function openFullScreenIntentSettings(): Promise<void> {
   }
 }
 
-/** Clear the popup — answered, declined, cancelled or rang out. */
+/**
+ * "Display over other apps" — the OTHER route to a call screen, and the better
+ * one: with it the app can launch the call screen directly, so nothing extra is
+ * posted to the notification shade. Granted by a completely separate switch
+ * from the full-screen one, which is exactly why both are worth having.
+ */
+export async function canDrawOverlays(): Promise<boolean | null> {
+  const mod = native();
+  if (!mod) return null;
+  try {
+    return await mod.canDrawOverlays();
+  } catch {
+    return null;
+  }
+}
+
+export async function openOverlaySettings(): Promise<void> {
+  const mod = native();
+  if (!mod) return;
+  try {
+    await mod.openOverlaySettings();
+  } catch {
+    /* no such screen on this ROM */
+  }
+}
+
+/**
+ * Whether the phone will still wake Localo for a push.
+ *
+ * The most under-diagnosed cause of "it never rang": with battery optimisation
+ * on — the default — some ROMs delay or drop pushes to an app that hasn't been
+ * opened recently, and on the aggressive ones (Xiaomi, Oppo, Vivo, Realme)
+ * swiping the app out of Recents counts as a force-stop, after which NOTHING is
+ * delivered until it is opened by hand. No code in the app can detect that
+ * happening; all it can do is ask to be exempted.
+ */
+export async function isIgnoringBatteryOptimizations(): Promise<boolean | null> {
+  const mod = native();
+  if (!mod) return null;
+  try {
+    return await mod.isIgnoringBatteryOptimizations();
+  } catch {
+    return null;
+  }
+}
+
+export async function openBatterySettings(): Promise<void> {
+  const mod = native();
+  if (!mod) return;
+  try {
+    await mod.openBatterySettings();
+  } catch {
+    /* no such screen on this ROM */
+  }
+}
+
+/** Clear the call — answered, declined, cancelled or rang out. */
 export async function dismissIncomingCall(callId: string): Promise<void> {
   const mod = native();
   if (!mod) return;
