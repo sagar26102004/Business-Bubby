@@ -71,6 +71,40 @@ class CallMessagingService : ExpoFirebaseMessagingService() {
     }
 
     CallLog.add(this, "call ${call.id} from ${call.callerName}")
+
+    // UPGRADE 1 — replace the transient alert with a notification that STAYS.
+    //
+    // What expo-notifications drew above is an ordinary heads-up: it appears
+    // for a few seconds and then drops into the shade, which for a ringing call
+    // reads as the popup vanishing before you can answer it. This posts the
+    // same CallStyle notification the in-app "Ring this phone now" check uses —
+    // round caller avatar, coloured Answer/Decline pills, `ongoing` so it can't
+    // be swiped or time out on its own.
+    //
+    // The duplicate is only cleared once ours is confirmed posted. `show`
+    // returns false when it could not draw anything at all (notifications
+    // revoked, CallStyle refused AND the plain fallback refused), and in that
+    // case expo's alert is left exactly where it is — a transient notification
+    // is worth having when the alternative is silence, which is precisely the
+    // trap this service's ordering comment exists to avoid.
+    val answerUri = CallNotifications.answerUriFor(this, call.id)
+    val posted = CallNotifications.show(
+      this,
+      call.id,
+      call.callerName,
+      call.businessName,
+      CallNotifications.RING_CHANNEL_ID,
+      answerUri,
+      RING_WINDOW_MS
+    )
+    if (posted) {
+      CallNotifications.cancelOtherRingNotifications(this, call.id)
+      CallLog.add(this, "posted the CallStyle notification")
+    } else {
+      CallLog.add(this, "could not draw CallStyle — keeping the plain alert")
+    }
+
+    // UPGRADE 2 — the full-screen call screen, on top of that.
     val outcome = CallNotifications.showCallScreen(
       this,
       call.id,

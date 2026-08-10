@@ -619,6 +619,40 @@ object CallNotifications {
     )
   }
 
+  /**
+   * Clear OTHER notifications on the ring channel — in practice, the plain one
+   * expo-notifications drew from the same push.
+   *
+   * Ours is a CallStyle notification that stays until the call is dealt with;
+   * theirs is an ordinary alert that heads-up for a few seconds and then falls
+   * into the shade. Both from one push means the good one is buried under a
+   * duplicate, and the visible behaviour is the transient one — which reads as
+   * "the popup vanished".
+   *
+   * ⚠️ ONLY CALL THIS ONCE OURS IS ACTUALLY POSTED. It is the exact mistake the
+   * service's ordering comment warns about: remove the proven notification
+   * before the better one exists and a failure leaves the phone silent. The id
+   * is excluded rather than the channel cleared for the same reason — clearing
+   * the channel would take ours down with it.
+   */
+  fun cancelOtherRingNotifications(context: Context, callId: String) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    val keep = notificationId(callId)
+    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+      ?: return
+    try {
+      for (posted in manager.activeNotifications) {
+        if (posted.notification.channelId == RING_CHANNEL_ID && posted.id != keep) {
+          manager.cancel(posted.tag, posted.id)
+        }
+      }
+    } catch (t: Throwable) {
+      // A duplicate in the shade is untidy; crashing the push handler is not
+      // survivable. Leave it.
+      Log.w(TAG, "could not clear the duplicate ring notification", t)
+    }
+  }
+
   fun dismiss(context: Context, callId: String) {
     cancelAllForCall(context, callId)
   }
