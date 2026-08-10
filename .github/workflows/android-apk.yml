@@ -137,8 +137,44 @@ jobs:
         # by prebuild on a different platform.
         run: chmod +x android/gradlew
 
+      - name: Give Gradle enough memory
+        # ⚠️ WITHOUT THIS THE BUILD DIES IN KSP.
+        #
+        #   > Task :expo-updates:kspReleaseKotlin FAILED
+        #   e: [ksp] java.lang.OutOfMemoryError: Metaspace
+        #
+        # Expo's generated gradle.properties asks for -Xmx2048m and a 512 MiB
+        # metaspace, which is sized for an ordinary app. This one runs KSP over
+        # expo-updates on top of two dozen native modules, and 512 MiB of
+        # metaspace is not enough to hold the loaded classes. Gradle says so
+        # plainly a few tasks earlier ("The Daemon will expire after the build
+        # after running out of JVM Metaspace") and then fails anyway.
+        #
+        # Appended rather than edited: android/gradle.properties is regenerated
+        # by prebuild on every run, so there is no committed file to change, and
+        # java.util.Properties takes the LAST definition of a duplicated key —
+        # which is what makes appending a valid override rather than a conflict.
+        #
+        # The runner has 16 GB, so this is generous on purpose; being stingy here
+        # costs a whole failed run to discover.
+        run: |
+          {
+            echo ""
+            echo "# Appended by .github/workflows/android-apk.yml"
+            echo "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g -Dfile.encoding=UTF-8"
+            echo "org.gradle.daemon.performance.disable-logging=true"
+          } >> android/gradle.properties
+          echo "--- effective JVM settings ---"
+          grep -E 'org\.gradle\.jvmargs' android/gradle.properties
+
       - name: Build the APK
         working-directory: android
+        env:
+          # Silences "The NODE_ENV environment variable is required but was not
+          # specified" from generateReactNativeEntryPoint, and is correct for a
+          # release bundle. Set on THIS STEP ONLY — job-wide it would reach
+          # `npm install`, which then skips devDependencies and breaks the build.
+          NODE_ENV: production
         # -PreactNativeArchitectures overrides the four ABIs prebuild writes into
         # gradle.properties. The native compile and packaging happen once PER
         # ABI, so dropping to arm64-v8a alone is close to a 4x saving on the
