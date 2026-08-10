@@ -1,0 +1,147 @@
+# Build an installable Android APK, without EAS.
+#
+# WHY THIS EXISTS
+# EAS Build's free tier allows a handful of Android builds a month, and this app
+# needs a NATIVE build for any change under `modules/call-notification` (the
+# incoming-call notification and call screen are Kotlin, so `eas update` cannot
+# carry them — and with `runtimeVersion.policy = fingerprint` an OTA update
+# aimed at a changed native fingerprint is not even delivered to the old app).
+# Running out of build quota therefore blocks call work entirely.
+#
+# GitHub's ubuntu runners ship the Android SDK and JDK preinstalled, so the
+# whole thing is a checkout, a prebuild and a Gradle task. No EAS account, no
+# quota, no credentials.
+#
+# HOW TO RUN IT
+# GitHub → Actions → "Android APK" → Run workflow. About 20 minutes the first
+# time; roughly half that afterwards, once the Gradle cache is warm. The APK
+# lands in the run's Artifacts section as `localo-apk`.
+#
+# ⚠️ THE FIRST INSTALL NEEDS AN UNINSTALL FIRST
+# This signs with the debug keystore from Expo's template, which is NOT the
+# keystore EAS used for the app already on the phone. Android refuses to install
+# over an app signed by a different key, and the error it gives ("App not
+# installed") says nothing about signatures. So uninstall Localo once before
+# installing the first APK from here. Builds after that share this keystore and
+# upgrade over each other normally.
+#
+# Uninstalling clears app data, so the phone mints a NEW push token and you have
+# to sign in again. That is fine — the `push_tokens` trigger from migration 0013
+# handles the handover — but expect to tap "Register this phone now" once.
+
+name: Android APK
+
+on:
+  # Manual only, deliberately. Building on every push would burn the free
+  # minutes allowance on commits that never touch native code, and most changes
+  # here are JavaScript.
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: 'Which build to produce'
+        default: release
+        type: choice
+        options:
+          - release
+          - debug
+
+# One build at a time; a newer request supersedes an older one rather than
+# queueing behind it.
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # A cold Gradle cache plus a React Native build is slow; the default 360
+    # minutes is far too generous for something that should never exceed ~30.
+    timeout-minutes: 60
+
+    env:
+      # These are inlined into the JS bundle by Metro at BUILD time, so they must
+      # be set here rather than supplied later — a bundle built without them
+      # falls back to the in-memory mock and the app silently talks to nothing.
+      #
+      # Not secrets, and not worth hiding: the same two values are already
+      # committed in plaintext in eas.json, the key is the *publishable* one, and
+      # every row it can reach is guarded by RLS. Anything genuinely secret
+      # (service-role key, LiveKit secret) lives only in Supabase edge-function
+      # secrets and never reaches a client build.
+      EXPO_PUBLIC_BACKEND: supabase
+      EXPO_PUBLIC_SUPABASE_URL: https://mzxslzouzmiswnrolcaq.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_x0-0776uRm-OP89yFWzWfA_4qZn7IFF
+      # EXPO_PUBLIC_DEV_TOOLS and EXPO_PUBLIC_SEED_PASSWORD are deliberately
+      # ABSENT. A release build is `__DEV__ === false`, which folds the dev-tools
+      # branch out entirely, and the seed password must never be compiled into a
+      # shareable APK — every test account's login is derived from its phone
+      # number, so a shared password in the bundle is a shared account.
+      GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          # Keyed off package-lock.json, which is committed.
+          cache: npm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # 17, not newer. The Gradle and AGP versions Expo SDK 57 generates do
+          # not accept 21+, and the failure is an opaque Gradle stacktrace
+          # rather than anything naming the JDK.
+          java-version: '17'
+
+      - name: Set up Gradle
+        # Caches ~/.gradle across runs, which is most of the second-run speedup.
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        # --legacy-peer-deps is REQUIRED for this repo: a peer conflict makes a
+        # plain install fail outright. Same flag the README and CLAUDE.md give.
+        run: npm install --legacy-peer-deps
+
+      - name: Generate the native Android project
+        # `android/` is gitignored, so it is generated here from app.json and the
+        # config plugins (LiveKit, WebRTC, notifications, camera, location…).
+        # --no-install because dependencies are already installed above, and
+        # letting prebuild redo it would drop the --legacy-peer-deps flag.
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Make the Gradle wrapper executable
+        # The checkout does not preserve the executable bit for a file generated
+        # by prebuild on a different platform.
+        run: chmod +x android/gradlew
+
+      - name: Build the APK
+        working-directory: android
+        run: ./gradlew assemble${{ inputs.variant == 'debug' && 'Debug' || 'Release' }} --no-daemon --stacktrace
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: localo-apk
+          path: android/app/build/outputs/apk/${{ inputs.variant }}/*.apk
+          if-no-files-found: error
+          # Long enough to install at leisure, short enough not to hoard
+          # hundred-megabyte artifacts in the account's storage quota.
+          retention-days: 14
+
+      - name: Keep the build log on failure
+        # Gradle's own reports say far more than the console tail, and they are
+        # gone the moment the runner is recycled.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-reports
+          path: |
+            android/app/build/reports/
+            android/build/reports/
+          if-no-files-found: ignore
+          retention-days: 7
