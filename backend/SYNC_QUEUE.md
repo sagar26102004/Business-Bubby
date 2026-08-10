@@ -32,34 +32,45 @@ re-derivation from the Supabase diff is required:
 
 ---
 
-## [SYNC-019] Call push must carry title/body again (buttons on a closed app)
+## [SYNC-019] Ring push must be strictly data-only — drop `channelId` too
+
+> ⚠️ REPLACES an earlier [SYNC-019] that told Path B to ADD `title` / `body` / `sound`.
+> That instruction was wrong and would reintroduce the bug below. Do NOT restore it.
 
 - **Area:** CallRepository / calls — the push that rings a closed app
-- **Supabase change:** `supabase/functions/call-ring/index.ts` — the Expo push message
-  went back to carrying `title` / `body` / `sound` alongside the existing `data`,
-  `categoryId: 'incoming_call'`, `channelId: 'calls_v2'`, `ttl: 30`, `priority: 'high'`,
-  `_contentAvailable: true`. It was briefly data-only so that Android would draw nothing and
-  leave the field to the app's native CallStyle popup; when that popup didn't appear on a
-  closed app there was nothing to fall back to, and the phone rang showing an empty
-  notification with no way to answer. With a title present, Android renders its own
-  notification and `categoryId` puts Accept/Decline on it. The native service
-  (`modules/call-notification`) consumes the message before expo-notifications sees it
-  whenever it runs, so there is no double notification.
+- **Supabase change:** `supabase/functions/call-ring/index.ts` now sends a strictly data-only
+  Expo push: `to`, `priority: 'high'`, `categoryId: 'incoming_call'`, `ttl: 30`, `data`,
+  `_contentAvailable: true` — and NOTHING else. `title`, `body`, `sound` and `channelId` were
+  all removed.
+- **Why (measured on a real phone 2026-08-10, realme RMX3241 / Android 13):** Expo's push
+  service emits an FCM `android.notification` block if handed ANY field that belongs in one —
+  including `channelId` on its own, because that is where `android_channel_id` has to live.
+  That block sets `gcm.n.e=1`, and `FirebaseMessagingService.handleIntent()` renders such a
+  message ITSELF and returns *before* `onMessageReceived` whenever the app is backgrounded. The
+  native `CallMessagingService` was correctly selected (`priority="100"` beats
+  expo-notifications' `-1`; confirmed via `adb shell cmd package query-services -a
+  com.google.firebase.MESSAGING_EVENT`) and then simply never invoked — so the CallStyle popup,
+  the full-screen call screen and even the ring log never ran. Removing `title`/`body` alone is
+  NOT enough: `channelId` still triggers it, and the result is a genuinely BLANK notification
+  drawn by FCM on calls_v2 (`dumpsys notification` → `tag=FCM-Notification:*`,
+  `android.title=null`). That blank render is what made the earlier data-only attempt look like
+  a failure and get reverted.
+- **Cost of dropping `channelId`:** none for the real path — the popup is posted natively on
+  `CallNotifications.RING_CHANNEL_ID` (`'calls_v2'`), and that channel owns the ringtone and
+  vibration. Only expo-notifications' last-resort render loses the channel and lands on the
+  default one; `categoryId` still gives it Accept/Decline.
 - **Domain/interface:** none.
-- **Path B — backend/:** `backend/src/services/calls.ts` → `ringDevices()`. Add to each
-  message object, keeping everything else as-is:
-  ```ts
-  title: `📞 ${call.customerName}`,
-  body: `Incoming call for ${call.businessName}`,
-  sound: 'default',
-  ```
-  Replace the "DATA-ONLY on purpose" paragraph in the `ringDevices` doc comment — it now
-  states the opposite of what the code does. Say instead that the title/body are the fallback
-  Android renders when the app's own notification service doesn't handle the message, and that
-  `categoryId` is what gives that fallback its buttons.
+- **Path B — backend/:** `backend/src/services/calls.ts` → `ringDevices()`. It is already
+  data-only for title/body, but **still sends `channelId: CALL_CHANNEL_ID`** — remove that
+  line and the now-unused `CALL_CHANNEL_ID` const. Keep `priority`, `categoryId`, `ttl`,
+  `data`. Extend the "DATA-ONLY on purpose" doc comment to say that `channelId` counts as a
+  notification field for this purpose, since that is the non-obvious half.
 - **Path B — src/data/api/:** none.
 - **DB/migration:** none.
-- **Verify:** `cd backend && npm run typecheck && npm run build`.
+- **Verify:** `cd backend && npm run typecheck && npm run build`. Behavioural check needs a
+  real device: `adb logcat -s LocaloCall` during a call must show `call <id> from <name>` →
+  `posted the CallStyle notification`, and `FirebaseMessaging: Showing notification` must NOT
+  appear.
 
 ## [SYNC-020] Ring push must report Expo's tickets, not assume success
 

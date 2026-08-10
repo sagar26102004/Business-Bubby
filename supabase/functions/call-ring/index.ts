@@ -26,16 +26,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 /**
- * Must match CALL_CHANNEL_ID in src/features/notifications/push.ts. Versioned
- * because Android freezes a channel's sound at creation — bumping the id there
- * without bumping it here sends every ring to a channel that no longer exists.
- */
-const CALL_CHANNEL_ID = 'calls_v2';
-/**
- * Must match CALL_CATEGORY_ID — this is what puts Accept/Decline on the
- * notification Android renders by itself, i.e. the fallback for every case
- * where the app's own service doesn't draw the call popup. The category is
- * registered on the device at sign-in (src/features/notifications/push.ts).
+ * Must match CALL_CATEGORY_ID — the Accept/Decline pair expo-notifications adds
+ * when IT draws the notification, which now happens only as a last resort (see
+ * the note on the message body below: the push is data-only so the popup is
+ * drawn natively instead). Kept because that last resort is the difference
+ * between a ring you can answer and one you cannot. The category is registered
+ * on the device at sign-in (src/features/notifications/push.ts).
  */
 const CALL_CATEGORY_ID = 'incoming_call';
 
@@ -157,24 +153,62 @@ Deno.serve(async (req: Request) => {
 
     const messages = tokens.map((to) => ({
       to,
-      // ⚠️ THE SAFETY NET. These two lines are what Android falls back to
-      // rendering if the app's own notification service doesn't handle the
-      // message — and combined with `categoryId` below, that fallback still
-      // carries Accept and Decline.
+      // ⚠️ THERE IS DELIBERATELY NO `title` OR `body` HERE. DO NOT ADD THEM
+      // BACK — they are what stopped the call popup working, and they look
+      // exactly like the fix.
       //
-      // It was data-only for exactly one build, so that Android would draw
-      // nothing and leave the field to the native CallStyle popup. When that
-      // popup didn't appear on a closed app, data-only meant there was nothing
-      // to fall back to: the phone rang showing an empty notification with no
-      // way to answer. A plainer notification that works beats a beautiful one
-      // that might not — and this is the one that has been seen ringing a
-      // locked phone, with Answer and Decline on it, on real devices.
-      title: `📞 ${call.customerName}`,
-      body: `Incoming call for ${call.businessName}`,
-      sound: 'default',
+      // Sending them makes Expo's push service emit an FCM `notification`
+      // payload. FirebaseMessagingService.handleIntent() checks for that block
+      // BEFORE dispatching, and when it is present and the app is in the
+      // background, FCM renders the notification ITSELF and returns without
+      // ever calling onMessageReceived. Our CallMessagingService is chosen and
+      // then never invoked, so nothing it does — the CallStyle popup, the full
+      // screen call, even the ring log — happens at all.
+      //
+      // Confirmed on a real device (realme RMX3241, Android 13) by logcat:
+      //
+      //   D FirebaseMessaging: Restricting intent to a specific service:
+      //                        expo.modules.callnotification.CallMessagingService
+      //   D FirebaseMessaging: Logging to scion event=_nr Bundle[{_nmc=display}]
+      //   D FirebaseMessaging: Showing notification
+      //
+      // — the service is picked, then bypassed. onMessageReceived fires ONLY
+      // for data-only messages while the app is backgrounded.
+      //
+      // This WAS data-only once before and was reverted because the phone rang
+      // showing an empty notification. That was a real symptom of a different
+      // cause: back then CallMessagingService had no CallStyle post in it (that
+      // arrived later), so once expo-notifications had drawn its blank render
+      // there was nothing to replace it. The popup is now drawn natively from
+      // this same data, so the field is deliberately left clear for it.
+      //
+      // `sound` and `channelId` are gone for the SAME reason, and the second one
+      // is the subtle one that cost an extra deploy to find.
+      //
+      // Dropping title/body alone is NOT enough. FCM decides a message is a
+      // notification from the key `gcm.n.e=1`, which Expo's push service sets
+      // whenever it emits an `android.notification` block at all — and passing
+      // `channelId` alone is enough to make it emit one, because that is where
+      // `android_channel_id` has to live. The result is a message with no text
+      // that FCM still renders itself: a genuinely BLANK notification, posted on
+      // calls_v2, with onMessageReceived still never called. Verified with
+      // `dumpsys notification`:
+      //
+      //   tag=FCM-Notification:643792802  Notification(channel=calls_v2 ...)
+      //   extras={ android.title=null  android.text=null }
+      //
+      // That blank render is the same thing seen the last time this was made
+      // data-only, and it is why the change was wrongly judged a failure then.
+      //
+      // Losing the channel here costs nothing: the popup is posted natively on
+      // CallNotifications.RING_CHANNEL_ID ('calls_v2'), and that channel owns
+      // the ringtone and the vibration pattern, so the ring is unaffected. Only
+      // expo-notifications' last-resort render loses it, and lands on the
+      // default channel instead — a quieter fallback, still answerable via the
+      // category below, and one we can now SEE happening in the ring log.
+      //
       // `high` is what lets Android deliver to an app that isn't running.
       priority: 'high',
-      channelId: CALL_CHANNEL_ID,
       categoryId: CALL_CATEGORY_ID,
       // A ring is worthless once it's been answered elsewhere or timed out;
       // the app's own ring window is 30s.
