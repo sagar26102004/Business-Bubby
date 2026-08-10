@@ -159,7 +159,9 @@ export interface AppNotification {
     | 'enroll_requested'
     | 'enroll_update'
     | 'payment_reported'
-    | 'payment_update';
+    | 'payment_update'
+    /** An ad campaign was approved, rejected or stopped. */
+    | 'ad_update';
   /** Heading, e.g. "Maria from Sparks Electrical". */
   title: string;
   /** Preview text, e.g. the message body. */
@@ -210,9 +212,13 @@ export interface PortfolioItem {
 }
 
 /**
- * A limited-time offer a business promotes — a fresh combo, an opening
- * discount, a weekday special. Deals surface on the Browse screen's
- * "Deals near you" carousel and tap through to the business page.
+ * LEGACY — a limited-time offer, from before businesses could author their own.
+ *
+ * Nothing in the app creates a Deal: there is no editor for it and no real
+ * backend writes one, so it survives only in the mock seed. `Offer` (below) is
+ * the real thing a business builds in Workspace › Offers, and the Home ad slot
+ * now runs on offers and `AdCampaign`s. Deals are still rendered there so the
+ * seeded demo data keeps looking right; don't build anything new on them.
  */
 export interface Deal {
   id: string;
@@ -253,9 +259,10 @@ export interface OfferLine {
  * builds one in Workspace › Offers by picking from its menu/services/products/
  * rentals, and it shows on the business page directly under the description.
  *
- * Deliberately a superset of `Deal` (tag/title/price/wasPrice/emoji): promoting
- * an offer onto the Home "Deals near you" carousel — the paid ad placement —
- * is then just a matter of surfacing it, with no reshaping of the data.
+ * Deliberately a superset of `Deal` (tag/title/price/wasPrice/emoji), so an
+ * offer needs no reshaping to appear on the Home ad slot. Every live offer from
+ * a nearby business shows there for free; paying for an `AdCampaign` is what
+ * lifts one to the front of the queue and widens how far it reaches.
  */
 export interface Offer {
   id: string;
@@ -266,6 +273,13 @@ export interface Offer {
   tag?: string;
   /** Emoji on the card; falls back to the listing type's icon. */
   emoji?: string;
+  /**
+   * Photo behind the ad card. Optional — without one the card falls back to the
+   * emoji on a colored gradient, which is what every offer looked like before.
+   * Picked with PhotosField, so today it's a local uri that dies with the
+   * session (see CLAUDE.md — no upload storage yet).
+   */
+  imageUrl?: string;
   /** What's included — picked from the business's own offerings. */
   lines: OfferLine[];
   /** What the customer pays for the bundle, e.g. "₹99". */
@@ -277,6 +291,72 @@ export interface Offer {
   /** ISO date the offer stops showing. Undefined = runs until switched off. */
   endsAt?: string;
   createdAt: string;
+}
+
+/**
+ * Where a campaign is in its life.
+ *
+ *   pending  — requested and waiting on a platform admin. Not showing.
+ *   active   — approved and paid for; showing until `endsAt` passes.
+ *   rejected — an admin turned it down; `reviewNote` says why.
+ *   stopped  — pulled early, by the business or by an admin.
+ *
+ * There is deliberately no 'expired' status: a run ending is a fact about the
+ * clock, not a decision anyone made, so it's derived from `endsAt` (see
+ * `isCampaignRunning` in domain/ads.ts) rather than written by a sweep job that
+ * would need something to be awake to run it.
+ */
+export type AdCampaignStatus = 'pending' | 'active' | 'rejected' | 'stopped';
+
+/**
+ * An AD CAMPAIGN — a business paying to put one of its offers in front of the
+ * neighborhood. This is the platform's revenue line.
+ *
+ * It carries no creative of its own: it points at an `Offer` the business
+ * already built, and the ad card is rendered from that offer live. So editing
+ * the offer updates the running ad, and there's no second copy to drift.
+ *
+ * What money buys is REACH and PRIORITY. Every live offer already shows on the
+ * Home ad slot to people close by; a campaign widens the radius to the plan's
+ * `radiusKm` and sorts the offer ahead of the unpaid ones, marked "Sponsored".
+ *
+ * Nothing here charges a card — the app has no payment gateway (CLAUDE.md). A
+ * request lands as `pending`, a platform admin approves it once payment is
+ * settled off-app, and `paid` records that by hand, the same way bills and
+ * memberships already work.
+ */
+export interface AdCampaign {
+  id: string;
+  businessId: string;
+  /** Copied at request time so the admin queue reads without joining. */
+  businessName: string;
+  /** The `Offer.id` being promoted — the creative lives there. */
+  offerId: string;
+  /** Which `AD_PLANS` entry was bought (domain/ads.ts). */
+  planId: string;
+  /** How far the ad reaches, in km. Frozen from the plan at request time. */
+  radiusKm: number;
+  /** How long the run lasts once approved. Frozen from the plan. */
+  days: number;
+  /** Rupees owed for the run. Frozen from the plan, so a later price change
+   *  never rewrites what a business was quoted. */
+  amount: number;
+  status: AdCampaignStatus;
+  /** Set by hand once money has actually arrived, off-app. */
+  paid: boolean;
+  requestedAt: string;
+  requestedById: string;
+  requestedByName: string;
+  /** Set on approval — the clock starts when the admin says yes, not when the
+   *  business asked, so a slow review never eats into the run. */
+  startsAt?: string;
+  endsAt?: string;
+  reviewedAt?: string;
+  /** Why it was rejected, or a note on an approval. Shown to the business. */
+  reviewNote?: string;
+  /** Times the card has been shown, and tapped. What the business bought. */
+  impressions: number;
+  taps: number;
 }
 
 /** A single line on a shop's menu (cafe/restaurant/bakery, etc.). */

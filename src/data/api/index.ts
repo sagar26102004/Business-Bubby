@@ -53,5 +53,11 @@ export function createApiRepositories(): Repositories {
     productThreads: createApiProductThreads(),
     logbook: createApiLogbook(),
     push: createApiPush(),
+    // ⚠️ NOT YET SERVED BY THE API. Ads landed on the Supabase side first (the
+    // standing Supabase-first rule in CLAUDE.md); the Express twin is queued as
+    // [SYNC-001] in backend/SYNC_QUEUE.md. Until it lands, Path B keeps the ad
+    // slot working against in-memory campaigns rather than 404ing the Home
+    // screen — so ads are per-session here, and won't match Path A.
+    ads: mock.ads,
   };
 }

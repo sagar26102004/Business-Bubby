@@ -172,5 +172,62 @@ re-derivation from the Supabase diff is required:
   button that prints the server's own error. Path B's `POST /push/tokens` should likewise
   answer with a real error status rather than a silent 200 when it cannot resolve the user.
 
+## [SYNC-023] AdRepository — the paid ad slot on Home
+
+- **Area:** NEW `AdRepository` / ad campaigns. Path B currently delegates `ads` to the MOCK
+  (`src/data/api/index.ts` → `ads: mock.ads`), so ads are per-session and don't match Path A.
+  This entry replaces that delegation with real API calls.
+- **Supabase change:** new `src/data/supabase/ads.ts`, registered in `src/data/supabase/index.ts`.
+  Implements every method of `AdRepository`.
+- **Domain/interface (SHARED — already done, do not redo):**
+  - `src/domain/types.ts` — `AdCampaign`, `AdCampaignStatus`, `Offer.imageUrl`, and a new
+    `'ad_update'` member of `AppNotification['kind']`.
+  - `src/domain/ads.ts` — `AD_PLANS` rate card, `FREE_REACH_KM`, `getAdPlan`,
+    `isCampaignRunning`, `isCampaignFinished`, `campaignDaysLeft`, `campaignStatusLabel`,
+    `campaignTapRate`.
+  - `src/domain/offers.ts` — `isOfferLive`/`liveOffers` MOVED here out of
+    `features/businesses/offerUtils.ts` (which now re-exports them) so the data layer can use
+    them without importing from `features/`.
+  - `src/domain/notifications.ts` — new `'ads'` mute family; `ad_update` maps to it.
+  - `src/data/repositories.ts` — `AdRepository`, `AdPlacement`, `NewAdCampaignInput`,
+    `ads: AdRepository` on the `Repositories` bundle.
+  - `src/data/adPlacements.ts` — `buildPlacements(running, businesses, near, now)`, the SHARED
+    reach/ordering rule (sponsored first within the bought radius, then any live offer within
+    `FREE_REACH_KM`, nearest-first inside each band). Path B's client should call
+    `listPlacements` on the server, but the server must produce the SAME order; port this file's
+    logic into `backend/src/services/ads.ts` rather than inventing a second rule.
+- **Path B — backend/:** new `backend/src/services/ads.ts` + router `backend/src/routers/ads.ts`
+  over the `ad_campaigns` table (Prisma: `{ id, businessId, status, data, createdAt }` — run
+  `prisma db pull` after the migration below). Port the Supabase file method-for-method:
+  - `GET /ads/placements?lat=&lng=` → `AdPlacement[]`. Load campaigns with `status='active'`,
+    keep those passing `isCampaignRunning` (use the SERVER clock), load the businesses they
+    reference plus (when lat/lng given) all businesses, then `buildPlacements`.
+  - `GET /ads/business/:businessId` → members only. `GET /ads` → super-admin only, all campaigns.
+  - `POST /ads` → `request`. Authz: caller must be a business member. Validates the plan exists,
+    the offer exists and `isOfferLive`, and that the same offer has no `pending`-or-running
+    campaign. **Always writes `status: 'pending'`** and freezes `radiusKm`/`days`/`amount` from
+    the plan — the client never supplies them.
+  - `POST /ads/:id/approve` (super-admin) — sets `status='active'`, `startsAt = now`,
+    `endsAt = now + days`, `reviewedAt`, optional `reviewNote`; notifies the business owner with
+    kind `ad_update`. The clock starts at APPROVAL, not at request.
+  - `POST /ads/:id/reject` (super-admin) — `status='rejected'` + note + `ad_update` notify.
+  - `POST /ads/:id/stop` — business member OR super-admin; `status='stopped'`, `endsAt = now`.
+  - `POST /ads/:id/paid` (super-admin) — `{ paid: boolean }`.
+  - `POST /ads/:id/events` `{ kind: 'impression' | 'tap' }` — **unauthenticated/any caller**,
+    increments `data.impressions`/`data.taps` only when the campaign is running, and always
+    answers 204 even on failure (it's fired from a carousel a customer is scrolling past).
+  Document all of it in Swagger.
+- **Path B — src/data/api/:** add `createApiAds()` to `src/data/api/repositories.ts` hitting the
+  routes above, and swap `ads: mock.ads` for it in `src/data/api/index.ts` (delete the ⚠️ comment
+  there). `recordImpression`/`recordTap` must swallow all errors.
+- **DB/migration:** `supabase/migrations/0014_ad_campaigns.sql` — SHARED DB, apply once. Creates
+  `ad_campaigns` + RLS + the `ad_record_event(uuid, text)` SECURITY DEFINER RPC. Path B connects
+  privileged and bypasses RLS, so it re-implements the authz in `backend/src/authz.ts` terms;
+  the RPC is Path A's way of letting a viewer count without update rights and Path B does not
+  need it (its `/events` route plays that role). Do not "tidy" the policies away.
+- **Verify:** `cd backend && npm run typecheck && npm run build`; app `npx tsc --noEmit` and
+  `npx expo export --platform web`. Smoke: promote an offer → it appears in the super-admin
+  queue as pending → approve → it shows on Home with a Sponsored badge.
+
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
 

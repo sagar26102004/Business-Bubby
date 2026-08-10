@@ -20,7 +20,8 @@ export type NotificationCategory =
   | 'billing'
   | 'members'
   | 'reviews'
-  | 'stall';
+  | 'stall'
+  | 'ads';
 
 export interface NotificationCategoryDef {
   id: NotificationCategory;
@@ -80,6 +81,12 @@ export const NOTIFICATION_CATEGORIES: NotificationCategoryDef[] = [
     icon: '🏷️',
     description: 'Questions and price offers on items for sale.',
   },
+  {
+    id: 'ads',
+    label: 'Ads',
+    icon: '📣',
+    description: 'Whether a promoted offer went live, and when a run ends.',
+  },
 ];
 
 /** Which family an alert belongs to. */
@@ -107,6 +114,8 @@ export function categoryOfKind(kind: AppNotification['kind']): NotificationCateg
     case 'enroll_requested':
     case 'enroll_update':
       return 'members';
+    case 'ad_update':
+      return 'ads';
     default:
       return 'chats';
   }

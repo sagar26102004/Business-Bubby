@@ -7,6 +7,7 @@
  * classes that satisfy these interfaces and changing one line in DataProvider.
  */
 import type {
+  AdCampaign,
   AppNotification,
   Bill,
   BillLine,
@@ -28,6 +29,7 @@ import type {
   MembershipPayment,
   MenuItem,
   MonthlySpend,
+  Offer,
   OfferingKind,
   OpeningHours,
   Order,
@@ -908,6 +910,89 @@ export interface CatalogRepository {
   remove(id: string): Promise<void>;
 }
 
+/** What a business asks for when it buys an ad slot. */
+export interface NewAdCampaignInput {
+  businessId: string;
+  /** The `Offer` to promote — it must already exist and be live. */
+  offerId: string;
+  /** An `AD_PLANS` id (domain/ads.ts). Price/days/radius come from it. */
+  planId: string;
+  requestedById: string;
+  requestedByName: string;
+}
+
+/**
+ * One card's worth of ad, resolved for rendering: the offer to draw, the
+ * business behind it, and the campaign that paid for it (absent = this is an
+ * ordinary live offer showing for free within FREE_REACH_KM).
+ *
+ * Resolved in the repository rather than on the screen because deciding what
+ * reaches a given point needs the campaign, the business location and the
+ * offer's live state together — and the Home screen shouldn't be the thing
+ * that knows the reach rules.
+ */
+export interface AdPlacement {
+  business: Business;
+  offer: Offer;
+  campaign?: AdCampaign;
+  /** Straight-line km from the viewer, when a location was given. */
+  distanceKm?: number;
+}
+
+/**
+ * ADS — the platform's revenue line (domain/ads.ts explains the model).
+ *
+ * A business promotes an `Offer` it already built; a platform admin approves
+ * the request once payment is settled off-app; the approved campaign then runs
+ * for its bought window, reaching further than a free offer and sorting ahead
+ * of them in the Home ad slot.
+ */
+export interface AdRepository {
+  /**
+   * What to show in the Home ad slot for someone standing at `near`: running
+   * sponsored campaigns first (widest reach, best-paid first), then ordinary
+   * live offers from businesses close by. Nearest-first within each band.
+   *
+   * With no `near`, distance can't be judged, so only sponsored placements come
+   * back — showing an unpaid corner shop to someone in another city is worse
+   * than showing nothing.
+   */
+  listPlacements(near?: GeoPoint): Promise<AdPlacement[]>;
+
+  /** Every campaign this business has ever run — the workspace's ad history. */
+  listForBusiness(businessId: string): Promise<AdCampaign[]>;
+
+  /** The platform admin's queue: everything, newest first. */
+  listAll(): Promise<AdCampaign[]>;
+
+  /** Buy a slot. Lands as `pending` — nothing shows until an admin approves. */
+  request(input: NewAdCampaignInput): Promise<AdCampaign>;
+
+  /**
+   * Admin approves: the run starts NOW and ends `days` later, so a slow review
+   * never eats into what was paid for. Notifies the business.
+   */
+  approve(id: string, note?: string): Promise<AdCampaign>;
+
+  /** Admin turns it down. `note` is the reason, and the business is told it. */
+  reject(id: string, note?: string): Promise<AdCampaign>;
+
+  /** Pull a running ad early — by the business itself, or by an admin. */
+  stop(id: string): Promise<AdCampaign>;
+
+  /** Record that money arrived (or didn't) — settled off-app, marked by hand. */
+  setPaid(id: string, paid: boolean): Promise<AdCampaign>;
+
+  /**
+   * Count a card being shown / tapped. Best-effort and non-throwing: these are
+   * fired from a scrolling carousel by viewers who have no write access to the
+   * campaign, and a failed counter must never surface as an error on a screen
+   * the customer is just browsing.
+   */
+  recordImpression(id: string): Promise<void>;
+  recordTap(id: string): Promise<void>;
+}
+
 export interface Repositories {
   businesses: BusinessRepository;
   catalog: CatalogRepository;
@@ -929,4 +1014,5 @@ export interface Repositories {
   productThreads: ProductThreadRepository;
   logbook: LogbookRepository;
   push: PushRepository;
+  ads: AdRepository;
 }

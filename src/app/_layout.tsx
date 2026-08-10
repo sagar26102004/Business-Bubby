@@ -200,12 +200,14 @@ export default function RootLayout() {
           <Stack.Screen name="workspace/[businessId]/fleet" options={{ title: 'Fleet & tracking' }} />
           <Stack.Screen name="workspace/[businessId]/team" options={{ title: 'Team' }} />
           <Stack.Screen name="workspace/[businessId]/offers" options={{ title: 'Offers' }} />
+          <Stack.Screen name="promote/[businessId]" options={{ title: 'Promote' }} />
           <Stack.Screen name="member/[membershipId]" options={{ title: 'Member' }} />
           <Stack.Screen name="member-account/[businessId]/[customerId]" options={{ title: 'Member' }} />
           <Stack.Screen name="inbox/[businessId]/index" options={{ title: 'Inbox' }} />
           <Stack.Screen name="inbox/[businessId]/[participantId]" options={{ title: 'Chat' }} />
           <Stack.Screen name="dev" options={{ title: 'Dev tools' }} />
           <Stack.Screen name="admin" options={{ title: 'Admin' }} />
+          <Stack.Screen name="ad-review" options={{ title: 'Ad review' }} />
           <Stack.Screen name="sign-in" options={{ presentation: 'modal', title: 'Sign in' }} />
         </Stack>
         {/* On a reload, send deep routes back to Home (mock/auth reset). */}

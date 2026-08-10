@@ -18,6 +18,7 @@ import { commerceVocab, getVehicleKind } from '@/domain/catalog';
 import { enabledModules } from '@/domain/modules';
 import { canAccessService, isBusinessTeamMember, isManagerOrOwner, type ServiceId } from '@/domain/access';
 import { liveOffers } from '@/features/businesses/offerUtils';
+import { isCampaignRunning } from '@/domain/ads';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { startBackgroundShare, stopBackgroundShare } from '@/lib/backgroundLocation';
@@ -42,7 +43,7 @@ export default function WorkspaceScreen() {
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
-    const [employees, bookings, orders, bills, vehicles, members, memberRequests, customers, sharing] =
+    const [employees, bookings, orders, bills, vehicles, members, memberRequests, customers, sharing, campaigns] =
       await Promise.all([
         repos.employees.listByBusiness(business.id),
         repos.bookings.listForBusiness(business.id),
@@ -55,8 +56,21 @@ export default function WorkspaceScreen() {
         currentUser
           ? repos.tracking.isSharing(business.id, currentUser.id)
           : Promise.resolve(false),
+        repos.ads.listForBusiness(business.id),
       ]);
-    return { business, employees, bookings, orders, bills, vehicles, members, memberRequests, customers, sharing };
+    return {
+      business,
+      employees,
+      bookings,
+      orders,
+      bills,
+      vehicles,
+      members,
+      memberRequests,
+      customers,
+      sharing,
+      campaigns,
+    };
   }, [businessId, currentUser?.id]);
 
   // Local mirror of the driver's live-share toggle so it flips instantly.
@@ -119,6 +133,19 @@ export default function WorkspaceScreen() {
   const base = `/workspace/${business.id}`;
   // How many offers a customer is actually seeing right now.
   const liveOfferCount = liveOffers(business).length;
+
+  // The Promote tile leads with whatever the owner most needs to know: an ad on
+  // air, a request still waiting, or (nothing yet) the pitch itself.
+  const runningAds = data.campaigns.filter((c) => isCampaignRunning(c));
+  const waitingAds = data.campaigns.filter((c) => c.status === 'pending');
+  const adSummary = runningAds.length
+    ? `${runningAds.length} ad${runningAds.length === 1 ? '' : 's'} live · ${runningAds.reduce(
+        (sum, c) => sum + c.impressions,
+        0,
+      )} views`
+    : waitingAds.length
+      ? `${waitingAds.length} waiting for review`
+      : 'Put an offer on the Home screen';
 
   // Vehicles this member drives — for a driver the live-share toggle is the one
   // control they open the workspace for, so it's pulled up top as its own card
@@ -227,6 +254,15 @@ export default function WorkspaceScreen() {
             ? `${liveOfferCount} live on your page`
             : 'Bundle what you sell at a deal price',
           href: `${base}/offers` as Href,
+        },
+        // Ads — the same "Offers" grant, because promoting one is a decision
+        // about an offer. Its own tile so a business can find the ad slot
+        // without first knowing that ads live inside the offers screen.
+        canUse('offers') && {
+          icon: '📣',
+          label: 'Promote',
+          sub: adSummary,
+          href: `/promote/${business.id}` as Href,
         },
         canUse('offerings') && {
           icon: '📝',

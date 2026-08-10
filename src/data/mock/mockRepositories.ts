@@ -7,6 +7,7 @@
  * the swap to a real API friction-free.
  */
 import type {
+  AdCampaign,
   AppNotification,
   Bill,
   BillLine,
@@ -37,11 +38,16 @@ import type {
   Vehicle,
 } from '@/domain/types';
 import { getVehicleKind } from '@/domain/catalog';
+import { getAdPlan, isCampaignRunning } from '@/domain/ads';
+import { isOfferLive } from '@/domain/offers';
+import { buildPlacements } from '@/data/adPlacements';
 import { applyCatalogEntries, catalogKey, isCodeCatalogName } from '@/domain/catalogEntries';
 import { normalizeRole } from '@/domain/roles';
 import { isNotificationMuted } from '@/domain/notifications';
 import { isSuperAdminPhone } from '@/domain/superAdmin';
 import type {
+  AdPlacement,
+  AdRepository,
   AuthRepository,
   BillRepository,
   BizChatRepository,
@@ -52,6 +58,7 @@ import type {
   CallRepository,
   CaptureEntryInput,
   CatalogRepository,
+  NewAdCampaignInput,
   ChatAuthor,
   ChatRepository,
   ChatThreadSummary,
@@ -188,6 +195,11 @@ const withProductIds = (products?: ProductItem[]): ProductItem[] | undefined =>
 // code, domain/dishes.ts + domain/tags.ts), fills as listings are created and a
 // super-admin adds tags. See CatalogRepository.
 const catalogEntries: CatalogEntry[] = [];
+
+// Paid ad slots. Starts empty even with seed content on: a campaign has to be
+// requested and approved to exist, and seeding pre-approved ads would hide the
+// one flow this feature is actually about.
+const adCampaigns: AdCampaign[] = [];
 
 /**
  * Record offerings not already in the code catalog or the store, bumping the
@@ -2851,6 +2863,172 @@ class MockLogbookRepository implements LogbookRepository {
   }
 }
 
+// ── Ads ─────────────────────────────────────────────────────────────────────
+
+/**
+ * The paid ad slot (domain/ads.ts). A business promotes an `Offer` it already
+ * built, an admin approves it, and it runs for the window it bought — reaching
+ * further than a free offer and sorting ahead of them on Home.
+ *
+ * The mock enforces the same rules the RLS policies do on the real backend
+ * (migration 0014): a request always lands as `pending`, so nothing here can
+ * put itself on air. The reach rules themselves are shared code, not a second
+ * copy — see data/adPlacements.ts.
+ */
+class MockAdRepository implements AdRepository {
+  async listPlacements(near?: GeoPoint): Promise<AdPlacement[]> {
+    await delay(70);
+    const now = Date.now();
+    const running = adCampaigns.filter((c) => isCampaignRunning(c, now));
+    return clone(buildPlacements(running, businesses, near, now));
+  }
+
+  async listForBusiness(businessId: string): Promise<AdCampaign[]> {
+    await delay(60);
+    return adCampaigns
+      .filter((c) => c.businessId === businessId)
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))
+      .map(clone);
+  }
+
+  async listAll(): Promise<AdCampaign[]> {
+    await delay(60);
+    return [...adCampaigns]
+      .sort((a, b) => b.requestedAt.localeCompare(a.requestedAt))
+      .map(clone);
+  }
+
+  async request(input: NewAdCampaignInput): Promise<AdCampaign> {
+    await delay(120);
+    const plan = getAdPlan(input.planId);
+    if (!plan) throw new Error('Pick a plan to promote this offer.');
+
+    const business = businesses.find((b) => b.id === input.businessId);
+    if (!business) throw new Error(`Business ${input.businessId} not found`);
+
+    const offer = (business.offers ?? []).find((o) => o.id === input.offerId);
+    if (!offer) throw new Error('That offer no longer exists — pick another one.');
+    if (!isOfferLive(offer)) {
+      throw new Error('That offer is paused or finished. Switch it back on before promoting it.');
+    }
+
+    // One live campaign per offer — paying twice for the same card would just
+    // buy a duplicate of yourself in the carousel.
+    const clash = adCampaigns.find(
+      (c) =>
+        c.businessId === input.businessId &&
+        c.offerId === input.offerId &&
+        (c.status === 'pending' || isCampaignRunning(c)),
+    );
+    if (clash) {
+      throw new Error(
+        clash.status === 'pending'
+          ? 'This offer is already waiting for review.'
+          : 'This offer is already being promoted.',
+      );
+    }
+
+    const campaign: AdCampaign = {
+      id: nextId('ad'),
+      businessId: input.businessId,
+      businessName: business.name,
+      offerId: input.offerId,
+      planId: plan.id,
+      // Frozen from the plan, so a later price change never rewrites what this
+      // business was quoted.
+      radiusKm: plan.radiusKm,
+      days: plan.days,
+      amount: plan.amount,
+      status: 'pending',
+      paid: false,
+      requestedAt: new Date().toISOString(),
+      requestedById: input.requestedById,
+      requestedByName: input.requestedByName,
+      impressions: 0,
+      taps: 0,
+    };
+    adCampaigns.push(campaign);
+    return clone(campaign);
+  }
+
+  async approve(id: string, note?: string): Promise<AdCampaign> {
+    await delay(100);
+    const campaign = this.find(id);
+    // The run starts at approval, not at request, so a slow review never eats
+    // into what was paid for.
+    const startsAt = new Date();
+    campaign.status = 'active';
+    campaign.startsAt = startsAt.toISOString();
+    campaign.endsAt = new Date(startsAt.getTime() + campaign.days * 86_400_000).toISOString();
+    campaign.reviewedAt = startsAt.toISOString();
+    campaign.reviewNote = note?.trim() || undefined;
+
+    const business = businesses.find((b) => b.id === campaign.businessId);
+    if (business) {
+      notify({
+        recipientId: business.ownerId,
+        kind: 'ad_update',
+        title: `📣 Your ad is live · ${campaign.businessName}`,
+        body: `It runs for ${campaign.days} days and reaches ${campaign.radiusKm} km around you.`,
+        businessId: campaign.businessId,
+      });
+    }
+    return clone(campaign);
+  }
+
+  async reject(id: string, note?: string): Promise<AdCampaign> {
+    await delay(100);
+    const campaign = this.find(id);
+    campaign.status = 'rejected';
+    campaign.reviewedAt = new Date().toISOString();
+    campaign.reviewNote = note?.trim() || undefined;
+
+    const business = businesses.find((b) => b.id === campaign.businessId);
+    if (business) {
+      notify({
+        recipientId: business.ownerId,
+        kind: 'ad_update',
+        title: `Ad request not approved · ${campaign.businessName}`,
+        body: campaign.reviewNote ?? 'Your promoted offer was not approved this time.',
+        businessId: campaign.businessId,
+      });
+    }
+    return clone(campaign);
+  }
+
+  async stop(id: string): Promise<AdCampaign> {
+    await delay(90);
+    const campaign = this.find(id);
+    campaign.status = 'stopped';
+    campaign.endsAt = new Date().toISOString();
+    return clone(campaign);
+  }
+
+  async setPaid(id: string, paid: boolean): Promise<AdCampaign> {
+    await delay(80);
+    const campaign = this.find(id);
+    campaign.paid = paid;
+    return clone(campaign);
+  }
+
+  // Counters never throw: they fire from a carousel someone is scrolling past.
+  async recordImpression(id: string): Promise<void> {
+    const campaign = adCampaigns.find((c) => c.id === id);
+    if (campaign && isCampaignRunning(campaign)) campaign.impressions += 1;
+  }
+
+  async recordTap(id: string): Promise<void> {
+    const campaign = adCampaigns.find((c) => c.id === id);
+    if (campaign && isCampaignRunning(campaign)) campaign.taps += 1;
+  }
+
+  private find(id: string): AdCampaign {
+    const campaign = adCampaigns.find((c) => c.id === id);
+    if (!campaign) throw new Error('That ad campaign no longer exists.');
+    return campaign;
+  }
+}
+
 export function createMockRepositories(): Repositories {
   return {
     businesses: new MockBusinessRepository(),
@@ -2873,5 +3051,6 @@ export function createMockRepositories(): Repositories {
     productThreads: new MockProductThreadRepository(),
     logbook: new MockLogbookRepository(),
     push: new MockPushRepository(),
+    ads: new MockAdRepository(),
   };
 }

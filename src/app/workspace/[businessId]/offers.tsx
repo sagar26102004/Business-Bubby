@@ -15,11 +15,12 @@
  */
 import { useMemo, useState } from 'react';
 import { Alert, StyleSheet, Switch, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Offer, OfferLine } from '@/domain/types';
 import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { SuperAdminBanner } from '@/features/businesses/SuperAdminBanner';
+import { PhotosField } from '@/features/media/PhotosField';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
@@ -62,6 +63,7 @@ export default function WorkspaceOffersScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const colors = useColors();
+  const router = useRouter();
   const { currentUser } = useAuth();
 
   const { data, loading, error, reload } = useAsync(async () => {
@@ -81,6 +83,7 @@ export default function WorkspaceOffersScreen() {
   const [description, setDescription] = useState('');
   const [tag, setTag] = useState('');
   const [emoji, setEmoji] = useState('🎉');
+  const [imageUrl, setImageUrl] = useState<string | undefined>();
   const [price, setPrice] = useState('');
   const [lines, setLines] = useState<OfferLine[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
@@ -130,6 +133,7 @@ export default function WorkspaceOffersScreen() {
     setDescription('');
     setTag('');
     setEmoji('🎉');
+    setImageUrl(undefined);
     setPrice('');
     setLines([]);
     setFormError(null);
@@ -146,6 +150,7 @@ export default function WorkspaceOffersScreen() {
     setDescription(offer.description ?? '');
     setTag(offer.tag ?? '');
     setEmoji(offer.emoji ?? '🎉');
+    setImageUrl(offer.imageUrl);
     const amount = parsePrice(offer.price);
     setPrice(amount === undefined ? '' : String(amount));
     setLines(offer.lines);
@@ -206,6 +211,7 @@ export default function WorkspaceOffersScreen() {
       description: description.trim() || undefined,
       tag: tag.trim() || undefined,
       emoji,
+      imageUrl,
       lines,
       price: toPriceLabel(price),
       // Recomputed on every save so the struck-through figure always matches
@@ -386,6 +392,18 @@ export default function WorkspaceOffersScreen() {
             ))}
           </View>
 
+          {/* One photo, used as the background if this offer is ever promoted
+              onto the Home ad slot. Without it the card falls back to the icon
+              above on a colored panel. */}
+          <View style={styles.field}>
+            <PhotosField
+              label="Photo (optional) — the picture on your ad"
+              value={imageUrl ? [imageUrl] : []}
+              onChange={(photos) => setImageUrl(photos[0])}
+              max={1}
+            />
+          </View>
+
           {formError ? (
             <Text variant="caption" tone="danger" style={styles.label}>
               {formError}
@@ -470,6 +488,23 @@ export default function WorkspaceOffersScreen() {
               <Switch value={offer.active} onValueChange={() => toggleActive(offer)} />
             </View>
 
+            {/* Only a LIVE offer can be promoted — a paused one has nothing to
+                show. The ad slot itself is explained on the promote screen. */}
+            {live ? (
+              <View style={styles.cta}>
+                <Button
+                  title="📣 Promote this offer"
+                  variant="secondary"
+                  onPress={() =>
+                    router.push({
+                      pathname: '/promote/[businessId]',
+                      params: { businessId: business.id, offer: offer.id },
+                    })
+                  }
+                />
+              </View>
+            ) : null}
+
             <View style={styles.actions}>
               <View style={styles.action}>
                 <Button title="Edit" variant="secondary" onPress={() => startEdit(offer)} />
@@ -507,6 +542,7 @@ const styles = StyleSheet.create({
   priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   priceField: { width: 110 },
   priceInfo: { flex: 1 },
+  cta: { marginTop: spacing.md },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   action: { flex: 1 },
   listHeading: { marginTop: spacing.lg, marginBottom: spacing.sm },

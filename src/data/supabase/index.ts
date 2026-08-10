@@ -33,6 +33,7 @@ import { createSupabaseBizChat } from './bizChat';
 import { createSupabaseProductThreads } from './productThreads';
 import { createSupabaseLogbook } from './logbook';
 import { createSupabasePush } from './push';
+import { createSupabaseAds } from './ads';
 
 export function createSupabaseRepositories(): Repositories {
   return {
@@ -56,5 +57,6 @@ export function createSupabaseRepositories(): Repositories {
     productThreads: createSupabaseProductThreads(),
     logbook: createSupabaseLogbook(),
     push: createSupabasePush(),
+    ads: createSupabaseAds(),
   };
 }

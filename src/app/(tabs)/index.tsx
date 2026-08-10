@@ -5,10 +5,15 @@
  *  - A CATEGORY STRIP (For You + every intent from domain/intents.ts) that
  *    filters this same screen inline — no navigation. The active category is
  *    underlined.
- *  - Picking a category swaps the "ad" (deals carousel, filtered to that
- *    category), reveals its SUBCATEGORY TILES (the category's tags as emoji
- *    tiles → tap opens /browse/[intent]?sub=Tag), and filters the nearby
+ *  - Picking a category swaps the AD SLOT (the rotating card carousel, filtered
+ *    to that category), reveals its SUBCATEGORY TILES (the category's tags as
+ *    emoji tiles → tap opens /browse/[intent]?sub=Tag), and filters the nearby
  *    business list below.
+ *
+ * The ad slot is the platform's revenue line (domain/ads.ts): sponsored cards
+ * from businesses that bought a campaign, then any live offer from a shop close
+ * by. What goes in it is decided by AdRepository.listPlacements, not here — see
+ * data/adPlacements.ts.
  *
  * The header used to be a blue gradient block. It's now a plain white sheet
  * closed by a hairline: the content below (photos, deals, cards) supplies the
@@ -35,15 +40,16 @@ import { useResponsive } from '@/lib/useResponsive';
 import { Card, EmptyView, ErrorView, Icon, LoadingView, Text } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
-import { DealsCarousel, type DealCardItem } from '@/features/businesses/DealsCarousel';
+import { AdCarousel, type AdCardItem } from '@/features/ads/AdCarousel';
 import { ModePills } from '@/features/shell/ModePills';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 const placeIcon = (kind: PlaceKind) =>
   kind === 'current' ? '📍' : kind === 'home' ? '🏠' : kind === 'work' ? '💼' : '⭐';
 
-/** Deal-card gradients, keyed by the listing type of the business behind the deal. */
-const DEAL_GRADIENTS: Record<ListingType, [string, string]> = {
+/** Ad-card gradients, keyed by the listing type of the business behind the ad.
+ *  Used when the offer has no photo of its own. */
+const AD_GRADIENTS: Record<ListingType, [string, string]> = {
   service: ['#3B82F6', '#1E40AF'],
   shop: ['#14B8A6', '#0F766E'],
   item: ['#F59E0B', '#B45309'],
@@ -104,26 +110,77 @@ export default function BrowseScreen() {
     return selected ? all.filter((b) => intentMatches(b, selected)) : all;
   }, [data, selected]);
 
-  // The "ad" — live deals from the (filtered) businesses, nearest first.
-  const deals: DealCardItem[] = useMemo(
-    () =>
-      businesses.flatMap((b) =>
-        (b.deals ?? []).map((d) => ({
-          key: d.id,
-          tag: d.tag,
-          title: d.title,
-          description: d.description,
-          price: d.price,
-          wasPrice: d.wasPrice,
-          emoji: d.emoji ?? getType(b.type)?.icon ?? '🏷️',
-          businessName: b.name,
-          distanceLabel: formatDistance(b.distanceKm),
-          colors: DEAL_GRADIENTS[b.type],
-          onPress: () => router.push(`/business/${b.id}`),
-        })),
-      ),
+  // What's in the ad slot: sponsored campaigns first, then live offers from
+  // shops close by. The reach rules live in the repository (data/adPlacements),
+  // so this screen only has to decide the CATEGORY filter and the card look.
+  const { data: placements } = useAsync(
+    () => repos.ads.listPlacements(near),
+    [near?.latitude, near?.longitude],
+  );
+
+  const ads: AdCardItem[] = useMemo(() => {
+    const inCategory = (placements ?? []).filter(
+      (p) => !selected || intentMatches(p.business, selected),
+    );
+
+    const fromOffers: AdCardItem[] = inCategory.map((p) => ({
+      key: `${p.business.id}:${p.offer.id}`,
+      tag: p.offer.tag ?? 'OFFER',
+      title: p.offer.title,
+      description: p.offer.description,
+      price: p.offer.price,
+      wasPrice: p.offer.wasPrice,
+      emoji: p.offer.emoji ?? getType(p.business.type)?.icon ?? '🏷️',
+      imageUrl: p.offer.imageUrl,
+      businessName: p.business.name,
+      distanceLabel: formatDistance(p.distanceKm),
+      colors: AD_GRADIENTS[p.business.type],
+      sponsored: !!p.campaign,
+      onPress: () => {
+        // Fire-and-forget: a failed counter must never delay the navigation the
+        // customer actually asked for.
+        if (p.campaign) void repos.ads.recordTap(p.campaign.id);
+        router.push(`/business/${p.business.id}`);
+      },
+    }));
+
+    // Seeded demo data only — nothing in the app creates a Deal any more (see
+    // domain/types.ts). Kept last so real offers always lead.
+    const fromDeals: AdCardItem[] = businesses.flatMap((b) =>
+      (b.deals ?? []).map((d) => ({
+        key: `deal:${d.id}`,
+        tag: d.tag,
+        title: d.title,
+        description: d.description,
+        price: d.price,
+        wasPrice: d.wasPrice,
+        emoji: d.emoji ?? getType(b.type)?.icon ?? '🏷️',
+        businessName: b.name,
+        distanceLabel: formatDistance(b.distanceKm),
+        colors: AD_GRADIENTS[b.type],
+        onPress: () => router.push(`/business/${b.id}`),
+      })),
+    );
+
+    return [...fromOffers, ...fromDeals];
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [businesses],
+  }, [placements, businesses, selected]);
+
+  /** Campaign id behind an ad card, so a view can be counted against it. */
+  const campaignIdByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of placements ?? []) {
+      if (p.campaign) map.set(`${p.business.id}:${p.offer.id}`, p.campaign.id);
+    }
+    return map;
+  }, [placements]);
+
+  const countImpression = useCallback(
+    (key: string) => {
+      const campaignId = campaignIdByKey.get(key);
+      if (campaignId) void repos.ads.recordImpression(campaignId);
+    },
+    [campaignIdByKey, repos],
   );
 
   // Subcategory tiles for the selected category — its tags found on nearby
@@ -307,15 +364,15 @@ export default function BrowseScreen() {
           </ScrollView>
         ) : null}
 
-        {/* The "ad" — deals near you, scoped to the picked category */}
-        {deals.length > 0 ? (
+        {/* The ad slot — offers near you, scoped to the picked category */}
+        {ads.length > 0 ? (
           <View style={styles.dealsSection}>
             <Text variant="subheading" weight="bold" style={styles.dealsHeading}>
               🔥 {selected ? `${selected.label} deals` : 'Deals near you'}
             </Text>
             {/* Bleeds to the screen edges so neighbouring cards peek in. */}
             <View style={styles.dealsBleed}>
-              <DealsCarousel items={deals} />
+              <AdCarousel items={ads} onImpression={countImpression} />
             </View>
           </View>
         ) : null}
@@ -327,7 +384,19 @@ export default function BrowseScreen() {
         ) : null}
       </View>
     ),
-    [places, activePlace, placesOpen, colors, isGuest, insets.top, router, deals, selectedId, subTiles],
+    [
+      places,
+      activePlace,
+      placesOpen,
+      colors,
+      isGuest,
+      insets.top,
+      router,
+      ads,
+      countImpression,
+      selectedId,
+      subTiles,
+    ],
   );
 
   if (error) return <ErrorView message={error.message} onRetry={reload} />;

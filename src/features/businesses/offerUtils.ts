@@ -45,19 +45,12 @@ export function offerSavingPercent(offer: Offer): number | undefined {
   return savingPercent(offer.wasPrice, offer.price);
 }
 
-/** Switched on and not past its end date. */
-export function isOfferLive(offer: Offer, now: number = Date.now()): boolean {
-  if (!offer.active) return false;
-  if (offer.endsAt && new Date(offer.endsAt).getTime() < now) return false;
-  return true;
-}
-
-/** The offers a customer should see on the business page, newest first. */
-export function liveOffers(business: Pick<Business, 'offers'>): Offer[] {
-  return (business.offers ?? [])
-    .filter((o) => isOfferLive(o))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
+/**
+ * Liveness moved to domain/offers.ts — the ad repositories need it too, and the
+ * data layer must not reach into features. Re-exported here so every screen
+ * keeps importing its offer helpers from one place.
+ */
+export { isOfferLive, liveOffers } from '@/domain/offers';
 
 /** "2 × Cold coffee" / "Cold coffee" — one line of an offer, for display. */
 export function offerLineLabel(line: OfferLine): string {

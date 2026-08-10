@@ -193,6 +193,19 @@ export default function AdminScreen() {
         ) : null}
       </Card>
 
+      {/* Ads — the revenue line. Requests wait here until approved, so this is
+          a queue someone has to actually work; its own screen has the detail. */}
+      <Card style={styles.card}>
+        <Text weight="semibold" style={styles.cardTitle}>
+          Ad review
+        </Text>
+        <Text variant="caption" tone="muted" style={styles.cardSub}>
+          Businesses pay to put an offer on the Home screen. Nothing runs until you approve it,
+          and payment is marked by hand once it arrives.
+        </Text>
+        <Button title="📣 Open ad requests" onPress={() => router.push('/ad-review')} />
+      </Card>
+
       {/* Add a business tag */}
       <Card style={styles.card}>
         <Text weight="semibold" style={styles.cardTitle}>
