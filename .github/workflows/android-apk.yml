@@ -44,6 +44,20 @@ on:
         options:
           - release
           - debug
+      architectures:
+        description: 'CPU architectures to compile (fewer = much faster)'
+        default: arm64-v8a
+        type: choice
+        options:
+          # Every Android phone made in the last several years. One ABI instead
+          # of four is the single biggest thing separating a ~20 minute build
+          # from an hour, because the native work is done once per ABI.
+          - arm64-v8a
+          # Add 32-bit ARM for genuinely old hardware.
+          - armeabi-v7a,arm64-v8a
+          # Everything, including x86 for emulators. Slowest by far; only worth
+          # it for a build you intend to distribute.
+          - armeabi-v7a,arm64-v8a,x86,x86_64
 
 # One build at a time; a newer request supersedes an older one rather than
 # queueing behind it.
@@ -54,9 +68,13 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # A cold Gradle cache plus a React Native build is slow; the default 360
-    # minutes is far too generous for something that should never exceed ~30.
-    timeout-minutes: 60
+    # ⚠️ 90, NOT 60. The first attempt was capped at 60 on the assumption that a
+    # React Native build takes ~20 minutes; the real cold build on a free 4-core
+    # runner — LiveKit, react-native-webrtc and a dozen Expo modules, compiled
+    # once per ABI — was still going at 51 and would have been killed mid-Gradle
+    # with nothing to show for it. The ABI input above is the actual fix; this is
+    # the headroom so a cold cache or a slow runner cannot waste an entire run.
+    timeout-minutes: 90
 
     env:
       # These are inlined into the JS bundle by Metro at BUILD time, so they must
@@ -121,7 +139,14 @@ jobs:
 
       - name: Build the APK
         working-directory: android
-        run: ./gradlew assemble${{ inputs.variant == 'debug' && 'Debug' || 'Release' }} --no-daemon --stacktrace
+        # -PreactNativeArchitectures overrides the four ABIs prebuild writes into
+        # gradle.properties. The native compile and packaging happen once PER
+        # ABI, so dropping to arm64-v8a alone is close to a 4x saving on the
+        # slowest part of the build.
+        run: >-
+          ./gradlew assemble${{ inputs.variant == 'debug' && 'Debug' || 'Release' }}
+          -PreactNativeArchitectures=${{ inputs.architectures || 'arm64-v8a' }}
+          --no-daemon --stacktrace
 
       - name: Upload the APK
         uses: actions/upload-artifact@v4
