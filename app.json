@@ -53,7 +53,8 @@
             "./assets/call_ringtone.wav"
           ]
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

@@ -939,6 +939,16 @@ export interface AdPlacement {
   distanceKm?: number;
 }
 
+/** How the caller wants placements picked. */
+export interface PlacementOptions {
+  /**
+   * A range the VIEWER chose, in km — the /deals feed's distance filter. Given
+   * one, every live offer inside it comes back (no free-reach cut, no
+   * cold-start widening); omitted, the Home slot's own reach rules apply.
+   */
+  radiusKm?: number;
+}
+
 /**
  * ADS — the platform's revenue line (domain/ads.ts explains the model).
  *
@@ -956,8 +966,13 @@ export interface AdRepository {
    * With no `near`, distance can't be judged, so only sponsored placements come
    * back — showing an unpaid corner shop to someone in another city is worse
    * than showing nothing.
+   *
+   * `options.radiusKm` is the /deals feed asking for a range the CUSTOMER set,
+   * which replaces the built-in free-reach and cold-start rules (data/
+   * adPlacements.ts explains why, and why it still never widens a campaign past
+   * the reach it paid for).
    */
-  listPlacements(near?: GeoPoint): Promise<AdPlacement[]>;
+  listPlacements(near?: GeoPoint, options?: PlacementOptions): Promise<AdPlacement[]>;
 
   /** Every campaign this business has ever run — the workspace's ad history. */
   listForBusiness(businessId: string): Promise<AdCampaign[]>;

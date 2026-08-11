@@ -16,6 +16,16 @@
  *      be worth showing. A shop has to see the slot working before it will pay
  *      for it, and an empty carousel proves nothing.
  * Nearest first inside each band.
+ *
+ * VIEWER-CHOSEN RADIUS. The /deals feed lets the customer set their own range,
+ * and that answers a different question — "what's on around me?" rather than
+ * "what belongs in the four cards on Home". Passing `viewerRadiusKm` therefore
+ * replaces the free band with exactly what was asked for and switches the
+ * cold-start top-up off (it exists to fill a fixed slot; a feed has no slot to
+ * fill). What it does NOT do is widen a campaign past the reach it bought:
+ * priority is what the money paid for, and an offer beyond its bought radius
+ * still shows if the viewer asked that far — as an ordinary card, unlabelled,
+ * because it isn't a sponsored placement there.
  */
 import type { AdCampaign, Business, GeoPoint } from '@/domain/types';
 import { COLD_START_REACH_KM, FREE_REACH_KM, MIN_SLOT_CARDS } from '@/domain/ads';
@@ -29,6 +39,8 @@ export function buildPlacements(
   businesses: Business[],
   near: GeoPoint | undefined,
   now: number,
+  /** The range the viewer explicitly asked for (the /deals feed), in km. */
+  viewerRadiusKm?: number,
 ): AdPlacement[] {
   const byId = new Map(businesses.map((b) => [b.id, b]));
   const distanceTo = (b: Business): number | undefined =>
@@ -47,10 +59,16 @@ export function buildPlacements(
     if (!offer || !isOfferLive(offer, now)) continue;
 
     const distanceKm = distanceTo(business);
-    // Reach is what was paid for. An UNKNOWN distance (no viewer location, or a
-    // business that never pinned itself) still shows: the slot was bought, and
-    // silently dropping it is the worse failure of the two.
-    if (distanceKm !== undefined && distanceKm > campaign.radiusKm) continue;
+    // Reach is what was paid for, and never more than the viewer asked to see.
+    // An UNKNOWN distance (no viewer location, or a business that never pinned
+    // itself) still shows on Home: the slot was bought, and silently dropping
+    // it is the worse failure of the two. In the feed, where the whole point is
+    // a chosen range, an unplaceable business can't honestly be included.
+    if (distanceKm === undefined) {
+      if (viewerRadiusKm !== undefined) continue;
+    } else if (distanceKm > Math.min(campaign.radiusKm, viewerRadiusKm ?? Infinity)) {
+      continue;
+    }
 
     promoted.add(`${business.id}:${offer.id}`);
     sponsored.push({ business, offer, campaign, distanceKm });
@@ -62,10 +80,11 @@ export function buildPlacements(
   const candidates: AdPlacement[] = [];
   // Without a viewer location there's no way to judge closeness, and showing an
   // unpaid corner shop to someone in another city is worse than an empty slot.
+  const outerKm = viewerRadiusKm ?? COLD_START_REACH_KM;
   if (near) {
     for (const business of businesses) {
       const distanceKm = distanceTo(business);
-      if (distanceKm === undefined || distanceKm > COLD_START_REACH_KM) continue;
+      if (distanceKm === undefined || distanceKm > outerKm) continue;
       for (const offer of business.offers ?? []) {
         if (!isOfferLive(offer, now)) continue;
         // Never twice: a sponsored offer is already in the list above.
@@ -83,8 +102,10 @@ export function buildPlacements(
   // thin to be worth showing, keep taking the next-nearest until it's full —
   // the cold-start rule in domain/ads.ts. Sponsored cards already count toward
   // "full", so a well-sold area stops widening on its own.
-  const free = candidates.filter((p) => (p.distanceKm ?? Infinity) <= FREE_REACH_KM);
-  if (sponsored.length + free.length < MIN_SLOT_CARDS) {
+  const free = candidates.filter(
+    (p) => (p.distanceKm ?? Infinity) <= (viewerRadiusKm ?? FREE_REACH_KM),
+  );
+  if (viewerRadiusKm === undefined && sponsored.length + free.length < MIN_SLOT_CARDS) {
     for (const p of candidates) {
       if (sponsored.length + free.length >= MIN_SLOT_CARDS) break;
       if (!free.includes(p)) free.push(p);

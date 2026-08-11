@@ -41,10 +41,6 @@ export default function MyOrdersScreen() {
 
   return (
     <Screen scroll>
-      <Text tone="muted" style={styles.subtitle}>
-        Everything you've ordered, what's still moving, and how past orders went.
-      </Text>
-
       {orders.length === 0 ? (
         <EmptyView
           title="No orders yet"
@@ -128,7 +124,6 @@ function OrderRow({ order, businessName }: { order: Order; businessName?: string
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  subtitle: { marginBottom: spacing.md },
   group: { letterSpacing: 1, marginTop: spacing.md, marginBottom: spacing.sm },
   card: { marginBottom: spacing.sm },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

@@ -21,6 +21,7 @@ import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { SuperAdminBanner } from '@/features/businesses/SuperAdminBanner';
 import { PhotosField } from '@/features/media/PhotosField';
+import { MAX_SECONDS, VideoField } from '@/features/media/VideoField';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
@@ -84,6 +85,7 @@ export default function WorkspaceOffersScreen() {
   const [tag, setTag] = useState('');
   const [emoji, setEmoji] = useState('🎉');
   const [imageUrl, setImageUrl] = useState<string | undefined>();
+  const [videoUrl, setVideoUrl] = useState<string | undefined>();
   const [price, setPrice] = useState('');
   const [lines, setLines] = useState<OfferLine[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
@@ -134,6 +136,7 @@ export default function WorkspaceOffersScreen() {
     setTag('');
     setEmoji('🎉');
     setImageUrl(undefined);
+    setVideoUrl(undefined);
     setPrice('');
     setLines([]);
     setFormError(null);
@@ -151,6 +154,7 @@ export default function WorkspaceOffersScreen() {
     setTag(offer.tag ?? '');
     setEmoji(offer.emoji ?? '🎉');
     setImageUrl(offer.imageUrl);
+    setVideoUrl(offer.videoUrl);
     const amount = parsePrice(offer.price);
     setPrice(amount === undefined ? '' : String(amount));
     setLines(offer.lines);
@@ -212,6 +216,7 @@ export default function WorkspaceOffersScreen() {
       tag: tag.trim() || undefined,
       emoji,
       imageUrl,
+      videoUrl,
       lines,
       price: toPriceLabel(price),
       // Recomputed on every save so the struck-through figure always matches
@@ -404,6 +409,18 @@ export default function WorkspaceOffersScreen() {
             />
           </View>
 
+          {/* The reel. Same offer, better creative — it costs nothing extra and
+              plays full-screen in the deals feed, where a still photo would
+              just sit there. The photo above stays the poster frame. */}
+          <View style={styles.field}>
+            <VideoField
+              label="Video ad (optional) — your reel"
+              value={videoUrl}
+              onChange={setVideoUrl}
+              hint={`Up to ${MAX_SECONDS}s, filmed upright. It plays full-screen in Deals near you; the photo above is what shows everywhere else.`}
+            />
+          </View>
+
           {formError ? (
             <Text variant="caption" tone="danger" style={styles.label}>
               {formError}
@@ -452,6 +469,9 @@ export default function WorkspaceOffersScreen() {
                   {live ? '● Live on your page' : '○ Paused — hidden from customers'}
                 </Text>
               </View>
+              {/* A reel plays full-screen in the deals feed instead of sitting
+                  as a still — worth saying at a glance which offers have one. */}
+              {offer.videoUrl ? <Tag label="🎬 Reel" /> : null}
               {offer.tag ? <Tag label={offer.tag} tone="brand" /> : null}
             </View>
 

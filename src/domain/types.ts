@@ -276,10 +276,23 @@ export interface Offer {
   /**
    * Photo behind the ad card. Optional — without one the card falls back to the
    * emoji on a colored gradient, which is what every offer looked like before.
-   * Picked with PhotosField, so today it's a local uri that dies with the
-   * session (see CLAUDE.md — no upload storage yet).
+   * Picked with PhotosField, which uploads it to the `media` bucket and stores
+   * the public URL (lib/upload.ts).
    */
   imageUrl?: string;
+  /**
+   * THE REEL — a short vertical video ad the business filmed itself, the way it
+   * would post one on Instagram. Optional, and deliberately just another field
+   * on `Offer` rather than a type of its own: a reel is the same promotion with
+   * better creative, so it inherits everything offers already have (liveness,
+   * free reach, campaigns) and needs no second pricing model.
+   *
+   * Where it plays: full-screen in the /deals feed, autoplaying while its page
+   * is the one on screen. Everywhere a still is wanted — the Home carousel, the
+   * business page — `imageUrl` is used instead, so a reel should carry one as
+   * its poster frame.
+   */
+  videoUrl?: string;
   /** What's included — picked from the business's own offerings. */
   lines: OfferLine[];
   /** What the customer pays for the bundle, e.g. "₹99". */

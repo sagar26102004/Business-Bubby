@@ -47,6 +47,7 @@ import { isNotificationMuted } from '@/domain/notifications';
 import { isSuperAdminPhone } from '@/domain/superAdmin';
 import type {
   AdPlacement,
+  PlacementOptions,
   AdRepository,
   AuthRepository,
   BillRepository,
@@ -2876,11 +2877,11 @@ class MockLogbookRepository implements LogbookRepository {
  * copy — see data/adPlacements.ts.
  */
 class MockAdRepository implements AdRepository {
-  async listPlacements(near?: GeoPoint): Promise<AdPlacement[]> {
+  async listPlacements(near?: GeoPoint, options?: PlacementOptions): Promise<AdPlacement[]> {
     await delay(70);
     const now = Date.now();
     const running = adCampaigns.filter((c) => isCampaignRunning(c, now));
-    return clone(buildPlacements(running, businesses, near, now));
+    return clone(buildPlacements(running, businesses, near, now, options?.radiusKm));
   }
 
   async listForBusiness(businessId: string): Promise<AdCampaign[]> {

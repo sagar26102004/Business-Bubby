@@ -17,7 +17,12 @@
  * the offer's live state together, and the screen shouldn't own that rule.
  */
 import type { AdCampaign, Business, GeoPoint } from '@/domain/types';
-import type { AdPlacement, AdRepository, NewAdCampaignInput } from '@/data/repositories';
+import type {
+  AdPlacement,
+  AdRepository,
+  NewAdCampaignInput,
+  PlacementOptions,
+} from '@/data/repositories';
 import { buildPlacements } from '@/data/adPlacements';
 import { getAdPlan, isCampaignRunning } from '@/domain/ads';
 import { isOfferLive } from '@/domain/offers';
@@ -93,7 +98,7 @@ async function notifyOwner(campaign: AdCampaign, title: string, body: string): P
 
 export function createSupabaseAds(): AdRepository {
   return {
-    async listPlacements(near?: GeoPoint): Promise<AdPlacement[]> {
+    async listPlacements(near?: GeoPoint, options?: PlacementOptions): Promise<AdPlacement[]> {
       // Without a location there's no way to judge reach, so only sponsored
       // cards come back — an unpaid corner shop shown to someone in another
       // city is worse than an empty slot.
@@ -125,7 +130,7 @@ export function createSupabaseAds(): AdRepository {
         }
       }
 
-      return buildPlacements(running, [...haveBusinesses.values()], near, now);
+      return buildPlacements(running, [...haveBusinesses.values()], near, now, options?.radiusKm);
     },
 
     async listForBusiness(businessId: string): Promise<AdCampaign[]> {

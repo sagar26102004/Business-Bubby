@@ -922,15 +922,18 @@ export const seedBusinesses: Business[] = [
       { name: 'AC gas top-up', price: '₹2,500' },
       { name: 'Appliance repair visit', price: '₹300', description: 'Visit charge adjusted in repair bill' },
     ],
-    deals: [
+    offers: [
       {
-        id: 'deal_electronica_cooler',
+        id: 'offer_electronica_cooler',
         tag: 'SEASON END',
         title: 'Desert cooler clearance',
         description: 'Last pieces of the summer stock',
+        emoji: '❄️',
+        lines: [{ kind: 'product', name: 'Desert air cooler 55L', price: '₹7,499', quantity: 1 }],
         price: '₹5,999',
         wasPrice: '₹7,499',
-        emoji: '❄️',
+        active: true,
+        createdAt: '2026-06-18T09:00:00.000Z',
       },
     ],
     openNow: true,
@@ -1017,15 +1020,26 @@ export const seedBusinesses: Business[] = [
         description: 'High-tea spread with unlimited chai/coffee · 10–20 guests, 3–6 pm',
       },
     ],
-    deals: [
+    offers: [
       {
-        id: 'deal_cafe_combo',
+        id: 'offer_cafe_combo',
         tag: 'COMBO',
         title: 'Cappuccino + brownie',
         description: 'All day, every day',
+        emoji: '☕',
+        // The seeded REEL — a business that filmed its ad instead of
+        // photographing it, so the /deals feed has a video to play out of the
+        // box. Remote sample footage; a real one is filmed in Workspace ›
+        // Offers and uploaded to the media bucket.
+        videoUrl: 'https://cdn.jsdelivr.net/gh/mediaelement/mediaelement-files/big_buck_bunny.mp4',
+        lines: [
+          { kind: 'menu', name: 'Cappuccino', price: '₹160', quantity: 1 },
+          { kind: 'menu', name: 'Chocolate Brownie', price: '₹160', quantity: 1 },
+        ],
         price: '₹249',
         wasPrice: '₹320',
-        emoji: '☕',
+        active: true,
+        createdAt: '2026-06-20T08:00:00.000Z',
       },
     ],
     openNow: true,
@@ -1128,15 +1142,20 @@ export const seedBusinesses: Business[] = [
         description: 'Mini thali, ice cream, return gifts & balloon decor · 10–30 kids',
       },
     ],
-    deals: [
+    offers: [
       {
-        id: 'deal_shreemaya_thali',
+        id: 'offer_shreemaya_thali',
         tag: 'LUNCH 12–3',
         title: 'Special veg thali',
         description: 'Weekday lunch only, dine-in',
+        emoji: '🍽️',
+        lines: [
+          { kind: 'menu', name: 'Shreemaya Special Veg Thali', price: '₹350', quantity: 1 },
+        ],
         price: '₹249',
         wasPrice: '₹350',
-        emoji: '🍽️',
+        active: true,
+        createdAt: '2026-06-22T11:00:00.000Z',
       },
     ],
     openNow: true,
@@ -1184,15 +1203,19 @@ export const seedBusinesses: Business[] = [
       { name: 'Hyundai i20', price: '₹1,999/day' },
       { name: 'Toyota Innova Crysta (7-seater)', price: '₹3,499/day' },
     ],
-    deals: [
+    offers: [
       {
-        id: 'deal_shraddha_weekday',
+        id: 'offer_shraddha_weekday',
         tag: 'WEEKDAY',
         title: 'Activa — Mon to Thu',
         description: 'Helmet included, 100 km free',
+        emoji: '🛵',
+        videoUrl: 'https://cdn.jsdelivr.net/gh/mediaelement/mediaelement-files/echo-hereweare.mp4',
+        lines: [{ kind: 'product', name: 'Honda Activa 6G (scooter)', price: '₹399/day', quantity: 1 }],
         price: '₹299/day',
         wasPrice: '₹399/day',
-        emoji: '🛵',
+        active: true,
+        createdAt: '2026-06-15T10:00:00.000Z',
       },
     ],
     openNow: true,

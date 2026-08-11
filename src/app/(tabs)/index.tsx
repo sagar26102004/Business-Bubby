@@ -31,7 +31,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
-import type { ListingType, PlaceKind, SavedPlace } from '@/domain/types';
+import type { PlaceKind, SavedPlace } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
 import { INTENT_CATEGORIES, intentMatches, tagEmoji, type IntentCategory } from '@/domain/intents';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -41,20 +41,12 @@ import { Card, EmptyView, ErrorView, Icon, LoadingView, Text } from '@/component
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { AdCarousel, type AdCardItem } from '@/features/ads/AdCarousel';
+import { AD_GRADIENTS } from '@/features/ads/adGradients';
 import { ModePills } from '@/features/shell/ModePills';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 const placeIcon = (kind: PlaceKind) =>
   kind === 'current' ? '📍' : kind === 'home' ? '🏠' : kind === 'work' ? '💼' : '⭐';
-
-/** Ad-card gradients, keyed by the listing type of the business behind the ad.
- *  Used when the offer has no photo of its own. */
-const AD_GRADIENTS: Record<ListingType, [string, string]> = {
-  service: ['#3B82F6', '#1E40AF'],
-  shop: ['#14B8A6', '#0F766E'],
-  item: ['#F59E0B', '#B45309'],
-  rental: ['#0EA5E9', '#0369A1'],
-};
 
 export default function BrowseScreen() {
   const repos = useRepositories();
@@ -367,9 +359,31 @@ export default function BrowseScreen() {
         {/* The ad slot — offers near you, scoped to the picked category */}
         {ads.length > 0 ? (
           <View style={styles.dealsSection}>
-            <Text variant="subheading" weight="bold" style={styles.dealsHeading}>
-              🔥 {selected ? `${selected.label} deals` : 'Deals near you'}
-            </Text>
+            <View style={styles.dealsHeadingRow}>
+              <Text variant="subheading" weight="bold" style={styles.dealsHeading}>
+                🔥 {selected ? `${selected.label} deals` : 'Deals near you'}
+              </Text>
+              {/* Four cards is a glance. The feed is where someone who WANTS
+                  deals browses them — full-screen, swipe-up, videos playing.
+                  It carries the place and category over so "See all" continues
+                  what's on screen rather than resetting it. */}
+              <Pressable
+                onPress={() =>
+                  router.push({
+                    pathname: '/deals',
+                    params: {
+                      ...(activePlace ? { place: activePlace.id } : {}),
+                      ...(selectedId ? { intent: selectedId } : {}),
+                    },
+                  })
+                }
+                hitSlop={8}
+              >
+                <Text variant="label" weight="semibold" tone="brand">
+                  See all →
+                </Text>
+              </Pressable>
+            </View>
             {/* Bleeds to the screen edges so neighbouring cards peek in. */}
             <View style={styles.dealsBleed}>
               <AdCarousel items={ads} onImpression={countImpression} />
@@ -521,6 +535,12 @@ const styles = StyleSheet.create({
   stripUnderline: { height: 3, width: 28, borderRadius: 2, marginTop: 3 },
   // Deals
   dealsSection: { marginBottom: spacing.md },
+  dealsHeadingRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
   dealsHeading: { marginBottom: spacing.md },
   // Escape the list's horizontal padding so peeking cards reach the edges.
   dealsBleed: { marginHorizontal: -spacing.lg },

@@ -157,6 +157,9 @@ export default function RootLayout() {
           <Stack.Screen name="directions/[businessId]" options={{ title: 'Directions' }} />
           <Stack.Screen name="search" options={{ headerShown: false }} />
           <Stack.Screen name="browse/[type]" options={{ title: 'Browse' }} />
+          {/* The deals feed is dark and full-bleed — it owns its own top bar,
+              the way /search does. */}
+          <Stack.Screen name="deals" options={{ headerShown: false }} />
           <Stack.Screen name="qr/[businessId]" options={{ title: 'QR code' }} />
           <Stack.Screen name="scan" options={{ title: 'Scan QR code' }} />
           <Stack.Screen name="call/[businessId]" options={{ title: 'Call' }} />

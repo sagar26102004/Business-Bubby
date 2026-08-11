@@ -229,5 +229,42 @@ re-derivation from the Supabase diff is required:
   `npx expo export --platform web`. Smoke: promote an offer → it appears in the super-admin
   queue as pending → approve → it shows on Home with a Sponsored badge.
 
+## [SYNC-024] Deals feed — viewer-chosen radius on `listPlacements`, and `Offer.videoUrl`
+
+> Depends on **[SYNC-023]**. If SYNC-023 has not landed yet, fold this into it rather than
+> doing it twice — Path B still delegates `ads` to the mock, so nothing here is broken today.
+
+- **Area:** `AdRepository.listPlacements` + the `Offer` shape (the new `/deals` feed).
+- **Supabase change:** `src/data/supabase/ads.ts` → `listPlacements(near?, options?)` now forwards
+  `options?.radiusKm` to `buildPlacements` as its 5th argument. No query change: the same rows
+  are read, the RULE applied to them differs. Nothing else in the file moved.
+- **Domain/interface (SHARED — already done, do not redo):**
+  - `src/data/repositories.ts` — new `PlacementOptions { radiusKm?: number }`;
+    `listPlacements(near?: GeoPoint, options?: PlacementOptions)`.
+  - `src/data/adPlacements.ts` — `buildPlacements(running, businesses, near, now, viewerRadiusKm?)`.
+    With a `viewerRadiusKm`: the free band becomes exactly that radius, the cold-start top-up is
+    SKIPPED (it exists to fill a fixed 5-card slot; a feed has no slot), a sponsored placement is
+    capped at `min(campaign.radiusKm, viewerRadiusKm)`, and a business with no computable distance
+    is dropped rather than shown (in the Home slot it is still kept). An offer whose campaign is
+    out of its bought reach but inside the viewer's radius still appears — as an ordinary,
+    unlabelled card, because it is not a sponsored placement there. Port this behaviour exactly;
+    do not re-derive it.
+  - `src/domain/types.ts` — `Offer.videoUrl?: string` (the reel). Pure passthrough: no backend
+    logic keys on it, the feed just plays it instead of showing `imageUrl`.
+- **Path B — backend/:** in `backend/src/services/ads.ts`, `listPlacements` takes an optional
+  `radiusKm` and passes it into the ported `buildPlacements`. Router: `GET /ads/placements` gains
+  an optional `radiusKm` query param (number, km) — document it in Swagger. `Offer` is stored
+  inside `businesses.data`, so `videoUrl` needs NO backend work; just don't strip unknown offer
+  fields anywhere.
+- **Path B — src/data/api/:** `createApiAds().listPlacements(near, options)` appends
+  `&radiusKm=` when `options?.radiusKm` is set.
+- **DB/migration:** none for this entry. Separately, `supabase/migrations/0015_media_bucket.sql`
+  (public `media` storage bucket + policies) is a SHARED-DB migration to apply once — it is not
+  Path B work: `src/lib/upload.ts` talks to Supabase Storage directly on every backend, because
+  Path B already requires Supabase for auth.
+- **Verify:** `cd backend && npm run typecheck && npm run build`; app `npx tsc --noEmit`. Smoke:
+  `GET /ads/placements?lat=&lng=&radiusKm=1` returns strictly fewer placements than `radiusKm=25`
+  for the same point.
+
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
 
