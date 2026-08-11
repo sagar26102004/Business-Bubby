@@ -141,7 +141,7 @@ export default function TrackedItemScreen() {
           <View style={styles.flex}>
             <Text weight="semibold">{item.customerName}</Text>
             <Text variant="caption" tone="muted">
-              {customer?.phone ?? (customer ? 'Localo account' : 'Account not found')}
+              {customer?.phone ?? (customer ? 'One Place account' : 'Account not found')}
             </Text>
           </View>
         </View>

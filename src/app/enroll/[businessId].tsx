@@ -64,7 +64,7 @@ export default function EnrollScreen() {
         <Stack.Screen options={{ title: 'Enrol' }} />
         <EmptyView
           title="Sign in to enrol"
-          subtitle="You need a Localo account so the plan can reach your Subscriptions."
+          subtitle="You need a One Place account so the plan can reach your Subscriptions."
         />
         <Button title="Sign in" onPress={() => router.push('/sign-in')} />
       </Screen>

@@ -74,7 +74,7 @@ export function PhotosField({
     setError(null);
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      setError('Localo needs camera access to take a photo. You can allow it in Settings.');
+      setError('One Place needs camera access to take a photo. You can allow it in Settings.');
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -89,7 +89,7 @@ export function PhotosField({
     setError(null);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setError('Localo needs access to your photos to pick one. You can allow it in Settings.');
+      setError('One Place needs access to your photos to pick one. You can allow it in Settings.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({

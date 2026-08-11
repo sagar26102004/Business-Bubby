@@ -68,7 +68,7 @@ export default function ReviewScreen() {
         <GateMessage
           icon="⭐"
           title="Sign in to rate"
-          body={`Ratings on Localo come from real customers, so you need an account to rate ${business.name}.`}
+          body={`Ratings on One Place come from real customers, so you need an account to rate ${business.name}.`}
         />
         <Button title="Sign in" onPress={() => router.push('/sign-in')} />
       </Screen>

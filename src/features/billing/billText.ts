@@ -31,6 +31,6 @@ export function billToText(bill: Bill): string {
     `TOTAL: ${formatMoney(bill.total)}${hasUnpriced ? ' (some items to be priced)' : ''}`,
     ...(bill.note ? ['', `Note: ${bill.note}`] : []),
     '',
-    `Issued by ${bill.issuedByName} via Localo`,
+    `Issued by ${bill.issuedByName} via One Place`,
   ].join('\n');
 }

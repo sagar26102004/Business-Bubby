@@ -163,7 +163,7 @@ export const seedUsers: User[] = [
     name: 'Sagar',
     email: 'rathoretrayamb@gmail.com',
     phone: '+91 98260 10001',
-    bio: 'Testing Localo. Parent of Aarav (Class 4, on the school bus).',
+    bio: 'Testing One Place. Parent of Aarav (Class 4, on the school bus).',
     isProfilePublic: true,
   },
 
@@ -767,7 +767,7 @@ export const seedBusinesses: Business[] = [
     description:
       'Neighbourhood gym in Bhawarkua with free weights, machines and cardio, plus morning ' +
       'yoga and evening zumba batches. Monthly memberships with no joining fee — your plan ' +
-      'shows up in your Localo subscriptions with renewal dates, so there are never surprises.',
+      'shows up in your One Place subscriptions with renewal dates, so there are never surprises.',
     type: 'service',
     subcategoryId: 'other',
     location: {
@@ -1234,7 +1234,7 @@ export const seedBusinesses: Business[] = [
     tagline: 'Personal items for sale',
     description:
       'Handmade with love — jute, terracotta, macramé, embroidery and crochet. Everything is ' +
-      'made by me at home in small batches. Message me on Localo to order or ask for a custom ' +
+      'made by me at home in small batches. Message me on One Place to order or ask for a custom ' +
       'piece; you’re welcome to offer your price.',
     type: 'item',
     location: {

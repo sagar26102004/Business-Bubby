@@ -106,7 +106,7 @@ export function CallAlertsCheck() {
           id: 'permission',
           label: 'Notifications allowed',
           ok: permission?.granted === true,
-          fix: 'Android only asks once. Turn Localo’s notifications back on in system Settings.',
+          fix: 'Android only asks once. Turn One Place’s notifications back on in system Settings.',
         },
         {
           id: 'channel',
@@ -411,7 +411,7 @@ export function CallAlertsCheck() {
       ) : null}
       {failed('battery') ? (
         <Button
-          title="Stop battery saving for Localo"
+          title="Stop battery saving for One Place"
           variant="secondary"
           onPress={() => void openBatterySettings()}
           style={styles.button}

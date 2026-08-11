@@ -106,7 +106,7 @@ export default function MyBusinessScreen() {
         <View style={styles.guest}>
           <Text style={styles.guestEmoji}>🏢</Text>
           <Text variant="subheading" weight="semibold" style={styles.center}>
-            Run a business? List it on Localo.
+            Run a business? List it on One Place.
           </Text>
           <Text tone="muted" style={[styles.center, styles.guestSub]}>
             Sign in to register businesses, manage your team, and answer customer chats.

@@ -76,7 +76,7 @@ export function VideoField({ label = 'Video ad (optional)', value, onChange, hin
     setError(null);
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) {
-      setError('Localo needs camera access to film your ad. You can allow it in Settings.');
+      setError('One Place needs camera access to film your ad. You can allow it in Settings.');
       return;
     }
     const result = await ImagePicker.launchCameraAsync({
@@ -91,7 +91,7 @@ export function VideoField({ label = 'Video ad (optional)', value, onChange, hin
     setError(null);
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setError('Localo needs access to your videos to pick one. You can allow it in Settings.');
+      setError('One Place needs access to your videos to pick one. You can allow it in Settings.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({

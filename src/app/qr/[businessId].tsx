@@ -46,7 +46,7 @@ export default function BusinessQrScreen() {
 
   const onShare = async () => {
     const result = await shareText(
-      `${type?.icon ?? '🏬'} ${business.name} on Localo\n${url}`,
+      `${type?.icon ?? '🏬'} ${business.name} on One Place\n${url}`,
       business.name,
     );
     setOutcome(result);

@@ -32,6 +32,9 @@
     "production": {
       "autoIncrement": true,
       "channel": "production",
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EXPO_PUBLIC_BACKEND": "supabase",
         "EXPO_PUBLIC_SUPABASE_URL": "https://mzxslzouzmiswnrolcaq.supabase.co",
@@ -40,6 +43,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./play-service-account.json",
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
+    }
   }
 }

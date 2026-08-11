@@ -657,8 +657,8 @@ export default function WorkspaceMembersScreen() {
                   <Text weight="semibold">{payer.name}</Text>
                   <Text variant="caption" tone="muted">
                     {payer.hasAccount
-                      ? `Has a Localo account${payer.phone ? ` · ${payer.phone}` : ''} — the plan shows in their Subscriptions.`
-                      : 'No Localo account — tracked and billed here by name only.'}
+                      ? `Has a One Place account${payer.phone ? ` · ${payer.phone}` : ''} — the plan shows in their Subscriptions.`
+                      : 'No One Place account — tracked and billed here by name only.'}
                   </Text>
                 </View>
                 <Text tone="brand" weight="semibold" onPress={() => pickPayer(null)}>
@@ -707,7 +707,7 @@ export default function WorkspaceMembersScreen() {
                       <View style={styles.flex}>
                         <Text weight="medium">{u.name}</Text>
                         <Text variant="caption" tone="muted">
-                          {u.phone ?? 'Localo account'}
+                          {u.phone ?? 'One Place account'}
                         </Text>
                       </View>
                     </Pressable>
@@ -729,7 +729,7 @@ export default function WorkspaceMembersScreen() {
                 />
               ) : (
                 <Text variant="caption" tone="muted" style={styles.hintTop}>
-                  Type at least 2 letters to find an account — or add someone who isn’t on Localo yet.
+                  Type at least 2 letters to find an account — or add someone who isn’t on One Place yet.
                 </Text>
               )}
             </>

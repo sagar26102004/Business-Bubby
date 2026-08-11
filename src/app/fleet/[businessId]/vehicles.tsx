@@ -103,7 +103,7 @@ export default function FleetVehiclesScreen() {
     if (!driver?.userId) {
       Alert.alert(
         'No driver account',
-        'Assign a driver who has a Localo account first — the live location comes from their phone.',
+        'Assign a driver who has a One Place account first — the live location comes from their phone.',
       );
       return;
     }

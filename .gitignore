@@ -51,6 +51,11 @@ yarn-error.*
 # credentials and must NEVER be committed.
 *firebase-adminsdk*.json
 serviceAccountKey.json
+
+# Google Play submission
+# The Play service-account key lets anyone upload releases to your listing.
+# Referenced by eas.json -> submit.production.android.serviceAccountKeyPath.
+play-service-account.json
 # NOTE: google-services.json is deliberately NOT ignored. It is not a secret —
 # it ships inside the APK — and EAS cloud builds skip gitignored files, so the
 # build needs it committed.

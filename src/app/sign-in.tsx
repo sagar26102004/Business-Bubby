@@ -136,7 +136,7 @@ export default function SignInScreen() {
 
       <View style={styles.switchRow}>
         <Text tone="muted" variant="label">
-          {isSignup ? 'Already have an account?' : 'New to Localo?'}
+          {isSignup ? 'Already have an account?' : 'New to One Place?'}
         </Text>
         <Text
           tone="accent"

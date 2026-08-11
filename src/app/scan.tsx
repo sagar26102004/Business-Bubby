@@ -55,7 +55,7 @@ function PasteFallback() {
   const open = () => {
     const route = routeForScan(value.trim());
     if (!route) {
-      setError('That doesn’t look like a Localo link.');
+      setError('That doesn’t look like a One Place link.');
       return;
     }
     router.replace(route as Parameters<typeof router.replace>[0]);
@@ -69,12 +69,12 @@ function PasteFallback() {
           Camera scanning works in the app
         </Text>
         <Text tone="muted" style={styles.centerText}>
-          On the web there’s no QR camera — paste the link from a Localo QR code
+          On the web there’s no QR camera — paste the link from a One Place QR code
           (a business sign or an order ticket) and we’ll open it.
         </Text>
       </View>
       <Input
-        label="Localo link"
+        label="One Place link"
         placeholder="e.g. https://…/business/b_cafe or …/fulfill/o12"
         value={value}
         onChangeText={(t) => {
@@ -112,7 +112,7 @@ function NativeScanner({
             Camera access needed
           </Text>
           <Text tone="muted" style={styles.centerText}>
-            Localo uses the camera only to scan business QR codes — point it at a
+            One Place uses the camera only to scan business QR codes — point it at a
             code on a counter or flyer to open that business.
           </Text>
         </View>
@@ -149,7 +149,7 @@ function NativeScanner({
       <View style={styles.overlay} pointerEvents="none">
         <View style={styles.frame} />
         <Text tone="inverse" weight="semibold" style={styles.hint}>
-          {badCode ? 'Not a Localo business code' : 'Point at a Localo QR code'}
+          {badCode ? 'Not a One Place business code' : 'Point at a One Place QR code'}
         </Text>
         {badCode ? (
           <Text variant="caption" style={[styles.hint, { color: colors.star }]}>

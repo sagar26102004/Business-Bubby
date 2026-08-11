@@ -98,7 +98,7 @@ export function OwnerPicker({ value, onChange, selfLabel, hideSelf }: OwnerPicke
       ) : null}
       {term.trim().length >= 2 && !searching && results.length === 0 ? (
         <Text variant="caption" tone="muted">
-          No one found. They need a public Localo account first.
+          No one found. They need a public One Place account first.
         </Text>
       ) : null}
       {results.map((user) => (

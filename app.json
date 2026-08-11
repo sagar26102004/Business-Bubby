@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Localo",
+    "name": "One Place",
     "slug": "localo",
     "scheme": "localo",
     "version": "1.0.0",
@@ -18,21 +18,21 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Localo uses the camera to scan business QR codes."
+          "cameraPermission": "One Place uses the camera to scan business QR codes."
         }
       ],
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Localo uses the camera so you can photograph what you're selling.",
-          "photosPermission": "Localo uses your photos so you can add pictures of what you're selling."
+          "cameraPermission": "One Place uses the camera so you can photograph what you're selling.",
+          "photosPermission": "One Place uses your photos so you can add pictures of what you're selling."
         }
       ],
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Localo uses your location to show businesses and stalls near you.",
-          "locationAlwaysAndWhenInUsePermission": "Localo shares a driver's live location with the owner and tracking customers while on a shift, even when the app is in the background.",
+          "locationWhenInUsePermission": "One Place uses your location to show businesses and stalls near you.",
+          "locationAlwaysAndWhenInUsePermission": "One Place shares a driver's live location with the owner and tracking customers while on a shift, even when the app is in the background.",
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
@@ -41,10 +41,23 @@
       [
         "@config-plugins/react-native-webrtc",
         {
-          "microphonePermission": "Localo uses your microphone for in-app voice calls with businesses."
+          "microphonePermission": "One Place uses your microphone for in-app voice calls with businesses."
         }
       ],
       "expo-audio",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#000000",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#000000"
+          }
+        }
+      ],
       [
         "expo-notifications",
         {
@@ -60,8 +73,8 @@
       "typedRoutes": true
     },
     "ios": {
-      "supportsTablet": true,
-      "bitcode": false
+      "bundleIdentifier": "com.localo.app",
+      "supportsTablet": true
     },
     "android": {
       "package": "com.localo.app",
@@ -81,9 +94,8 @@
         "android.permission.BLUETOOTH"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#000000",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,

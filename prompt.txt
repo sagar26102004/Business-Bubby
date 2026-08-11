@@ -1,0 +1,548 @@
+===============================================================================
+LOCALO — LAUNCH PROMPT PACK
+One prompt per issue. Run them ONE AT A TIME, in the order given.
+Created: 2026-08-11
+===============================================================================
+
+HOW TO USE THIS FILE
+--------------------
+Each block below is a self-contained prompt. Copy ONE block (everything between
+the ---8<--- markers) and paste it as your message to Claude Code. Wait for it
+to finish and verify before moving to the next.
+
+Do NOT paste two prompts at once. Each one touches auth, migrations or build
+config, and stacking them makes a failure impossible to isolate.
+
+ORDER MATTERS. P05 changes the identity model that P06, P07, P08 and P09 all
+build on. P01-P04 are independent and can be done any time.
+
+BEFORE EVERY PROMPT: make sure `git status` is clean and you are on a branch,
+so any single step can be reverted on its own.
+
+AFTER EVERY PROMPT, the verification is always at least:
+    npx tsc --noEmit
+    npx expo export --platform web
+Both must exit 0.
+
+STANDING RULE REMINDER (from CLAUDE.md): any change to data behaviour is made in
+the Supabase backend ONLY (src/data/supabase/), plus shared domain/interface
+files and a SQL migration — and then an entry is appended to
+backend/SYNC_QUEUE.md for Path B. Never edit backend/ in the same pass.
+
+Next free migration number: 0016
+Next free SYNC id:          SYNC-025
+
+
+===============================================================================
+SECTION 1 — QUICK WINS (independent, do in any order)
+===============================================================================
+
+-------------------------------------------------------------------------------
+P01 — iOS build configuration
+-------------------------------------------------------------------------------
+---8<---
+Fix the iOS build configuration gaps in app.json. Do not touch any other file
+unless the change requires it.
+
+1. Add `ios.bundleIdentifier` = "com.localo.app" (match the Android package).
+
+2. Add `ios.infoPlist.UIBackgroundModes = ["audio"]`. This is required so a
+   LiveKit voice call survives the user locking the screen or switching apps.
+   Neither plugin adds it: @config-plugins/react-native-webrtc only sets the
+   mic/camera usage strings and disables bitcode, and
+   @livekit/react-native-expo-plugin is listed with NO options, which makes it
+   a literal no-op (its whole body is `if (options) {...}`).
+   Do NOT add "voip" to the array — that is only legitimate once real PushKit
+   is implemented, and Apple rejects apps that declare it without using it.
+
+3. Remove the now-redundant `ios.bitcode: false` — the WebRTC config plugin
+   already disables bitcode, and Apple dropped bitcode entirely.
+
+4. `assets/call_ringtone.wav` is exactly 32.0s (22050 Hz mono, 705600 frames).
+   Apple caps custom notification sounds at 30s and silently falls back to the
+   default beyond that. Re-encode it to ~28s, preserving the existing ring
+   cadence and keeping the SAME filename and the same underscore (the filename
+   is load-bearing on Android — it becomes a resource name that must match
+   [a-z][a-z0-9_]*, and a hyphen fails prebuild).
+
+5. Make src/features/notifications/CallAlertsCheck.tsx platform-aware. On iOS
+   it currently shows false failures: `getNotificationChannelAsync` returns
+   null so "Ring channel installed" reads as broken, "Call screen in this
+   build" fails because the native module is Android-only, and
+   "Calls can take over the screen" / "Allowed to wake for calls" pass
+   vacuously because `null !== false`. Hide the checks that cannot apply on
+   iOS rather than showing them red, and fix the fix-text that says
+   "Android only asks once."
+
+Do NOT attempt CallKit/PushKit. That is deliberately out of scope here.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+-------------------------------------------------------------------------------
+P02 — Splash screen
+-------------------------------------------------------------------------------
+---8<---
+The app currently ships a blank launch screen. `assets/splash-icon.png` exists
+but app.json has no splash configuration and expo-splash-screen is not
+installed.
+
+Read the Expo SDK 57 docs for expo-splash-screen before writing anything
+(https://docs.expo.dev/versions/v57.0.0/sdk/splash-screen/) — the configuration
+moved to a config plugin in recent SDKs and the old top-level `splash` key is
+not the current approach.
+
+1. Install expo-splash-screen (remember: this repo needs
+   `npm install --legacy-peer-deps`).
+2. Add and configure the plugin in app.json using assets/splash-icon.png.
+   Set a background colour that matches the app's theme — read
+   src/theme/theme.ts and use the real token value, do not invent a hex.
+   Configure the dark-mode variant too, since app.json sets
+   `userInterfaceStyle: "automatic"`.
+3. Make sure the splash hides correctly once the app is ready, rather than
+   flashing or hanging.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+-------------------------------------------------------------------------------
+P03 — Prominent disclosure for background location
+-------------------------------------------------------------------------------
+---8<---
+Google Play requires a PROMINENT IN-APP DISCLOSURE shown BEFORE requesting
+background location. Without it this app will be rejected — it is the single
+most common cause of multi-week Play review loops.
+
+Today `startBackgroundShare()` in src/lib/backgroundLocation.ts:85 calls
+`Location.requestBackgroundPermissionsAsync()` directly with no disclosure
+ahead of it. Callers are src/app/workspace/[businessId].tsx:163 and
+src/app/workspace/[businessId]/fleet.tsx:72.
+
+Build a disclosure dialog that appears before the OS permission prompt and
+meets Play's wording requirements. It must:
+  - Say explicitly that Localo collects location data to enable live vehicle
+    tracking for the business owner and tracking customers.
+  - State that collection continues "even when the app is closed or not in
+    use" — Play looks for language to this effect.
+  - Offer a clear accept and decline. Declining must NOT request the OS
+    permission, and must leave foreground-only sharing working exactly as it
+    does today (the existing ShareResult contract already models this:
+    `{ ok: true, background: false }`).
+  - Appear only for the BACKGROUND permission step, not for foreground GPS,
+    which is used app-wide for distance sorting and needs no such disclosure.
+
+Put the dialog in the feature layer (a new component under
+src/features/fleet/ or src/features/tracking/), use UI primitives from
+@/components/ui and tokens from @/theme/theme — no hardcoded colours.
+
+Do not weaken the existing guarantee that this path never throws and no-ops on
+web and in Expo Go.
+
+Also write the exact disclosure text you used into a new file
+docs/play-store/background-location-disclosure.md, because the identical
+wording has to be given to Google in the Play Console permission declaration
+form and in the demo video.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+-------------------------------------------------------------------------------
+P04 — Privacy policy (page + in-app links)
+-------------------------------------------------------------------------------
+---8<---
+The app has no privacy policy. Play requires one for every app, and this app
+collects location, photos, microphone audio, and profile data — so it will be
+scrutinised.
+
+I will host the final page myself; your job is to produce it and wire up the
+links.
+
+1. Write a complete privacy policy as a standalone, self-contained HTML file at
+   docs/play-store/privacy-policy.html. It must accurately describe what THIS
+   app actually does — read the code, do not write a generic template. Cover at
+   minimum:
+     - Account data: name, phone, email (see src/data/supabase/auth.ts and the
+       profiles / profiles_private tables, migration 0007).
+     - Precise location: foreground for nearby search and distance sorting;
+       background for driver live-location sharing (opt-in per business).
+     - Photos: stall product images and business display pictures
+       (src/features/media/PhotosField.tsx, the media bucket in migration 0015).
+     - Microphone: in-app voice calls over LiveKit. State that calls are
+       peer-to-peer media and that phone numbers are never exchanged.
+     - Push tokens (migration 0011) used solely to ring incoming calls.
+     - Business/commerce data: orders, bills, memberships, reviews, chats.
+     - Processors: Supabase (database, auth, storage), LiveKit (call audio),
+       Expo push / Firebase Cloud Messaging (notifications).
+     - Data retention and the account deletion route.
+     - A contact email placeholder clearly marked TODO for me to fill in.
+   Leave placeholders ONLY for facts you cannot derive from the code (legal
+   entity name, contact email, jurisdiction) and mark each one clearly.
+
+2. Add an in-app link to the policy from the account screen
+   (src/app/(tabs)/account.tsx), opening it with Linking.openURL. Put the URL
+   in ONE place as a constant so it is trivial to change once I know where it
+   is hosted.
+
+3. Also add the link to the sign-up screen, near the create-account button
+   ("By creating an account you agree to..."), because Play reviewers look for
+   consent at the point of collection.
+
+Do NOT invent claims about encryption, certifications, or data practices the
+code does not implement.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+===============================================================================
+SECTION 2 — AUTHENTICATION OVERHAUL
+Do these strictly in order. P05 is the foundation for P06-P09.
+===============================================================================
+
+CONTEXT FOR THIS WHOLE SECTION (applies to every prompt below):
+
+Current state — read src/data/supabase/auth.ts, src/data/supabase/shared.ts and
+src/app/sign-in.tsx before starting:
+  - Auth is phone-first over Supabase email+password. The phone is converted to
+    a SYNTHETIC email `<digits>@localo.app` by `phoneToEmail()`.
+  - Because those synthetic addresses have no real inbox, Supabase's
+    "Confirm email" setting MUST currently be OFF — meaning nothing is verified
+    and anyone can register any phone number they do not own.
+  - There is no email sign-up, no OTP, and no password reset anywhere.
+  - `AuthRepository.signIn(phoneOrEmail, password)` already takes a
+    `phoneOrEmail` parameter but the implementation always runs it through
+    `phoneToEmail()`.
+  - Profiles are created by the `handle_new_user` DB trigger from sign-up
+    metadata. Phone lives in `profiles_private` (migration 0007), readable only
+    by the account itself or a platform super-admin.
+
+Interfaces live in src/data/repositories.ts and are shared by all three
+backends. The mock (src/data/mock/mockRepositories.ts) is the behavioural spec.
+
+
+-------------------------------------------------------------------------------
+P05 — Identity model: real email + phone (foundation)
+-------------------------------------------------------------------------------
+---8<---
+Replace the synthetic-email hack with a real identity model. This is the
+foundation for OTP verification and password reset — do not build those yet.
+
+Goal: a user is identified by a REAL email address and/or a phone number, both
+optional individually but at least one required, and `<digits>@localo.app`
+stops being how we address people.
+
+1. Design the migration (supabase/migrations/0016_real_identity.sql):
+   - Decide and document how existing seeded accounts on synthetic emails are
+     handled. Do NOT silently break them — either migrate them or leave them
+     working alongside the new scheme, and say which in the file header.
+   - Keep phone in profiles_private with its existing RLS.
+   - Add whatever is needed to look up an account by phone at sign-in time
+     WITHOUT exposing the phone table publicly. A SECURITY DEFINER function
+     that resolves phone -> auth identity is the likely shape; if you use one,
+     make it resistant to being used as a phone-number enumeration oracle.
+   - Update the `handle_new_user` trigger for the new metadata shape.
+
+2. Update src/data/supabase/auth.ts:
+   - `signIn(phoneOrEmail, password)` must genuinely accept EITHER. Detect
+     which was given and resolve accordingly.
+   - `signUp` takes a real email and/or phone. Keep the existing
+     minimum-password validation and the friendly `niceAuthError` wrapping.
+   - Keep `signInGuest` (anonymous sessions) and `signInAs` working. `signInAs`
+     stays hard-gated behind `assertDevTool`.
+
+3. Update src/domain/types.ts and src/data/repositories.ts as needed (shared),
+   and update the mock so it stays the behavioural spec.
+
+4. Update src/app/sign-in.tsx for the new inputs. Do not build OTP screens yet
+   — this step is identity plumbing only, still password-based.
+
+5. Append a [SYNC-025] entry to backend/SYNC_QUEUE.md per the standing rule.
+
+IMPORTANT: this changes how every existing test account signs in. Before you
+start, tell me in one short paragraph what will happen to the 10 seeded test
+accounts (phones 9812340001-10, password localo123) and let me confirm the plan
+before you write the migration.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+-------------------------------------------------------------------------------
+P06 — Email sign-up with OTP verification
+-------------------------------------------------------------------------------
+---8<---
+Depends on P05 being finished and verified.
+
+Add real email verification via OTP, so "Confirm email" can finally be turned
+ON and accounts represent addresses people actually control.
+
+Read the Supabase Auth docs for OTP / `verifyOtp` before writing code. Use the
+6-digit code flow (`signInWithOtp` + `verifyOtp` with type 'email'), NOT the
+magic-link flow — a tapped link in an email client does not return cleanly to a
+React Native app, whereas a code the user retypes always works.
+
+1. Repository layer: add the OTP methods to `AuthRepository` in
+   src/data/repositories.ts — something like `sendEmailOtp(email)` and
+   `verifyEmailOtp(email, code)`. Implement in src/data/supabase/auth.ts and
+   mirror in the mock so dev/offline still works (the mock should accept a
+   fixed, obviously-fake code and say so on screen).
+
+2. UI: a verification step after sign-up — 6-digit entry, a resend button with
+   a visible cooldown, and clear handling of the three real failure modes:
+   wrong code, expired code, and too many attempts. Use @/components/ui
+   primitives and theme tokens.
+
+3. Handle the already-registered case without leaking whether an address exists
+   (Supabase's default responses are deliberately vague here — do not "improve"
+   them into an account-enumeration oracle).
+
+4. Gate whatever should be gated: decide and state clearly in the PR summary
+   whether an unverified account can browse, and what it cannot do. Recommend
+   the least disruptive option that still satisfies Play.
+
+5. Append a [SYNC-026] entry to backend/SYNC_QUEUE.md.
+
+NOTE FOR ME (do not implement): Supabase's built-in SMTP is rate-limited to a
+handful of emails per hour and is NOT for production. Tell me in your summary
+what I need to configure (custom SMTP provider) and roughly what it costs.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+-------------------------------------------------------------------------------
+P07 — Forgot password / reset
+-------------------------------------------------------------------------------
+---8<---
+Depends on P05 and P06.
+
+There is currently no way to recover an account. Add password reset.
+
+1. Add `sendPasswordReset(emailOrPhone)` and the completion step to
+   `AuthRepository` (src/data/repositories.ts), implement in
+   src/data/supabase/auth.ts, mirror in the mock.
+
+2. Use the OTP-code reset flow rather than a redirect link, for the same reason
+   as P06: codes work reliably in a React Native app, deep-linked reset URLs
+   are fragile. Verify the code, then set the new password.
+
+3. UI: "Forgot password?" on the sign-in screen -> enter email/phone -> enter
+   code -> choose new password. Enforce the same minimum-password rule as
+   sign-up, in ONE shared place rather than duplicating the check.
+
+4. Never reveal whether an account exists. The response must be identical for
+   a registered and unregistered address.
+
+5. After a successful reset, make sure existing sessions on other devices are
+   handled sensibly and say what you chose.
+
+6. Append a [SYNC-027] entry to backend/SYNC_QUEUE.md.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+-------------------------------------------------------------------------------
+P08 — Phone OTP via SMS  (BLOCKED — needs a paid provider, see notes)
+-------------------------------------------------------------------------------
+---8<---
+Depends on P05. Do NOT start this until I confirm I have an SMS provider
+configured in Supabase, because it cannot be tested without one.
+
+Add phone-number verification by SMS OTP, so a phone-first signup verifies the
+number the way email does in P06.
+
+1. First, before writing any code, give me a short written comparison of the
+   SMS provider options Supabase supports (Twilio, MessageBird, Vonage, and
+   Twilio Verify), with realistic per-SMS pricing for INDIA specifically, since
+   that is the launch market. Include whether India's DLT registration
+   requirement applies and what it involves. Wait for me to choose.
+
+2. Then implement `sendPhoneOtp(phone)` / `verifyPhoneOtp(phone, code)` on
+   `AuthRepository`, Supabase implementation plus mock mirror, following the
+   same structure as the email OTP from P06 so the two flows share UI.
+
+3. Reuse the P06 verification screen rather than building a second one.
+
+4. Rate-limit deliberately: SMS costs real money per message and an unthrottled
+   resend button is a way to spend it. Enforce a cooldown client-side AND note
+   in your summary what server-side limit I should set in Supabase.
+
+5. Append a [SYNC-028] entry to backend/SYNC_QUEUE.md.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+-------------------------------------------------------------------------------
+P09 — Account deletion (Play Store hard requirement)
+-------------------------------------------------------------------------------
+---8<---
+Depends on P05 (and ideally P06/P07 being settled, so the final auth shape is
+known).
+
+Google Play requires any app with account creation to provide BOTH an in-app
+account deletion path AND a publicly reachable web URL for requesting deletion.
+Localo currently has neither — src/app/(tabs)/account.tsx offers only sign in,
+create account, and sign out. This is a straight rejection.
+
+1. Decide and document the deletion semantics BEFORE coding, and show me the
+   plan first. This app has a lot of interlinked data and "delete everything"
+   is wrong: businesses have employees and customers, orders and bills are
+   another party's financial records, reviews affect a business's rating, and
+   chats have a second participant. Work out for each of these what is deleted,
+   what is anonymised, and what must be retained — and justify it. My starting
+   preference is: personal identifiers are erased, commercial records survive
+   in anonymised form, and a business with staff/customers cannot silently
+   vanish.
+
+2. What happens to a user who solely owns a business needs an explicit answer
+   (block deletion until ownership is transferred, or cascade — pick one and
+   explain). Note that migration 0008 already locks business ownership.
+
+3. Implement: a `deleteAccount()` method on `AuthRepository`
+   (src/data/repositories.ts), a Supabase implementation, and a mock mirror.
+   Deleting the auth user itself needs the service role, so this almost
+   certainly requires a new Supabase edge function alongside the existing ones
+   in supabase/functions/ — model it on call-ring for the auth/CORS pattern,
+   including the CORS preflight headers (see the long comment in call-ring
+   about why a missing OPTIONS handler fails silently from web).
+
+4. Migration 0017 (or next free) for any cascade/anonymisation SQL.
+
+5. UI in src/app/(tabs)/account.tsx: a clearly labelled destructive action,
+   behind a confirmation that states exactly what will and will not be deleted,
+   requiring re-authentication or typed confirmation. Do not use a JS
+   alert/confirm.
+
+6. Write docs/play-store/account-deletion.md describing the web-facing
+   deletion request route, which I have to host and declare in the Play
+   Console.
+
+7. Append a [SYNC-029] entry to backend/SYNC_QUEUE.md.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+===============================================================================
+SECTION 3 — PRODUCTION READINESS
+===============================================================================
+
+-------------------------------------------------------------------------------
+P10 — Separate production environment
+-------------------------------------------------------------------------------
+---8<---
+All three EAS build profiles in eas.json (development, preview, production)
+point at the SAME Supabase project, mzxslzouzmiswnrolcaq — the one seeded with
+Indore demo businesses and 10 test accounts on the shared password localo123.
+
+Shipping that to Play means real users land in a directory of fake businesses,
+with live test credentials against production, on a project where email
+confirmation is switched off.
+
+I will create the new Supabase project myself. Your job is everything else.
+
+1. Restructure eas.json so development/preview and production read DIFFERENT
+   Supabase URLs and anon keys. Keep the existing project for dev/preview.
+   Use clearly-named placeholders for the production values for me to fill in.
+
+2. Give me an ordered, copy-pasteable checklist at
+   docs/play-store/production-setup.md covering exactly what I must do in the
+   new Supabase project: which migrations to run and in what order (read
+   supabase/migrations/ and list them), which auth settings to change (email
+   confirmation ON, anonymous sign-ins ON for guest calls — see the
+   localo-voice-calls-livekit note, SMTP, redirect URLs), storage buckets
+   (migration 0015), edge function deploys and their secrets (there are three:
+   dynamic-responder, call-ring, call-decline), and the LiveKit credentials.
+
+3. Explicitly state which seed data must NOT be run against production, and
+   confirm that src/data/mock/seed.ts cannot reach a production build.
+
+4. Audit for anything else that is environment-specific and hardcoded — search
+   for the project ref, hardcoded ids, and the super-admin account referenced in
+   my notes (phone 8827548423). Report what you find; do not change behaviour
+   without telling me first.
+
+Do not create, delete, or migrate anything on any live Supabase project. This
+prompt produces config and documentation only.
+
+Verify: npx tsc --noEmit && npx expo export --platform web
+---8<---
+
+
+-------------------------------------------------------------------------------
+P11 — Play Console submission pack
+-------------------------------------------------------------------------------
+---8<---
+Do this LAST, once P01-P10 are done, because the answers depend on the final
+state of the app.
+
+I have never published an app before. Produce everything I need to fill in the
+Play Console, as documents I can work through — you cannot submit these for me,
+so they must be complete enough that I only have to copy, paste and upload.
+
+Create docs/play-store/ containing:
+
+1. data-safety.md — the complete Data Safety questionnaire answers, derived
+   from what the code ACTUALLY collects. Go through the app systematically:
+   location (foreground + background), photos, microphone, name/email/phone,
+   push tokens, and all the commerce data. For each: is it collected, is it
+   shared, is it encrypted in transit, can the user request deletion. Wrong
+   answers here are a policy violation, so cite the file for each claim.
+
+2. permission-declarations.md — the justification text for each sensitive
+   permission, written as Google wants to read it:
+     - ACCESS_BACKGROUND_LOCATION (the hard one — driver live-location sharing)
+     - USE_FULL_SCREEN_INTENT (declared in
+       modules/call-notification/android/src/main/AndroidManifest.xml:11;
+       Android 14+ grants this at install only to calling/alarm apps)
+     - SYSTEM_ALERT_WINDOW (note it is added twice — once by the WebRTC config
+       plugin and again in app.json:79; check whether the app.json entry can be
+       dropped)
+     - RECORD_AUDIO, CAMERA
+   For each: what the feature is, why the permission is required, and what
+   happens if it is denied.
+
+3. demo-video-script.md — a shot-by-shot script for the background-location
+   demo video Google requires. It must show the prominent disclosure from P03,
+   the permission prompt, and the feature working. State the required length
+   and format.
+
+4. store-listing.md — app name, short description (80 chars), full description
+   (4000 chars), and the exact pixel dimensions and count required for the
+   icon, feature graphic and screenshots. Write real copy for an India-first
+   local business directory, not placeholders.
+
+5. release-checklist.md — the end-to-end sequence from "clean repo" to "live on
+   Play", including the exact EAS commands, where the keystore lives and why I
+   must never lose it, internal testing before production, and the review wait
+   times to expect.
+
+Read the actual code for every factual claim. Do not guess at what the app
+collects.
+---8<---
+
+
+===============================================================================
+APPENDIX — DELIBERATELY OUT OF SCOPE
+===============================================================================
+
+Not included in any prompt above, by design:
+
+  * iOS CallKit / PushKit. Without it, iOS users only receive calls while the
+    app is open in the foreground. At ~4-8% iOS share in India this does not
+    pay for itself yet. It becomes mandatory before any US launch (~58-60% iOS).
+
+  * Real PDF bill export (currently plain text via the share sheet).
+
+  * Payment gateway for ad campaigns. Money is settled off-app and `paid` is
+    hand-marked. NOTE: if an in-app purchase flow is ever added for campaigns,
+    Google Play's billing policy becomes a live question — raise it then.
+
+  * Native Google/Apple map tiles (currently Leaflet in a WebView, which works).
+
+  * Real driver GPS streaming (currently simulated in advanceShares()).

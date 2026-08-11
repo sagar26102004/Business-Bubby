@@ -132,7 +132,7 @@ export default function DealsScreen() {
   const share = useCallback((p: AdPlacement) => {
     const price = p.offer.price ? ` — ${p.offer.price}` : '';
     void shareText(
-      `${p.offer.title}${price}\nat ${p.business.name} on Localo`,
+      `${p.offer.title}${price}\nat ${p.business.name} on One Place`,
       p.offer.title,
     );
   }, []);
