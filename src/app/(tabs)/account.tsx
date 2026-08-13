@@ -8,8 +8,29 @@ import { useRouter } from 'expo-router';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { DEV_TOOLS_ENABLED } from '@/lib/devTools';
+import { PRIVACY_POLICY_URL, openLegalPage } from '@/lib/legal';
 import { Avatar, Button, Card, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
+
+/**
+ * The privacy-policy link, shown to guests and signed-in users alike.
+ *
+ * Google Play requires a reachable in-app link to the policy, not only the URL
+ * in the store listing — and a guest browsing the directory has already had
+ * their location read, so they are exactly as entitled to read it as anyone.
+ */
+function PrivacyLink() {
+  return (
+    <Text
+      tone="muted"
+      variant="caption"
+      style={styles.privacy}
+      onPress={() => openLegalPage(PRIVACY_POLICY_URL)}
+    >
+      Privacy Policy
+    </Text>
+  );
+}
 
 export default function AccountScreen() {
   const { currentUser, authLoading, setCurrentUser, signOut } = useAuth();
@@ -48,6 +69,7 @@ export default function AccountScreen() {
               style={styles.guestBtn}
             />
           ) : null}
+          <PrivacyLink />
         </View>
       </Screen>
     );
@@ -75,6 +97,7 @@ export default function AccountScreen() {
 
       {currentUser.bio ? <Text style={styles.bio}>{currentUser.bio}</Text> : null}
 
+
       <Card style={styles.card}>
         <View style={styles.switchRow}>
           <View style={styles.switchLabel}>
@@ -93,7 +116,7 @@ export default function AccountScreen() {
 
       {isSuperAdminUser(currentUser) ? (
         <Button
-          title="🛡️ Admin"
+          title="🛡️ Platform console"
           variant="secondary"
           onPress={() => router.push('/admin')}
           style={styles.signOut}
@@ -117,6 +140,23 @@ export default function AccountScreen() {
           isSuperAdminUser(currentUser) || DEV_TOOLS_ENABLED ? styles.signOutGhost : styles.signOut
         }
       />
+
+      {/*
+        Play requires an in-app deletion path for any app with sign-up, and
+        requires it to be FINDABLE — buried behind a support email doesn't pass.
+        It sits below Sign out, in the danger colour, and leads to a screen that
+        explains itself rather than deleting on the spot.
+      */}
+      <Text
+        variant="caption"
+        weight="medium"
+        style={[styles.delete, { color: colors.danger }]}
+        onPress={() => router.push('/delete-account')}
+      >
+        Delete my account
+      </Text>
+
+      <PrivacyLink />
     </Screen>
   );
 }
@@ -130,9 +170,11 @@ const styles = StyleSheet.create({
   switchLabel: { flex: 1 },
   signOut: { marginTop: spacing.xl },
   signOutGhost: { marginTop: spacing.sm },
+  delete: { marginTop: spacing.lg, textAlign: 'center' },
   guest: { alignItems: 'center', paddingTop: spacing.xxl },
   guestLogo: { fontSize: 44 },
   guestTitle: { marginTop: spacing.md, textAlign: 'center' },
   guestSub: { marginTop: spacing.sm, textAlign: 'center' },
   guestBtn: { alignSelf: 'stretch', marginTop: spacing.md },
+  privacy: { marginTop: spacing.xl, textAlign: 'center', textDecorationLine: 'underline' },
 });

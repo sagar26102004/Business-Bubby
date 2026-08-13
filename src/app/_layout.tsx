@@ -9,9 +9,10 @@ import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text as RNText, View } from 'react-native';
 import { Stack, useNavigation, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/ui';
-import { DataProvider } from '@/data/DataProvider';
+import { DataProvider, useAuth } from '@/data/DataProvider';
 import { IncomingCallGate } from '@/features/calls/IncomingCallGate';
 import { PushRegistrar } from '@/features/notifications/PushRegistrar';
 import { CartProvider } from '@/features/orders/CartContext';
@@ -19,6 +20,58 @@ import { spacing, useColors } from '@/theme/theme';
 // Registers the driver background-location task at app start, so the OS can
 // restart it after the app is killed (see lib/backgroundLocation.ts).
 import '@/lib/backgroundLocation';
+
+/**
+ * Hold the splash screen up until the app knows WHO IT IS.
+ *
+ * Without this the splash disappears the moment the first view mounts, which is
+ * before `DataProvider` has restored the session — so the app paints the guest
+ * home screen, then repaints it as the signed-in one a network round trip
+ * later. The splash is the natural place to spend that time.
+ *
+ * Called at module scope and NOT awaited, per the expo-splash-screen docs: from
+ * inside a component it can run after the splash is already gone, which does
+ * nothing. It rejects harmlessly if that happens anyway, and every method here
+ * is a no-op on web, so nothing needs a platform guard.
+ */
+void SplashScreen.preventAutoHideAsync().catch(() => {});
+// iOS can cross-fade instead of cutting; Android ignores this.
+SplashScreen.setOptions({ duration: 300, fade: true });
+
+/**
+ * The longest we will EVER hold it.
+ *
+ * `authLoading` is flipped in a `.finally()`, so a rejected session lookup still
+ * releases the splash — but a request that never settles at all (a phone on a
+ * captive-portal wifi is the everyday version) would leave the user staring at
+ * a black screen with no way out. Better to show the app as a guest and let it
+ * correct itself than to hang on the one screen with no UI.
+ */
+const SPLASH_MAX_MS = 5000;
+
+/**
+ * Hides the splash once auth has settled, or once the deadline above passes.
+ *
+ * Lives inside `DataProvider` because that is what it waits for. Deliberately
+ * does NOT wait for screen data — the home screen has its own loading state and
+ * a spinner in the app beats a longer splash.
+ */
+function SplashGate() {
+  const { authLoading } = useAuth();
+
+  useEffect(() => {
+    // Hiding twice is harmless — the second call no-ops (or rejects, caught).
+    const hide = () => void SplashScreen.hideAsync().catch(() => {});
+    if (!authLoading) {
+      hide();
+      return;
+    }
+    const timer = setTimeout(hide, SPLASH_MAX_MS);
+    return () => clearTimeout(timer);
+  }, [authLoading]);
+
+  return null;
+}
 
 /**
  * Explicit header back control — a rounded chevron button with margin from the
@@ -200,6 +253,7 @@ export default function RootLayout() {
             options={{ title: 'Notifications' }}
           />
           <Stack.Screen name="notification-settings" options={{ title: 'Notifications' }} />
+          <Stack.Screen name="delete-account" options={{ title: 'Delete account' }} />
           <Stack.Screen name="workspace/[businessId]/fleet" options={{ title: 'Fleet & tracking' }} />
           <Stack.Screen name="workspace/[businessId]/team" options={{ title: 'Team' }} />
           <Stack.Screen name="workspace/[businessId]/offers" options={{ title: 'Offers' }} />
@@ -209,10 +263,18 @@ export default function RootLayout() {
           <Stack.Screen name="inbox/[businessId]/index" options={{ title: 'Inbox' }} />
           <Stack.Screen name="inbox/[businessId]/[participantId]" options={{ title: 'Chat' }} />
           <Stack.Screen name="dev" options={{ title: 'Dev tools' }} />
-          <Stack.Screen name="admin" options={{ title: 'Admin' }} />
+          <Stack.Screen name="admin/index" options={{ title: 'Platform console' }} />
+          <Stack.Screen name="admin/listings" options={{ title: 'Listings' }} />
+          <Stack.Screen name="admin/catalog" options={{ title: 'Tags & offerings' }} />
           <Stack.Screen name="ad-review" options={{ title: 'Ad review' }} />
           <Stack.Screen name="sign-in" options={{ presentation: 'modal', title: 'Sign in' }} />
+          <Stack.Screen
+            name="reset-password"
+            options={{ presentation: 'modal', title: 'Reset password' }}
+          />
         </Stack>
+        {/* Keeps the splash up until the session is restored. */}
+        <SplashGate />
         {/* On a reload, send deep routes back to Home (mock/auth reset). */}
         <ColdStartRedirect />
         {/* Rings business members on incoming voice calls, on any screen. */}

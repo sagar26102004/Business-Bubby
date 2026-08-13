@@ -12,6 +12,10 @@ import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { startBackgroundShare, stopBackgroundShare } from '@/lib/backgroundLocation';
+import {
+  BackgroundLocationDisclosure,
+  useBackgroundLocationDisclosure,
+} from '@/features/fleet/BackgroundLocationDisclosure';
 import { Button, Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing } from '@/theme/theme';
 
@@ -38,6 +42,9 @@ export default function WorkspaceFleetScreen() {
     const canAccess = canAccessService(business, meEmployee, currentUser, 'fleet');
     return { business, vehicles, items, sharing, meEmployee, isOwner, isMember, canAccess };
   }, [businessId, currentUser?.id]);
+
+  // Above the early returns — hooks cannot run conditionally.
+  const { confirm, disclosureProps } = useBackgroundLocationDisclosure();
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
@@ -69,7 +76,9 @@ export default function WorkspaceFleetScreen() {
   const toggleSharing = async (value: boolean) => {
     if (!currentUser) return;
     if (value) {
-      const res = await startBackgroundShare();
+      // `confirm` shows the Play-required disclosure, and only if the OS is
+      // actually about to be asked for background location.
+      const res = await startBackgroundShare(confirm);
       if (!res.ok) {
         Alert.alert(
           'Location permission needed',
@@ -77,7 +86,9 @@ export default function WorkspaceFleetScreen() {
         );
         return;
       }
-      if (res.background === false && res.reason !== 'web') {
+      // `declined` is the driver having just read the disclosure and said no —
+      // pointing them at Settings would be arguing with an answer we asked for.
+      if (res.background === false && res.reason !== 'web' && res.reason !== 'declined') {
         Alert.alert(
           'Sharing while the app is open',
           'For your vehicle to keep moving when the app is closed, set location access to "Allow all the time" in Settings.',
@@ -93,6 +104,7 @@ export default function WorkspaceFleetScreen() {
   return (
     <Screen scroll>
       <Stack.Screen options={{ title: 'Fleet & tracking' }} />
+      <BackgroundLocationDisclosure {...disclosureProps} />
 
       {myVehicles.length > 0 ? (
         <Card style={styles.shareCard}>

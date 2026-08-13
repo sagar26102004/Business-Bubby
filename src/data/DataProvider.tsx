@@ -10,7 +10,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { User } from '@/domain/types';
 import { applyCatalogEntries } from '@/domain/catalogEntries';
-import type { Repositories, SignUpInput } from '@/data/repositories';
+import type { DeleteAccountResult, Repositories, SignUpInput } from '@/data/repositories';
 import { createMockRepositories, resetMockData } from '@/data/mock/mockRepositories';
 import { createSupabaseRepositories } from '@/data/supabase';
 import { createApiRepositories } from '@/data/api';
@@ -48,6 +48,12 @@ interface DataContextValue {
   signIn: (email: string, password?: string) => Promise<User>;
   signUp: (input: SignUpInput) => Promise<User>;
   signOut: () => Promise<void>;
+  /**
+   * Close the account for good. Clears the session when it succeeds; a refusal
+   * (`{ deleted: false }`, a business still needs handing over) leaves the user
+   * signed in so they can go and deal with it.
+   */
+  deleteAccount: () => Promise<DeleteAccountResult>;
   /** Dev/testing: impersonate a specific user. */
   signInAs: (userId: string) => Promise<User>;
   /** Give a guest an anonymous identity so calls (etc.) work without sign-up. */
@@ -132,6 +138,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return user;
   }, [repositories]);
 
+  const deleteAccount = useCallback(async () => {
+    const result = await repositories.auth.deleteAccount();
+    // Only on a real deletion: a blocked attempt must NOT log the person out —
+    // they need the session to go and transfer the listing that blocked it.
+    if (result.deleted) setCurrentUserState(null);
+    return result;
+  }, [repositories]);
+
   const resetData = useCallback(() => {
     resetMockData();
     setCurrentUserState(null);
@@ -146,11 +160,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       signIn,
       signUp,
       signOut,
+      deleteAccount,
       signInAs,
       signInGuest,
       resetData,
     }),
-    [repositories, currentUser, authLoading, setCurrentUser, signIn, signUp, signOut, signInAs, signInGuest, resetData],
+    [repositories, currentUser, authLoading, setCurrentUser, signIn, signUp, signOut, deleteAccount, signInAs, signInGuest, resetData],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
@@ -174,8 +189,18 @@ export function useRepositories(): Repositories {
  * real uid usable for identity-scoped actions like calls.
  */
 export function useAuth() {
-  const { currentUser, authLoading, setCurrentUser, signIn, signUp, signOut, signInAs, signInGuest, resetData } =
-    useData();
+  const {
+    currentUser,
+    authLoading,
+    setCurrentUser,
+    signIn,
+    signUp,
+    signOut,
+    deleteAccount,
+    signInAs,
+    signInGuest,
+    resetData,
+  } = useData();
   return {
     currentUser,
     isGuest: !currentUser || !!currentUser.isAnonymous,
@@ -184,6 +209,7 @@ export function useAuth() {
     signIn,
     signUp,
     signOut,
+    deleteAccount,
     signInAs,
     signInGuest,
     resetData,

@@ -109,6 +109,9 @@ export function createApiBusinesses(): BusinessRepository {
     update: (id, patch) => http.patch<Business>(`/businesses/${seg(id)}`, patch),
     reassignOwner: (id, newOwnerId) =>
       http.post<Business>(`/businesses/${seg(id)}/reassign-owner`, { newOwnerId }),
+    remove: async (id) => {
+      await http.del(`/businesses/${seg(id)}`);
+    },
   };
 }
 

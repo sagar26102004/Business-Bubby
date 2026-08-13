@@ -266,5 +266,260 @@ re-derivation from the Supabase diff is required:
   `GET /ads/placements?lat=&lng=&radiusKm=1` returns strictly fewer placements than `radiusKm=25`
   for the same point.
 
+## [SYNC-025] `BusinessRepository.remove` — the owner takes a listing down
+
+- **Area:** BusinessRepository / businesses
+- **Supabase change:** `src/data/supabase/businesses.ts` gained `remove(id, actorId)`. It reads
+  the business first, throws `Only the owner can take a listing down.` when
+  `ownerId !== actorId`, then `delete from businesses where id = …`. The pre-check exists
+  because RLS refuses by returning **0 rows, not an error** — without it a blocked delete would
+  report success. No migration: `businesses_delete` (migration 0002) already allows
+  `owner_id = auth.uid()`, and every child table is `on delete cascade` (0001), so team, orders,
+  bills, chats, calls, memberships, reviews, product threads, vehicles and ad campaigns go with
+  it. Deliberately NOT extended to super-admins: an admin who needs a stranger's listing gone
+  uses `reassignOwner` first.
+- **Domain/interface:** `src/data/repositories.ts` → `remove(id: string, actorId: string):
+  Promise<void>` on `BusinessRepository` (shared, already done). The mock
+  (`src/data/mock/mockRepositories.ts`) implements the same rule plus a hand-written cascade
+  (`dropByBusiness`) mirroring the SQL foreign keys — that is the behavioural spec.
+- **Path B — backend/:** `backend/src/services/businesses.ts` → `remove(id, actorId)`: load the
+  row, 404 when missing, **403 unless `data.ownerId === actorId`** (Prisma runs on a privileged
+  connection that bypasses RLS, so this check is the ONLY thing standing between a member and
+  someone else's shop — do not weaken it to `isBusinessMember`, and do not add a super-admin
+  bypass). Then `prisma.businesses.delete({ where: { id } })` and let Postgres cascade.
+  Router `backend/src/routers/businesses.ts`: `DELETE /businesses/:id`, auth required, actor =
+  the JWT's user id, 204 on success. Document in Swagger.
+- **Path B — src/data/api/:** already written — `remove: async (id) => { await
+  http.del(`/businesses/${seg(id)}`); }` in `createApiBusinesses()`. Just make the route exist.
+- **DB/migration:** none.
+- **Verify:** `cd backend && npm run typecheck && npm run build`. Smoke: as the owner,
+  `DELETE /businesses/<own id>` → 204 and the listing is gone from `GET /businesses`; as any
+  other signed-in user → 403 and the row survives.
+
+## [SYNC-026] Real identity — sign in with a real email AND/OR a phone number
+
+- **Area:** AuthRepository / auth + `profiles_private`
+
+- **Supabase change:** `src/data/supabase/auth.ts`.
+  - `signUp` now takes `{ name, email?, phone?, password }` and requires AT LEAST ONE of
+    email/phone. The **login address** is the real email when given, otherwise the synthetic
+    `<digits>@localo.app` alias from the phone. Sign-up metadata is now
+    `{ name, phone, email }` — what the PERSON typed, which is not always the credential
+    address.
+  - `signIn(phoneOrEmail, password)` genuinely accepts either, resolved in TWO LAYERS:
+    1. try `phoneToEmail(typed)` (unchanged behaviour: passes an `@` through untouched,
+       otherwise builds the synthetic alias) — no round trip, and this is what every
+       phone-first account still uses, including the seeded ten;
+    2. only if that fails AND the input is not an email, call the
+       `resolve_login_email(p_phone, p_password)` RPC and retry with what it returns.
+    Layer 2 failing (or the function not existing) must degrade to layer 1's error, never
+    to a hard failure — that is what keeps an un-migrated project working.
+  - `src/data/supabase/shared.ts` gained `looksLikeEmail()` and `isSyntheticEmail()`;
+    `niceAuthError` no longer says "phone number" where either identifier may be meant, and
+    the invalid-login text is deliberately vague (anti-enumeration).
+
+- **Domain/interface (shared — already done):** `src/data/repositories.ts`
+  - `SignUpInput` is now `{ name, email?, phone?, password? }`.
+  - NEW exports `MIN_PASSWORD_LENGTH`, `assertIdentity({email,phone})`, `assertPassword(pw)`.
+    These are the single source of both rules and are already used by the mock, Path A, the
+    Path B client and the sign-in screen. **Path B's server must enforce the same two rules
+    with the same messages** — do not re-derive them.
+
+- **Path B — `src/data/api/auth.ts`:** PARTIALLY DONE. `signUp` was updated in the P05 pass
+  (only because it otherwise failed to compile against the new `SignUpInput`): it calls
+  `assertIdentity`/`assertPassword` and picks the same login address. **Still to do:** give
+  `signIn` the same two-layer resolution as Path A — currently it only does layer 1, so an
+  account whose login address is a real email cannot sign in by typing its phone number.
+
+- **Path B — `backend/`:** identity is still Supabase's (the API verifies the JWT and never
+  issues one), so there is no sign-in endpoint to change. What DOES need doing:
+  - any place the server writes a profile on first sight must file `phone`/`email` into
+    `profiles_private` and must NOT store a `%@localo.app` address as a contact email —
+    mirror `handle_new_user` in migration 0016;
+  - if a future endpoint provisions accounts, apply `assertIdentity`/`assertPassword`.
+
+- **DB/migration:** `supabase/migrations/0016_real_identity.sql` — SHARED DB, apply ONCE.
+  Adds an expression index on the digits of `profiles_private.data->>'phone'`; adds the
+  SECURITY DEFINER `resolve_login_email(text, text)` (verifies the password against
+  `auth.users.encrypted_password` with `crypt` so the address is only handed to a caller who
+  could already sign in — uniform NULL on every failure, so it is not an enumeration oracle);
+  rewrites `handle_new_user` for the new metadata shape; and strips previously-stored
+  synthetic addresses out of `profiles_private.data.email`. Existing accounts (the seeded ten,
+  the super-admin) are deliberately LEFT ALONE and keep signing in by phone + password.
+
+- **Verify:** `npx tsc --noEmit` and `npx expo export --platform web` in the app;
+  `npm run typecheck && npm run build` in `backend/`. Functionally: sign in with a seeded
+  phone (must still work), sign up with email only, phone only, and both; then sign in with
+  each identifier the account carries.
+
+## [SYNC-030] Username + password is the whole login
+
+> ⚠️ SUPERSEDES the deleted [SYNC-027] (email OTP verification) and [SYNC-028] (password
+> reset). Neither exists in the product any more. If either was already applied to Path B,
+> DELETE it: `sendEmailOtp`, `verifyEmailOtp`, `sendPasswordReset`, `completePasswordReset`,
+> `User.emailVerifiedAt`, and anything calling a `mark_email_verified` RPC (migration 0017
+> was never applied and has been deleted).
+
+- **Area:** AuthRepository / auth + `profiles.username`
+
+- **Why:** every previous scheme made sign-up depend on something outside the app — an inbox
+  Supabase would not let us template without paid SMTP, or an SMS provider needing Indian DLT
+  registration. A username needs neither. Email and phone survive as CONTACT DETAILS:
+  optional, unverified, never credentials.
+
+- **Supabase change:**
+  - `src/data/supabase/shared.ts` gained `usernameToEmail(handle)` → `<handle>@localo.app`.
+    `niceAuthError` now maps a duplicate-address rejection to "That username is taken." and
+    invalid-login to "Wrong username or password."
+  - `signUp` derives the credential address from the handle, so **uniqueness is enforced by
+    the `auth.users.email` unique constraint** — there is no check-then-insert to race.
+    Metadata is `{ name, username, phone, email }`; display name falls back to the username.
+  - `signIn` derives the address on the device with no lookup: `@` → itself; leading digit →
+    `phoneToEmail`; otherwise → `usernameToEmail`. The `resolve_login_email` RPC (0016) stays
+    as a SECOND attempt for the digits case only.
+
+- **Domain/interface (shared — already done):** `SignUpInput` is
+  `{ username, name?, email?, phone?, password? }`. NEW `assertUsername` and
+  `assertContactDetails` replace `assertIdentity`; `assertPassword` unchanged.
+  `USERNAME_MIN_LENGTH`/`USERNAME_MAX_LENGTH` exported. `User.username?: string` added
+  (PUBLIC — it is a handle, and lives on `profiles`, not `profiles_private`).
+  `User.emailVerifiedAt` and the OTP constants were removed.
+
+- **⚠️ THE INVARIANT THAT KEEPS THE SCHEMES APART:** `assertUsername` forbids a leading digit,
+  which is the only thing preventing a username alias from colliding with a phone alias on the
+  shared `@localo.app` domain. Do not relax it in any backend.
+
+- **Path B — `src/data/api/auth.ts`:** DONE — `signUp` mirrors the derivation above.
+
+- **Path B — `backend/`:** return `username` on `GET /users/:id` (public, alongside `name`),
+  and REJECT it on profile writes — a handle cannot be rewritten by its owner, because the
+  credential address in `auth.users` would not move with it. Migration 0018 enforces this with
+  a trigger; the API must not offer a way around it.
+
+- **DB/migration:** `supabase/migrations/0018_usernames.sql` — SHARED DB, apply ONCE. Indexes
+  `lower(data->>'username')` on `profiles`, rewrites `handle_new_user` to store the handle on
+  the public card, and extends `protect_profile_fields` to pin `username` on UPDATE.
+
+- **Known gap (deliberate):** there is NO password recovery. A username account's address has
+  no inbox, so nothing can be sent to it. Google sign-in is the recovery route — an account
+  with no password cannot forget one. Restoring reset needs custom SMTP AND a verified address
+  stored on the account; do not reintroduce a reset screen before both exist.
+
+- **Verify:** `npx tsc --noEmit` + `npx expo export --platform web`; `npm run typecheck &&
+  npm run build` in `backend/`. Functionally: sign up with just a username and password; sign
+  up again with the same handle (must say it is taken); sign in with a seeded phone
+  (9812340001) — the regression that matters most.
+
+## [SYNC-029] Sign in with Google (and email verification REMOVED)
+
+> ⚠️ SUPERSEDES the deleted [SYNC-027], which described an email-verification OTP flow. That
+> flow has been removed from the product — do not implement it. If any of it was already
+> applied to Path B, delete it: `sendEmailOtp`, `verifyEmailOtp`, `User.emailVerifiedAt`, and
+> anything reading a `mark_email_verified` RPC (migration 0017 was never applied and has been
+> deleted).
+
+- **Area:** AuthRepository / auth
+
+- **Why:** Supabase locks email-template editing behind custom SMTP, so the OTP code could
+  not be put into the mail at all on the current plan. Verification was cut; Google sign-in
+  replaces it as the trustworthy-identity route, and brings its own already-verified address.
+
+- **Supabase change:** `src/data/supabase/auth.ts` gained `signInWithGoogle()`.
+  `auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect } })`
+  → open `data.url` with `WebBrowser.openAuthSessionAsync(url, redirectTo)` → read `code` from
+  the returned URL → `auth.exchangeCodeForSession(code)` → `clearCache()` → `fetchProfile`.
+  `redirectTo` is `Linking.createURL('/auth-callback')`, which resolves per platform.
+  A `result.type !== 'success'` is a CANCELLATION and must read as one, not as a failure.
+
+- **Client config (shared):** `src/lib/supabase.ts` now sets `flowType: 'pkce'`, which
+  `exchangeCodeForSession` requires. `detectSessionInUrl` stays false — the redirect is read
+  by hand on every platform. New dependency: `expo-web-browser` (config plugin auto-added to
+  app.json).
+
+- **Domain/interface (shared — already done):** `AuthRepository.signInWithGoogle(): Promise<User>`.
+  `User.emailVerifiedAt` was REMOVED. `OTP_CODE_LENGTH` / `OTP_RESEND_COOLDOWN_SECONDS` remain,
+  still used by the password reset in [SYNC-028].
+
+- **Path B — `src/data/api/auth.ts`:** DONE, by delegation to `createSupabaseAuth()` (identity
+  is Supabase in Path B too), with the profile re-read via `GET /users/:id`.
+
+- **Path B — `backend/`:** nothing required — no token is issued by Express. Confirm the
+  profile serialiser no longer references `emailVerifiedAt`, and that a Google-created user
+  (whose row is written by the `handle_new_user` trigger from Google's metadata) reads back
+  correctly through `GET /users/:id`.
+
+- **DB/migration:** none. The `handle_new_user` trigger from 0016 already handles a Google
+  sign-up: Google supplies `name` and a real, non-synthetic `email`, which is exactly what it
+  files into `profiles_private`.
+
+- **⚠️ Dashboard prerequisites (not code):** Google provider enabled in Supabase with a Google
+  Cloud OAuth client id/secret; `https://<ref>.supabase.co/auth/v1/callback` listed as an
+  authorised redirect URI in Google Cloud; and the app's own redirect (`localo://auth-callback`
+  plus the dev-server origin) added under Authentication → URL Configuration.
+
+- **Verify:** `npx tsc --noEmit` + `npx expo export --platform web`; `npm run typecheck &&
+  npm run build` in `backend/`. Functionally: Continue with Google on web and on a device,
+  cancel it once (must not show an error), and confirm a first-time Google user gets a profile.
+
+## [SYNC-031] `AuthRepository.deleteAccount()` — closing an account for good
+
+- **Area:** AuthRepository / account deletion (Google Play hard requirement)
+
+- **Supabase change:** new edge function `supabase/functions/delete-account/index.ts` plus
+  migration `0019_account_deletion.sql`. `src/data/supabase/auth.ts` gained `deleteAccount()`,
+  which `functions.invoke('delete-account')` with an EMPTY body — the uid comes from the verified
+  JWT and there is deliberately no user-id parameter, so the endpoint can only ever delete the
+  caller. It reads the error body off `error.context` (a `FunctionsHttpError` hides the server's
+  message there) to tell a BLOCKED deletion from a real fault, then `signOut()` + `clearCache()`
+  on success.
+
+- **Domain/interface (shared — already done):** `AccountDeletionBlocker` and `DeleteAccountResult`
+  (`{ deleted: true; listingsRemoved } | { deleted: false; blockers }`) in
+  `src/data/repositories.ts`, plus `deleteAccount(): Promise<DeleteAccountResult>` on
+  `AuthRepository`. `User.deletedAt?: string` added in `src/domain/types.ts`. A refusal is a
+  RESULT, not a throw — owning a live business is an ordinary state, and the screen renders the
+  list. `DataProvider` exposes `deleteAccount()` and clears the session only when
+  `result.deleted`.
+
+- **Path B — `src/data/api/auth.ts`:** DONE, by delegation to `createSupabaseAuth().deleteAccount()`
+  — same reasoning as Google sign-in ([SYNC-029]): the account being deleted is a Supabase auth
+  user in Path B too (Express verifies JWTs, never issues them), and both backends share ONE
+  database, so 0019's scrub covers Path B's data as well. **Leave it delegated** unless Path B
+  ever stops using Supabase Auth.
+
+- **Path B — `backend/`:** nothing REQUIRED. Optional, only if you want Express to own the flow:
+  a `DELETE /users/me` that reimplements the edge function's four steps (blockers → scrub →
+  storage sweep → admin delete) using the service-role Prisma connection plus a Supabase admin
+  client for `auth.admin.deleteUser`. If you do add it, the identity must still come from the
+  verified JWT in `backend/src/authz.ts` and never from a path/body parameter.
+
+- **DB/migration:** `supabase/migrations/0019_account_deletion.sql` — SHARED DB, apply ONCE, and
+  before the function is deployed or every deletion fails on missing RPCs. It:
+  - **drops the `profiles → auth.users` foreign key** (found by shape, not by name). This is the
+    load-bearing change: that FK is `on delete cascade`, and `businesses.owner_id → profiles` is
+    too, so deleting an auth user used to detonate into every business the person owned and every
+    order, bill, review and employment record hanging off it. With the FK gone the profile row
+    survives as a TOMBSTONE, no cascade fires anywhere, and every foreign key still resolves.
+    ⚠️ Path B's Prisma schema was introspected from the old shape — re-run `prisma db pull` after
+    applying, or Prisma will keep modelling a relation the database no longer has.
+  - adds `account_deletion_blockers(uuid)`, `unreferenced_media_paths(uuid)` and
+    `anonymize_account(uuid)`, all SECURITY DEFINER and all **revoked from `anon`/`authenticated`,
+    granted to `service_role` only** — `anonymize_account` takes a uid argument, so a session able
+    to call it could erase anyone.
+  - refuses outright for any `platform_admins` row (the console must not be able to lock itself
+    out) and for any still-owned non-empty listing.
+
+- **⚠️ Deployment (not code):** `supabase functions deploy delete-account` on every project the app
+  ships against. Secrets are platform-injected. The function answers `OPTIONS` and returns the CORS
+  header block — without them a deletion from the web preview fails as the generic "Failed to send
+  a request to the Edge Function", exactly as `call-ring` once did.
+
+- **Verify:** `npx tsc --noEmit` + `npx expo export --platform web` (app); `npm run typecheck &&
+  npm run build` in `backend/`. Functionally, against a throwaway account: delete it and confirm
+  the profile is a tombstone, `profiles_private` is empty, orders read "Deleted user" and the
+  chats are gone; then confirm an account owning a listing WITH an order is refused, naming it.
+
+---
+
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
 

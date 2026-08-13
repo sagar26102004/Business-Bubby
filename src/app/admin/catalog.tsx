@@ -1,23 +1,22 @@
 /**
- * Platform admin — super-admin only. Two jobs, both about the app's GROWING
- * collection (see CatalogRepository):
+ * Admin › Tags & offerings — the app's GROWING collection (CatalogRepository).
+ *
+ * Two jobs:
  *   1. Add business tags by hand — they immediately join the tag typeahead
  *      everywhere (register, Manage).
- *   2. Curate the collection that listings have contributed automatically —
- *      hide junk/typos (they stop being suggested) or delete them outright.
+ *   2. Curate what listings have contributed automatically — hide junk/typos
+ *      (they stop being suggested) or delete them outright.
  *
  * Everything an owner lists that the code catalog didn't know is captured here
  * live, so this is where the platform keeps that stream clean.
  */
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import type { CatalogEntry, CatalogEntryKind } from '@/domain/types';
 import { applyCatalogEntries } from '@/domain/catalogEntries';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
-import { useDebouncedValue } from '@/lib/useDebouncedValue';
 import {
   Button,
   Card,
@@ -28,6 +27,7 @@ import {
   Tag,
   Text,
 } from '@/components/ui';
+import { AdminGate } from '@/features/admin/AdminGate';
 import { spacing, useColors } from '@/theme/theme';
 
 const KIND_META: Record<CatalogEntryKind, { label: string; icon: string }> = {
@@ -39,10 +39,19 @@ const KIND_META: Record<CatalogEntryKind, { label: string; icon: string }> = {
 
 type Filter = 'all' | CatalogEntryKind;
 
-export default function AdminScreen() {
-  const { currentUser, authLoading } = useAuth();
+export default function AdminCatalogScreen() {
+  return (
+    <Screen scroll>
+      <AdminGate>
+        <CatalogManager />
+      </AdminGate>
+    </Screen>
+  );
+}
+
+function CatalogManager() {
+  const { currentUser } = useAuth();
   const repos = useRepositories();
-  const router = useRouter();
   const colors = useColors();
 
   const [tag, setTag] = useState('');
@@ -54,17 +63,6 @@ export default function AdminScreen() {
   const { data: entries, reload, loading } = useAsync(
     () => (isAdmin ? repos.catalog.listAll() : Promise.resolve([])),
     [isAdmin],
-  );
-
-  // Business finder — the way into any listing's owner-facing screens.
-  const [bizQuery, setBizQuery] = useState('');
-  const debouncedBiz = useDebouncedValue(bizQuery, 300);
-  const { data: bizResults, loading: bizLoading } = useAsync(
-    () =>
-      isAdmin && debouncedBiz.trim().length > 1
-        ? repos.businesses.list({ search: debouncedBiz.trim() })
-        : Promise.resolve([]),
-    [isAdmin, debouncedBiz],
   );
 
   /** Re-pull approved entries into the in-app suggestion overlays after edits. */
@@ -88,26 +86,6 @@ export default function AdminScreen() {
   }, [entries]);
 
   const shown = (entries ?? []).filter((e) => filter === 'all' || e.kind === filter);
-
-  if (authLoading) return <LoadingView />;
-
-  if (!isAdmin) {
-    return (
-      <Screen scroll>
-        <View style={styles.denied}>
-          <Text style={styles.deniedIcon}>🛡️</Text>
-          <Text variant="heading" weight="bold" style={styles.deniedTitle}>
-            Admins only
-          </Text>
-          <Text tone="muted" style={styles.deniedSub}>
-            This screen is for platform super-admins. Sign in with a super-admin account to
-            manage tags and the offering collection.
-          </Text>
-          <Button title="Back" variant="secondary" onPress={() => router.back()} style={styles.deniedBtn} />
-        </View>
-      </Screen>
-    );
-  }
 
   const addTag = async () => {
     const clean = tag.trim();
@@ -139,73 +117,7 @@ export default function AdminScreen() {
   };
 
   return (
-    <Screen scroll>
-      <Text variant="heading" weight="bold" style={styles.h1}>
-        🛡️ Platform admin
-      </Text>
-
-      {/* Onboarding desk — list a business for someone, then set up their page
-          for them. A super-admin passes every access check (domain/access.ts),
-          so these open the real owner-facing screens. */}
-      <Card style={styles.card}>
-        <Text weight="semibold" style={styles.cardTitle}>
-          Set up a business
-        </Text>
-        <Text variant="caption" tone="muted" style={styles.cardSub}>
-          List a shop on the owner’s behalf, then open it to price its menu or put its first
-          offers up. Search by name to find one that’s already listed.
-        </Text>
-        <Button
-          title="＋ Register a business for someone"
-          onPress={() => router.push('/register')}
-        />
-        <View style={styles.searchRow}>
-          <Input
-            placeholder="Find a listed business by name"
-            value={bizQuery}
-            onChangeText={setBizQuery}
-          />
-        </View>
-        {bizLoading ? (
-          <Text variant="caption" tone="muted">
-            Searching…
-          </Text>
-        ) : null}
-        {(bizResults ?? []).map((b) => (
-          <View key={b.id} style={[styles.bizRow, { borderTopColor: colors.border }]}>
-            <View style={styles.bizName}>
-              <Text weight="semibold">{b.name}</Text>
-              <Text variant="caption" tone="muted" numberOfLines={1}>
-                {b.tagline || b.providerType || b.type}
-              </Text>
-            </View>
-            <View style={styles.bizActions}>
-              <Tag label="Page" onPress={() => router.push(`/business/${b.id}`)} />
-              <Tag label="Prices" onPress={() => router.push(`/manage/${b.id}`)} />
-              <Tag label="Offers" onPress={() => router.push(`/workspace/${b.id}/offers`)} />
-            </View>
-          </View>
-        ))}
-        {bizQuery.trim().length > 1 && !bizLoading && (bizResults ?? []).length === 0 ? (
-          <Text variant="caption" tone="muted" style={styles.searchRow}>
-            No business matches “{bizQuery.trim()}”.
-          </Text>
-        ) : null}
-      </Card>
-
-      {/* Ads — the revenue line. Requests wait here until approved, so this is
-          a queue someone has to actually work; its own screen has the detail. */}
-      <Card style={styles.card}>
-        <Text weight="semibold" style={styles.cardTitle}>
-          Ad review
-        </Text>
-        <Text variant="caption" tone="muted" style={styles.cardSub}>
-          Businesses pay to put an offer on the Home screen. Nothing runs until you approve it,
-          and payment is marked by hand once it arrives.
-        </Text>
-        <Button title="📣 Open ad requests" onPress={() => router.push('/ad-review')} />
-      </Card>
-
+    <>
       {/* Add a business tag */}
       <Card style={styles.card}>
         <Text weight="semibold" style={styles.cardTitle}>
@@ -236,8 +148,8 @@ export default function AdminScreen() {
         Collection ({counts.all})
       </Text>
       <Text variant="caption" tone="muted" style={styles.sectionSub}>
-        Everything listings have contributed plus the tags you added. Hide typos and junk so
-        they stop being suggested, or delete them for good.
+        Everything listings have contributed plus the tags you added. Hide typos and junk so they
+        stop being suggested, or delete them for good.
       </Text>
 
       <View style={styles.filters}>
@@ -289,12 +201,11 @@ export default function AdminScreen() {
           ))}
         </Card>
       )}
-    </Screen>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  h1: { marginBottom: spacing.lg },
   card: { marginBottom: spacing.xl },
   cardTitle: { marginBottom: spacing.xs },
   cardSub: { marginBottom: spacing.md },
@@ -306,20 +217,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   rowMain: { flex: 1 },
   action: { paddingHorizontal: spacing.xs },
-  searchRow: { marginTop: spacing.md },
-  bizRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingTop: spacing.sm,
-    marginTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  bizName: { flex: 1 },
-  bizActions: { flexDirection: 'row', gap: spacing.xs },
-  denied: { alignItems: 'center', paddingTop: spacing.xxl },
-  deniedIcon: { fontSize: 44 },
-  deniedTitle: { marginTop: spacing.md, textAlign: 'center' },
-  deniedSub: { marginTop: spacing.sm, textAlign: 'center' },
-  deniedBtn: { alignSelf: 'stretch', marginTop: spacing.lg },
 });

@@ -1,0 +1,552 @@
+===============================================================================
+ONE PLACE — GOOGLE PLAY SUBMISSION REFERENCE
+Everything needed to fill in the Play Console, in the order the forms ask.
+Prepared: 2026-08-13
+===============================================================================
+
+READ THIS FIRST
+---------------
+This is the Android twin of ios_description.txt. iOS has been dropped; Play is
+the only target.
+
+TWO things below will get this app REJECTED. They are in full in SECTION 13.
+In short:
+
+  1. NO REPORT / BLOCK for user-generated content  -> Play's User Generated
+     Content policy. This is code work and is NOT optional.
+  2. App icon appears to use One Piece IP          -> Play IP policy.
+
+Everything else in this file is ready to copy and paste.
+
+Longer, more detailed versions of every section live in docs/play-store/.
+This file is the single-page reference; those are the working documents.
+
+
+===============================================================================
+SECTION 1 — APP DETAILS
+===============================================================================
+
+APP NAME (30 char max)  ............  9 / 30
+One Place
+
+  Alternative, if you want the extra search surface (27 / 30):
+  One Place: Local Businesses
+
+PACKAGE NAME  (permanent once published — cannot ever be changed)
+com.localo.app
+  Kept from the old "Localo" working name. Invisible to users. Must match
+  app.json -> expo.android.package.
+
+DEFAULT LANGUAGE     English (India) — en-IN. The copy uses British spelling.
+APP OR GAME          App
+FREE OR PAID         Free  (permanent — a free app can never become paid)
+CATEGORY             Shopping
+  Business is defensible if you lead with the workspace, but the customer
+  directory is what most people open it for.
+
+COUNTRIES            India only for launch.
+  Strongly recommended: this is a location-based directory with no listings
+  outside India, so it looks broken anywhere else. You can add countries later;
+  removing them is messier.
+
+
+===============================================================================
+SECTION 2 — SHORT DESCRIPTION  (80 char max)
+Appears under the title in search results. Does more work than anything else.
+===============================================================================
+70 / 80
+
+Find shops, services and stalls near you — order, book, chat and call.
+
+  ALTERNATIVES
+  72 / 80   Your neighbourhood in one app: local shops, services, rentals and stalls.
+  77 / 80   Discover local businesses near you. Order, book appointments, sell your stuff.
+
+
+===============================================================================
+SECTION 3 — FULL DESCRIPTION  (4000 char max)
+===============================================================================
+2526 / 4000 — room to add if you want.
+
+One Place is the local directory for everything around you — the shops, the services, the people
+renting things out, and the neighbours selling what they no longer need.
+
+Open it and you see what is actually near you, sorted by distance. No feed, no algorithm deciding
+what deserves your attention. Just your neighbourhood.
+
+
+FIND WHAT IS AROUND YOU
+
+• Browse by what you need — food, health, home services, rentals, electronics and more
+• Search shops, dishes, services and items by name
+• See real distances and opening hours before you go
+• Open a real street map and see everything plotted around you
+• Scan a shop's QR code to open its page instantly
+
+
+DEAL WITH BUSINESSES DIRECTLY
+
+• Order products or a meal, and see the bill before you pay
+• Book an appointment for a service
+• Message a business and get an answer from a real person
+• Call a business inside the app — no phone number is exchanged, in either direction
+• Keep every order and bill in one place instead of scattered across chats
+
+
+A STALL FOR YOUR OWN THINGS
+
+Selling a phone, a bicycle, furniture you no longer need? Put it up in minutes with a photo and a
+price. Everything you sell lives in one stall under your name.
+
+Buyers ask questions and make offers on a public thread under each item, so the next person to
+wonder the same thing finds it already answered.
+
+
+RUN YOUR BUSINESS FROM YOUR PHONE
+
+Listing a business is free and takes a few minutes.
+
+• Publish your menu, services, products or rentals with prices
+• Take orders and issue bills from your phone
+• Answer customer chats and calls, or hand that to your team
+• Add managers and staff, and control what each of them can see
+• Run monthly plans — a gym membership, a tuition batch, a bus seat
+• Show your work in a photo and video showcase
+• Get honest ratings from customers who actually bought something
+
+
+LIVE VEHICLE TRACKING
+
+If you run vehicles — a school bus, a delivery van, a goods truck — your drivers can share their
+live position for a shift. The business sees the whole fleet. A parent sees only the bus their
+child is on. Drivers switch it on and off themselves, and it is off by default.
+
+
+BUILT HONESTLY
+
+• Only verified customers can leave a rating, so scores mean something
+• Your phone number is never shown to a business unless you become their customer
+• No advertising trackers, and no selling your data to anyone
+• Browse the whole directory without an account
+• Delete your account from inside the app, whenever you want
+
+Made in India, for Indian neighbourhoods.
+
+  FORMATTING: Play renders almost no markup. Use CAPITALS for headings (not #),
+  and the bullet character. No emoji — they render inconsistently across
+  Android versions.
+
+
+===============================================================================
+SECTION 4 — GRAPHIC ASSETS
+===============================================================================
+
+APP ICON  (required)
+  512 x 512 px, 32-bit PNG WITH alpha, max 1 MB.
+  *** READY TO UPLOAD: docs/play-store/play-icon-512.png ***
+  assets/icon.png is 1024x1024, which Play rejects for the store icon. The file
+  above is that icon resized. Regenerate after any icon change with:
+    python -c "from PIL import Image; Image.open('assets/icon.png').convert('RGBA').resize((512,512), Image.LANCZOS).save('docs/play-store/play-icon-512.png', optimize=True)"
+
+FEATURE GRAPHIC  (required)
+  1024 x 500 px, PNG or JPEG, NO alpha, max 15 MB.
+  NOT YET MADE. Two rules that matter more than the design: no screenshots of
+  the app inside it, and keep text away from the edges (it gets cropped on some
+  surfaces). Icon + name + one line ("Your neighbourhood, in one app") is enough.
+
+PHONE SCREENSHOTS  (required)
+  Minimum 2, maximum 8 — supply 6. Recommended 1080 x 1920 portrait.
+  NOT YET TAKEN. Instructions and the exact six shots to capture are in
+  screenshot/README.md. Take them on a real device from a preview build, AFTER
+  the production data cleanup, so no demo content is visible.
+
+TABLET SCREENSHOTS  Optional. Skip. Play shows a harmless "not optimised for
+  tablets" note without them.
+
+PROMO VIDEO  Optional. Skip for v1.
+  *** The background-location demo video is NOT this and must NEVER be attached
+      here. It goes only in the permission declaration form (SECTION 8). ***
+
+
+===============================================================================
+SECTION 5 — CONTACT DETAILS AND URLS
+===============================================================================
+
+EMAIL (published publicly on the listing)
+  rathoresagar26@gmail.com
+  Deletion and privacy requests arrive here. Use one you actually read — the
+  privacy policy promises a 30-day response.
+
+WEBSITE (optional)          https://YOUR-DOMAIN/legal/support.html
+PHONE (optional)            leave blank — it is published publicly
+
+PRIVACY POLICY URL (REQUIRED)
+  https://YOUR-DOMAIN/legal/privacy-policy.html
+
+ACCOUNT DELETION URL (REQUIRED — App content > Data safety)
+  https://YOUR-DOMAIN/legal/delete-account.html
+
+  MUST be reachable WITHOUT signing in. Test it in a private browsing window.
+  Failing that check is the most common rejection on this requirement.
+
+The four pages are written and live in this repo:
+  docs/legal/privacy-policy.html
+  docs/legal/terms-of-service.html
+  docs/legal/support.html
+  docs/legal/delete-account.html
+
+TO HOST THEM FREE WITH GITHUB PAGES:
+  1. Push this repo to GitHub.
+  2. Settings > Pages > Source: deploy from branch, /docs folder.
+  3. URLs become https://<username>.github.io/<repo>/legal/<page>.html
+  4. Replace every YOUR-DOMAIN here AND fill in src/lib/legal.ts:
+       PRIVACY_POLICY_URL, TERMS_URL, SUPPORT_URL, ACCOUNT_DELETION_URL
+     They are all still example.com placeholders. The app links to them.
+  5. The Play listing URL must be byte-identical to PRIVACY_POLICY_URL.
+
+
+===============================================================================
+SECTION 6 — DATA SAFETY
+Full version with per-claim code citations: docs/play-store/data-safety.md
+===============================================================================
+
+OPENING QUESTIONS
+  Does the app collect or share user data?       YES
+  Is all data encrypted in transit?              YES
+  Can users request data deletion?               YES (in-app AND web URL)
+
+  Encryption justification: every call is HTTPS/WSS. Supabase is HTTPS-only.
+  Call media is WebRTC, which is DTLS-SRTP encrypted by mandate. There is no
+  cleartext endpoint in the app.
+
+  "Shared" means transferred to a THIRD PARTY. Supabase, LiveKit and Expo are
+  service providers acting on our instructions, which Google's own guidance
+  says is not sharing. So everything below is COLLECTED: YES, SHARED: NO.
+
+PERSONAL INFO
+  Name              Collected. Optional. App functionality.
+  User IDs          Collected. Required. App functionality + account management.
+                    (The username is the sign-in identifier and is public.)
+  Email address     Collected. Optional. App functionality.
+                    (A contact detail, never a credential, never verified.
+                     Also returned by "Continue with Google".)
+  Phone number      Collected. Optional. App functionality.
+  Other personal info  Collected. Optional. App functionality.
+                    *** DO NOT OMIT THIS ONE. *** A tracked child's label on a
+                    school-vehicle run ("Aarav — Grade 3"), and an enrollee name
+                    on a membership taken out for someone else. Entered by an
+                    adult about another person. It is the answer most likely to
+                    be judged inaccurate if left out.
+
+  NOT collected: address, race/ethnicity, political or religious beliefs,
+  sexual orientation.
+
+FINANCIAL INFO — NOTHING. No payment instrument ever enters the app. There is
+  no gateway; money settles in the real world and a business marks the bill
+  paid by hand. Orders and bills are declared under App activity instead.
+
+LOCATION
+  Approximate location  Collected. Optional. App functionality.
+  Precise location      Collected. Optional. App functionality.
+                        Two uses, described separately in SECTION 8:
+                        (a) foreground — nearby search and distance sorting;
+                        (b) background — ONLY a driver who switched on live
+                            sharing for a shift.
+  Retention note: one row per driver per business holds the LATEST position
+  only, replaced on each update. No trail, no history.
+
+PHOTOS AND VIDEOS
+  Photos   Collected. Optional. App functionality. (Item photos and business
+           display pictures — public once on a listing.)
+  Videos   NOT collected. The showcase stores a LINK to a video hosted
+           elsewhere; the app never uploads a video file.
+
+AUDIO
+  Voice or sound recordings   Collected. Optional. App functionality.
+  *** TICK "PROCESSED EPHEMERALLY". *** Call audio is streamed live and is
+  never recorded, stored or written anywhere. The calls table holds metadata
+  only. This is the distinction between a calling app and a recording app.
+
+MESSAGES
+  Other in-app messages   Collected. Optional. App functionality.
+  (Customer chat, business-to-business chat, and the PUBLIC question/offer
+   threads on stall items.)
+  NOT collected: emails, SMS/MMS.
+
+APP ACTIVITY
+  Other user-generated content   Collected. (Listings, menus, reviews.)
+  Other actions                  Collected. (Orders, bookings, bills,
+                                 memberships and payments.)
+  NOT collected: app interactions/analytics, search history, installed apps,
+  browsing history. THERE IS NO ANALYTICS SDK IN THE PROJECT — verified against
+  package.json: no Firebase Analytics, Sentry, Segment, Amplitude, Mixpanel or
+  Facebook SDK.
+
+DEVICE OR OTHER IDS
+  Device or other IDs   Collected. Optional. App functionality.
+  (1) Push token — used solely to ring incoming calls and deliver alerts.
+  (2) expo-updates install ID — over-the-air update checks.
+
+  *** ADVERTISING ID: NO. *** The app does not read the GAID, has no ad SDK,
+  and does not track users across apps or sites. The "Sponsored" cards are
+  local businesses paying to be featured inside One Place itself; impression
+  and tap counts are reported to that business only, never used for profiling.
+
+DATA HANDLING
+  Encrypted in transit?              Yes
+  Users can request deletion?        Yes
+  Collection required to use app?    NO — browsing, search, the map and
+                                     listings all work signed out.
+  Families policy?                   NO — target audience is 18+.
+
+
+===============================================================================
+SECTION 7 — ACCOUNT DELETION  (App content > Data safety)
+Full version: docs/play-store/account-deletion.md
+===============================================================================
+
+Play requires BOTH routes. Both exist.
+
+  IN-APP    Account tab > "Delete my account" > type your username to confirm.
+            Immediate and irreversible. src/app/delete-account.tsx
+  WEB URL   https://YOUR-DOMAIN/legal/delete-account.html
+            Must load with no login.
+
+  Deletes all data?  Answer ALL DATA, and rely on the disclosed retention.
+  Play accepts retained data with a stated legitimate reason (another party's
+  records, accounting). Answering "some data" invites a question you would
+  answer with the same paragraphs anyway.
+
+WHAT ACTUALLY HAPPENS (supabase/migrations/0019_account_deletion.sql):
+  DELETED     sign-in, phone, email, saved places, push tokens, location
+              shares, own alerts, tracked items (they carry a child's name),
+              customer chats both sides, and any listing nobody has used.
+  ANONYMISED  orders, bills, bookings, memberships (the business's financial
+              records), reviews (a rating is earned from a verified
+              transaction), public stall threads. Name becomes "Deleted user".
+  BLOCKED     A listing with staff, orders, bills, members, reviews, chats,
+              calls, tracked items or an ad campaign stops the deletion until
+              it is transferred or taken down. The app names each one.
+
+  Deployed: edge function "delete-account" is ACTIVE on the project.
+
+
+===============================================================================
+SECTION 8 — SENSITIVE PERMISSIONS
+Full paste-ready text: docs/play-store/permission-declarations.md
+===============================================================================
+
+ACCESS_BACKGROUND_LOCATION — the one that decides your timeline.
+  Needs: the justification text, a demo video, AND a prominent in-app
+  disclosure shown before the OS prompt. All three exist.
+  The disclosure is src/features/fleet/BackgroundLocationDisclosure.tsx, shown
+  by startBackgroundShare() BEFORE requestBackgroundPermissionsAsync().
+  The full justification paragraph is in permission-declarations.md SECTION 1 —
+  paste it verbatim, and make sure the wording matches what the video shows.
+
+  DEMO VIDEO: shot-by-shot script in docs/play-store/demo-video-script.md.
+  2-4 minutes, unlisted YouTube, real device, portrait. It must show the
+  disclosure BEFORE the system dialog with NO CUT between them.
+
+USE_FULL_SCREEN_INTENT
+  Declared in modules/call-notification/.../AndroidManifest.xml:11. On Android
+  14+ granted at install only to calling/alarm apps. Justification in
+  permission-declarations.md SECTION 2.
+
+SYSTEM_ALERT_WINDOW
+  NOT in app.json — it comes from @config-plugins/react-native-webrtc. The
+  duplicate app.json entry was removed on 2026-08-13. Answer ready in
+  permission-declarations.md SECTION 3 if challenged.
+
+RECORD_AUDIO   In-app voice calls only, requested when the first call starts.
+CAMERA         QR scanning and photographing an item to sell.
+FOREGROUND_SERVICE_LOCATION   Declare the service type as "location".
+
+
+===============================================================================
+SECTION 9 — CONTENT RATING AND OTHER DECLARATIONS
+===============================================================================
+
+CONTENT RATING QUESTIONNAIRE — expect PEGI 3 / Everyone.
+  User-generated content?          YES
+  User-to-user communication?      YES  (chat, calls, reviews, public threads)
+  Can users share location?        YES  (driver live sharing)
+  Violence / sexual / profanity / horror / gambling / drugs / medical?   NO
+  Answering the first three honestly is mandatory — getting them wrong is a
+  policy violation, not a mistake.
+
+TARGET AUDIENCE          18 and over
+ADS                      NO — no third-party ad SDK
+IN-APP PURCHASES         NO — no gateway, money settles off-app
+GOVERNMENT APP           No
+NEWS APP                 No
+COVID-19 APP             No
+FINANCIAL FEATURES       No
+
+
+===============================================================================
+SECTION 10 — VERSION AND BUILD
+===============================================================================
+
+VERSION        1.0.0        (app.json -> expo.version)
+VERSION CODE   automatic    (eas.json: autoIncrement true,
+                             cli.appVersionSource "remote")
+FORMAT         .aab — Android App Bundle. eas.json production profile already
+               sets buildType "app-bundle".
+MIN SDK        whatever Expo SDK 57 sets — do not override
+
+BUILD
+  eas build --platform android --profile production
+
+*** BACK UP THE KEYSTORE THE DAY YOU CREATE IT ***
+  eas credentials  ->  Android  ->  production  ->  Keystore  ->  Download
+  Store the .jks and its passwords in a password manager AND offline.
+  If you lose this key you can NEVER update this app again — not with a new
+  key, not with a support ticket. You would have to publish a new listing under
+  a new package name and lose every install and review.
+  Also ACCEPT Play App Signing when offered on first upload. Google then holds
+  the real signing key and yours becomes only an upload key, which Google CAN
+  reset. It is the only insurance available.
+
+
+===============================================================================
+SECTION 11 — TESTING TRACKS  ** THE 14-DAY WALL **
+===============================================================================
+
+INTERNAL TESTING — instant, no review, up to 100 testers. Always first.
+  Test on a real device:
+    - sign up, sign in, Continue with Google
+    - location prompt, nearby businesses load
+    - place an order end to end, receive the bill
+    - chat message + notification
+    - VOICE CALL RINGS WITH THE APP CLOSED  (the FCM path)
+    - background location: disclosure > permission > vehicle moves while locked
+    - photo upload on a stall item
+    - DELETE AN ACCOUNT and verify (account-deletion.md SECTION 7)
+    - Privacy Policy link opens the hosted page
+    - Dev Tools is NOT visible anywhere
+
+CLOSED TESTING — the scheduling item nobody expects.
+  A PERSONAL developer account must run a closed test with roughly 12 testers
+  for 14 CONTINUOUS days before it can apply for production access.
+
+  *** VERIFY THE CURRENT NUMBERS IN YOUR OWN CONSOLE — Google has changed them
+      more than once (it was 20 for a long stretch). Your console shows the
+      rule that applies to you. ***
+
+  - 12 real people with Google accounts who accept the invite AND keep the app
+    installed. Someone opting out resets their contribution.
+  - The 14 days are continuous. A gap restarts the clock.
+  - START IT AS EARLY AS POSSIBLE. Everything else can be done while it runs.
+
+PRODUCTION — after the 14 days, an "Apply for production" button appears.
+  Use a STAGED ROLLOUT: 20% first, ramp over a few days.
+
+REVIEW TIMES
+  Internal testing            minutes, no review
+  First closed-test review    hours to 3 days
+  First production review     3-7 days, sometimes 2+ weeks
+  Later updates               hours to 2 days
+  A new developer account + background location is the slowest combination Play
+  has. Assume two weeks. Do not schedule a launch date against it.
+
+
+===============================================================================
+SECTION 12 — SUBMISSION SEQUENCE
+===============================================================================
+
+   1. Register the Play developer account ($25 once). ID verification takes
+      hours to days. START HERE — it gates everything.
+   2. Fix BLOCKER 1 (report/block for UGC). Code work, not optional.
+   3. Replace the app icon (BLOCKER 2).
+   4. Work through docs/play-store/production-setup.md — rotate the super-admin
+      password, clear demo data, deal with the ten test accounts, check auth
+      settings, run the security advisors.
+   5. Host docs/legal/, confirm all four URLs load in a private window, and
+      fill them into src/lib/legal.ts.
+   6. npx tsc --noEmit && npx expo export --platform web   (both exit 0)
+   7. eas build --platform android --profile production
+   8. BACK UP THE KEYSTORE.
+   9. Upload to INTERNAL testing. Run the whole SECTION 11 checklist on a real
+      phone. Fix, rebuild, repeat until clean.
+  10. Capture the six screenshots (screenshot/README.md) and make the feature
+      graphic.
+  11. Record the background-location demo video (demo-video-script.md).
+  12. Fill in every console section from this file.
+  13. Start CLOSED testing. Wait 14 days.
+  14. Apply for production. Staged rollout.
+
+
+===============================================================================
+SECTION 13 — BLOCKERS. DO NOT SUBMIT UNTIL THESE ARE RESOLVED.
+===============================================================================
+
+BLOCKER 1 — NO REPORT OR BLOCK FOR USER-GENERATED CONTENT
+  Google Play "User Generated Content" policy. This is the Android twin of the
+  Apple 1.2 blocker in ios_description.txt, and it applies just as much — Play
+  requires apps hosting UGC to provide an in-app way to REPORT objectionable
+  content and to BLOCK abusive users, plus a route for you to act on reports.
+
+  Current state: a codebase search for report / block / moderation tooling
+  returns NOTHING. The app has published contact details and no more.
+
+  Affected surfaces: reviews, customer chat, business-to-business chat, the
+  public question-and-offer threads on stall items, business listings, and
+  user-uploaded stall photos.
+
+  Fix: a report action on reviews, messages, listings and stall items; a
+  block-user capability; and somewhere for you to see and action reports (the
+  admin console is the obvious home). Not yet written as a prompt — add it to
+  prompt.txt as P12.
+
+  Play enforcement is less immediate than Apple's, but this surfaces during the
+  content rating questionnaire, where you must answer YES to user-generated
+  content. Shipping without it is a live policy violation from day one.
+
+BLOCKER 2 — APP ICON APPEARS TO USE THIRD-PARTY IP
+  Google Play Intellectual Property policy.
+  The icon pairs "OP" with what appears to be Luffy's straw hat from One Piece,
+  a Shueisha/Toei property. (The linked Supabase project is even named "One
+  Piece".) Play removes apps for IP infringement on rights-holder complaint,
+  and anime rights holders are active in this space. Commission an original
+  mark before submitting — far cheaper than a takedown after launch.
+
+NOT A BLOCKER, BUT KNOW ABOUT IT
+  - NO PASSWORD RESET EXISTS. Login is username + password, email is an
+    unverified contact detail, and nothing was built for recovery. A user who
+    forgets their password is locked out permanently. Google sign-in accounts
+    are unaffected. Not a Play issue; a support issue from day one.
+  - A REVIEWER OUTSIDE INDIA SEES AN EMPTY APP. This is a location-based
+    directory with listings only in Indore. Play reviewers are less likely than
+    Apple's to fail you for it, but consider seeding a few listings near
+    wherever review happens, or make the empty state explain itself.
+  - iOS is dropped. app.json still carries ios.bundleIdentifier and
+    UIBackgroundModes. Harmless — leave them.
+
+
+===============================================================================
+SECTION 14 — RELATED FILES IN THIS REPO
+===============================================================================
+
+  docs/play-store/data-safety.md              Every Data Safety answer, cited
+  docs/play-store/permission-declarations.md  Paste-ready permission text
+  docs/play-store/demo-video-script.md        Background-location video script
+  docs/play-store/store-listing.md            Copy + exact asset specs
+  docs/play-store/release-checklist.md        Clean repo -> live, with commands
+  docs/play-store/production-setup.md         Backend cleanup before launch
+  docs/play-store/account-deletion.md         Deletion semantics + console text
+  docs/play-store/background-location-disclosure.md  The exact disclosure text
+  docs/play-store/play-icon-512.png           READY TO UPLOAD
+  screenshot/README.md                        The six shots to capture, and how
+
+  docs/legal/privacy-policy.html              Privacy policy
+  docs/legal/terms-of-service.html            Terms
+  docs/legal/support.html                     Support + FAQ
+  docs/legal/delete-account.html              Public deletion request page
+  src/lib/legal.ts                            The four URLs — still placeholders
+  app.json                                    Icon, splash, permissions, package
+  eas.json                                    Build and submit profiles
+  supabase/migrations/0019_account_deletion.sql   Deletion rules — APPLIED
+  supabase/functions/delete-account/          Edge function — DEPLOYED
+
+===============================================================================

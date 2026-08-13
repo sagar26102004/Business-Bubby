@@ -63,6 +63,24 @@ interface Check {
   fix?: string;
 }
 
+/**
+ * Half of this screen asks questions only Android can answer.
+ *
+ * Notification channels, the full-screen-intent switch, "display over other
+ * apps", battery-optimisation exemption and the native call screen itself are
+ * all Android concepts, and every one of them reads as a NO on iOS — a channel
+ * lookup returns null, the native module isn't in the binary, and the three
+ * permission probes return null rather than false. Left alone, an iOS build
+ * shows two red rows it can never fix and two green ones that were never
+ * checked, which is worse than showing nothing: the point of this card is that
+ * a green row means something.
+ *
+ * So the Android-only rows and the buttons that drive them are HIDDEN on iOS,
+ * leaving the four links in the chain that genuinely apply there — permission,
+ * the Answer/Decline category, the push address, and whether the server has it.
+ */
+const IS_ANDROID = Platform.OS === 'android';
+
 /** How long the test call hangs around before clearing itself. */
 const TEST_RING_MS = 15_000;
 
@@ -106,14 +124,20 @@ export function CallAlertsCheck() {
           id: 'permission',
           label: 'Notifications allowed',
           ok: permission?.granted === true,
-          fix: 'Android only asks once. Turn One Place’s notifications back on in system Settings.',
+          // Both systems ask exactly once and never again; only the name of the
+          // place you have to go to change it differs.
+          fix: `${IS_ANDROID ? 'Android' : 'iOS'} only asks once. Turn One Place’s notifications back on in system Settings.`,
         },
-        {
-          id: 'channel',
-          label: 'Ring channel installed',
-          ok: !!channel,
-          fix: 'Created when you sign in. Sign out and back in, or reinstall.',
-        },
+        ...(IS_ANDROID
+          ? [
+              {
+                id: 'channel' as const,
+                label: 'Ring channel installed',
+                ok: !!channel,
+                fix: 'Created when you sign in. Sign out and back in, or reinstall.',
+              },
+            ]
+          : []),
         {
           id: 'category',
           label: 'Answer / Decline buttons',
@@ -146,25 +170,29 @@ export function CallAlertsCheck() {
             getLastRegistration() ??
             'This phone has an address but the server has not stored it against your account. Make sure you are SIGNED IN (not browsing as a guest), then reopen this screen.',
         },
-        {
-          id: 'module',
-          label: 'Call screen in this build',
-          ok: isCallNotificationAvailable(),
-          fix: 'This build has no call screen; calls fall back to a notification with buttons.',
-        },
-        {
-          id: 'callScreen',
-          // Either permission is enough — they are two routes to the same place.
-          label: 'Calls can take over the screen',
-          ok: fullScreen !== false || overlay === true,
-          fix: 'Calls will ring as a notification instead of a full call screen. Granting either switch below fixes it.',
-        },
-        {
-          id: 'battery',
-          label: 'Allowed to wake for calls',
-          ok: battery !== false,
-          fix: 'Battery saving can stop calls reaching this phone at all while the app is closed — nothing else here can help if it does.',
-        },
+        ...(IS_ANDROID
+          ? [
+              {
+                id: 'module' as const,
+                label: 'Call screen in this build',
+                ok: isCallNotificationAvailable(),
+                fix: 'This build has no call screen; calls fall back to a notification with buttons.',
+              },
+              {
+                id: 'callScreen' as const,
+                // Either permission is enough — two routes to the same place.
+                label: 'Calls can take over the screen',
+                ok: fullScreen !== false || overlay === true,
+                fix: 'Calls will ring as a notification instead of a full call screen. Granting either switch below fixes it.',
+              },
+              {
+                id: 'battery' as const,
+                label: 'Allowed to wake for calls',
+                ok: battery !== false,
+                fix: 'Battery saving can stop calls reaching this phone at all while the app is closed — nothing else here can help if it does.',
+              },
+            ]
+          : []),
       ];
       setChecks(next);
       setLog(entries);
@@ -320,7 +348,13 @@ export function CallAlertsCheck() {
       <Text weight="bold">📞 Call alerts on this phone</Text>
       <Text variant="caption" tone="muted" style={styles.body}>
         {failing.length === 0
-          ? 'Everything needed to ring while the app is closed is in place.'
+          ? // Only Android can honestly claim the closed-app case: iPhones ring
+            // through the app itself, so a locked or swiped-away app stays
+            // quiet until CallKit exists. Saying otherwise here would be the
+            // same false confidence the hidden rows used to give.
+            IS_ANDROID
+            ? 'Everything needed to ring while the app is closed is in place.'
+            : 'Everything this iPhone can check is in place. Calls ring while One Place is open — iPhones need Apple’s call system to ring a closed app, which this build does not have yet.'
           : `${failing.length} thing${failing.length === 1 ? '' : 's'} would stop this phone ringing.`}
       </Text>
 
@@ -366,19 +400,28 @@ export function CallAlertsCheck() {
         />
       ) : null}
 
-      <Button
-        title={testing ? 'Ringing…' : 'Ring this phone now'}
-        onPress={() => void testRing(false)}
-        disabled={testing}
-        style={styles.button}
-      />
-      <Button
-        title="Show the call screen"
-        variant="secondary"
-        onPress={() => void testRing(true)}
-        disabled={testing}
-        style={styles.button}
-      />
+      {/*
+        Both test rings go through the native module, so on iOS they would
+        answer "nothing could be posted" every time — a machine-generated
+        false alarm about a feature that was never there. Android only.
+      */}
+      {IS_ANDROID ? (
+        <>
+          <Button
+            title={testing ? 'Ringing…' : 'Ring this phone now'}
+            onPress={() => void testRing(false)}
+            disabled={testing}
+            style={styles.button}
+          />
+          <Button
+            title="Show the call screen"
+            variant="secondary"
+            onPress={() => void testRing(true)}
+            disabled={testing}
+            style={styles.button}
+          />
+        </>
+      ) : null}
       {testResult ? (
         <Text variant="caption" tone="muted" style={[styles.body, { color: colors.textMuted }]}>
           {testResult}
@@ -424,16 +467,22 @@ export function CallAlertsCheck() {
         quiet — it is written by the push handler while the app is CLOSED, which
         is the one situation with no other way to see anything at all. An empty
         log after a missed call is itself the answer: the push never arrived.
+
+        Written by the Kotlin push handler, so on iOS it is permanently empty —
+        and its empty state accuses the push of never arriving, which on an
+        iPhone would be a lie. Android only.
       */}
-      <Button
-        title={showLog ? 'Hide call history' : 'What happened to my calls?'}
-        variant="secondary"
-        onPress={() => {
-          setShowLog((s) => !s);
-          run();
-        }}
-        style={styles.button}
-      />
+      {IS_ANDROID ? (
+        <Button
+          title={showLog ? 'Hide call history' : 'What happened to my calls?'}
+          variant="secondary"
+          onPress={() => {
+            setShowLog((s) => !s);
+            run();
+          }}
+          style={styles.button}
+        />
+      ) : null}
       {showLog ? (
         <View style={styles.log}>
           {log.length === 0 ? (

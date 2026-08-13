@@ -63,16 +63,40 @@ export interface ShareResult {
   ok: boolean;
   /** Background updates are on too (the vehicle keeps moving when closed). */
   background?: boolean;
-  /** Why it couldn't fully start — surfaced to the driver. */
-  reason?: 'web' | 'denied' | 'error';
+  /**
+   * Why it couldn't fully start — surfaced to the driver. `declined` means the
+   * driver said no to OUR disclosure, so the OS was never asked; it is kept
+   * apart from `denied` (the OS dialog itself refused) because nagging someone
+   * about a Settings screen they deliberately avoided is exactly the pattern
+   * the disclosure requirement exists to stop.
+   */
+  reason?: 'web' | 'denied' | 'declined' | 'error';
 }
 
 /**
  * Begin sharing the driver's live location. Requests foreground permission
  * first (needed even to read GPS), then the always-on background permission,
  * and starts OS-managed background updates when granted. Safe to call twice.
+ *
+ * ⚠️ `confirmBackground` IS THE GOOGLE PLAY PROMINENT DISCLOSURE, and it is a
+ * required argument on purpose: Play's Location Permissions policy demands an
+ * in-app explanation BEFORE the system background-location dialog, and a
+ * required parameter is the only version of that rule a future caller cannot
+ * forget — leave it out and the build fails to typecheck rather than failing
+ * review weeks later. Pass `confirm` from `useBackgroundLocationDisclosure`
+ * (features/fleet/BackgroundLocationDisclosure.tsx); pass `async () => false`
+ * only if you deliberately want foreground-only sharing.
+ *
+ * It is awaited at precisely one point — after foreground permission is granted
+ * and immediately before the background request — so the disclosure never
+ * appears for plain foreground GPS, which the whole app uses for distance
+ * sorting and which needs no disclosure at all. It is also skipped when the
+ * permission has already been granted on a previous shift, since there is no
+ * upcoming OS prompt to disclose.
  */
-export async function startBackgroundShare(): Promise<ShareResult> {
+export async function startBackgroundShare(
+  confirmBackground: () => Promise<boolean>,
+): Promise<ShareResult> {
   if (Platform.OS === 'web') return { ok: true, background: false, reason: 'web' };
   try {
     const fg = await Location.requestForegroundPermissionsAsync();
@@ -80,10 +104,19 @@ export async function startBackgroundShare(): Promise<ShareResult> {
 
     // Expo Go can't run background updates — share foreground-only and skip the
     // background APIs so expo-location doesn't warn about the unsupported task.
+    // Nothing is disclosed here either: we are not about to ask for anything.
     if (isExpoGo) return { ok: true, background: false };
 
-    const bg = await Location.requestBackgroundPermissionsAsync();
-    if (bg.status === 'granted') {
+    let bg = await Location.getBackgroundPermissionsAsync().catch(() => null);
+    if (bg?.status !== 'granted') {
+      // A disclosure that throws must not take foreground sharing down with it,
+      // and must not be read as consent — so a failure here is a quiet "no".
+      const consented = await confirmBackground().catch(() => false);
+      if (!consented) return { ok: true, background: false, reason: 'declined' };
+      bg = await Location.requestBackgroundPermissionsAsync();
+    }
+
+    if (bg?.status === 'granted') {
       const already = await Location.hasStartedLocationUpdatesAsync(DRIVER_LOCATION_TASK).catch(
         () => false,
       );

@@ -1,0 +1,516 @@
+===============================================================================
+ONE PLACE — APP STORE SUBMISSION REFERENCE
+Everything needed to fill in App Store Connect, in the order the forms ask.
+Prepared: 2026-08-11
+===============================================================================
+
+READ THIS FIRST
+---------------
+Five things below will get this app REJECTED. They are listed in full in
+SECTION 12. In short:
+
+  1. No in-app account deletion        -> Apple Guideline 5.1.1(v). Automatic.
+  2. No report / block for user content -> Apple Guideline 1.2. Automatic.
+  3. Seed data is Indore-only           -> reviewer in California sees an empty
+                                            app -> Guideline 2.1.
+  4. No Apple Developer account yet     -> $99/yr, ID verification takes days.
+  5. App icon uses One Piece IP         -> Guideline 5.2.
+
+Items 1 and 2 are code work and are not optional. Do not submit before they
+are done.
+
+Everything else in this file is ready to copy and paste.
+
+
+===============================================================================
+SECTION 1 — APP INFORMATION
+===============================================================================
+
+APP NAME (30 char max)  ............  9 / 30
+One Place
+
+SUBTITLE (30 char max)  ............ 28 / 30
+Local shops, services & more
+
+BUNDLE ID
+com.localo.app
+  NOTE: intentionally kept from the old "Localo" working name. It is invisible
+  to users, and it must match the bundleIdentifier in app.json. It is permanent
+  once the app is published.
+
+SKU (any internal string, never shown publicly)
+oneplace-in-001
+
+PRIMARY LANGUAGE
+English (India)  — or English (U.K.); the copy uses British spelling.
+
+PRIMARY CATEGORY    Shopping
+SECONDARY CATEGORY  Business
+
+PRICE               Free
+IN-APP PURCHASES    None
+
+AVAILABILITY
+India only for launch. Restricting to India is strongly recommended — the app
+is a location-based directory with no listings outside India, so it will look
+broken to a user anywhere else.
+
+
+===============================================================================
+SECTION 2 — PROMOTIONAL TEXT  (170 char max)
+Editable any time WITHOUT submitting a new build. Use it for announcements.
+===============================================================================
+149 / 170
+
+Find the shops, services, rentals and sellers around you — and list your own in minutes. Order, book, chat and call local businesses, all in one app.
+
+
+===============================================================================
+SECTION 3 — KEYWORDS  (100 char max)
+===============================================================================
+97 / 100 — 13 terms, comma-separated, no spaces, all singular.
+
+business,directory,nearby,store,vendor,marketplace,seller,stall,rental,listing,repair,tiffin,cafe
+
+WHY THESE:
+  - Apple indexes APP NAME + SUBTITLE + KEYWORDS together. Repeating a word
+    from any of them wastes characters, so "one", "place", "local", "shop" and
+    "service" are deliberately absent — they are already covered by the name
+    and subtitle above.
+  - All singular. Apple matches plurals automatically; typing both wastes space.
+  - No spaces after commas. A space costs a character and buys nothing.
+  - "tiffin" is a deliberate India-market term with low competition.
+  - If you change the SUBTITLE, revisit this list — the overlap rule breaks.
+
+
+===============================================================================
+SECTION 4 — DESCRIPTION  (4000 char max)
+===============================================================================
+3449 / 4000
+
+One Place brings your whole neighbourhood into a single app. Find the shops, services, rentals and everyday sellers around you — then order, book, message or call them directly.
+
+BROWSE WHAT IS ACTUALLY NEAR YOU
+Every listing is sorted by how far it is from where you are standing. Filter by what you need — food, health, home services, rentals, electronics and more — and see the distance to each place before you tap.
+
+DEALS AROUND THE CORNER
+Live offers from businesses near you, right on the home screen. No coupon hunting.
+
+SEARCH THAT UNDERSTANDS SHOPS
+Search by business name, by what they sell, or by the exact dish, product or service you want. Suggestions appear as you type.
+
+SEE IT ON A MAP
+Open the map to see everything plotted around you, with distance rings, and tap any marker to jump straight to that business.
+
+ORDER, BOOK AND ENQUIRE
+Send an order for products or services and get a real answer back — accepted, or a proposal with anything unavailable removed and the total adjusted. Book appointments with service providers. Eating in? Your order becomes a running tab you can add rounds to until you ask for the bill.
+
+TALK WITHOUT GIVING OUT YOUR NUMBER
+Message any business in the app, or place a voice call over the internet. No phone number is exchanged in either direction.
+
+RATINGS YOU CAN TRUST
+Only verified customers can rate a business — someone who actually ordered, booked or was billed. Low ratings must include a written reason. No paid reviews, no rating from someone who never walked in.
+
+SELL YOUR OWN THINGS
+Got a phone, a bike or a bookshelf to sell? Open a stall. Everything you list lives together under your name instead of scattering into separate listings. Add photos from your camera or gallery, set a price, and answer questions on a public thread where the next buyer can read what you already told the last one.
+
+RENT THINGS OUT
+List a flat, a car, a bike or furniture with a clear per day or per month price.
+
+RUN YOUR BUSINESS FROM YOUR PHONE
+Listing is free and takes a few minutes — one question per screen, no forms to wrestle with. Then manage it all in one workspace:
+• Take and answer orders, and issue bills
+• Reply to customer messages, and pick who on your team can
+• Accept or decline appointment bookings
+• Keep a customer list built automatically from everyone you have dealt with
+• Run recurring plans — gym memberships, tuition batches, a school bus seat
+• Add managers and staff with the access you choose
+• Promote an offer to people nearby
+• Show off past work in a photo and video showcase
+• Print a QR code customers can scan to reach your page
+
+LIVE VEHICLE TRACKING
+Running a school van, a delivery bike or a goods vehicle? Drivers switch on live sharing for a shift, and the owner — plus the parents or customers whose children or goods are on board — can watch it move on the map. It is off by default and the driver controls it.
+
+LOOK AROUND WITHOUT AN ACCOUNT
+Browse everything, search and open the map without signing up. Create an account only when you want to order, message, review or list something.
+
+NO PAYMENTS, NO SURPRISES
+One Place does not take payments or commission. You deal with the business directly, exactly as you would in person.
+
+BUILT FOR INDIAN NEIGHBOURHOODS
+Prices in rupees, made for the way local markets actually work — the tailor, the tiffin service, the tyre shop and the person two streets away selling a second-hand fridge, all in one place.
+
+
+===============================================================================
+SECTION 5 — COPYRIGHT
+===============================================================================
+
+2026 Sagar Rathore
+
+  MUST match the legal name on your Apple Developer account EXACTLY. You are
+  registering as an individual (no company), so this is your legal name as it
+  appears on the ID you verify with. Correct it here if it differs.
+
+
+===============================================================================
+SECTION 6 — URLS
+===============================================================================
+
+PRIVACY POLICY URL   (REQUIRED)
+  https://YOUR-DOMAIN/legal/privacy-policy.html
+
+SUPPORT URL          (REQUIRED)
+  https://YOUR-DOMAIN/legal/support.html
+
+MARKETING URL        (optional — leave blank if you have no site)
+  https://YOUR-DOMAIN/
+
+The three pages are written and live in this repo at:
+  docs/legal/privacy-policy.html
+  docs/legal/support.html
+  docs/legal/terms-of-service.html
+
+TO HOST THEM FREE WITH GITHUB PAGES:
+  1. Push this repo to GitHub.
+  2. Settings > Pages > Source: deploy from branch, /docs folder.
+  3. Your URLs become
+       https://<username>.github.io/<repo>/legal/privacy-policy.html
+  4. Replace every YOUR-DOMAIN in this file and in the review notes.
+
+Apple checks these URLs load. A dead link is a rejection.
+
+
+===============================================================================
+SECTION 7 — APP PRIVACY  ("nutrition labels")
+Answer these in App Store Connect > App Privacy. Wrong answers are a policy
+violation, so each line below cites what in the code justifies it.
+===============================================================================
+
+DOES THIS APP COLLECT DATA?  Yes
+
+--- CONTACT INFO ---
+  Name           Collected. Linked to user. Purpose: App Functionality.
+                 Not used for tracking.
+  Phone Number   Collected. Linked to user. Purpose: App Functionality.
+                 (It is the sign-in identifier — src/data/supabase/auth.ts)
+  Email Address  Collected. Linked to user. Purpose: App Functionality.
+
+--- LOCATION ---
+  Precise Location  Collected. Linked to user. Purpose: App Functionality.
+                    Not used for tracking.
+                    (Nearby search + distance sort, and optional driver live
+                     sharing — src/lib/backgroundLocation.ts)
+
+--- USER CONTENT ---
+  Photos or Videos   Collected. Linked to user. Purpose: App Functionality.
+                     (Listing images — src/features/media/PhotosField.tsx)
+  Other User Content Collected. Linked to user. Purpose: App Functionality.
+                     (Messages, reviews, listings, public item threads)
+
+--- IDENTIFIERS ---
+  User ID   Collected. Linked to user. Purpose: App Functionality.
+
+--- NOT COLLECTED — answer NO to all of these ---
+  Health & Fitness, Financial Info, Payment Info, Credit Info, Contacts,
+  Browsing History, Search History, Purchases, Usage Data, Diagnostics,
+  Sensitive Info, Advertising Data, Device ID / IDFA.
+
+--- TRACKING ---
+  Is data used to track you?   NO.
+  There is no advertising SDK, no analytics SDK and no IDFA in this app.
+  The "Sponsored" cards are offers written by local businesses and shown by
+  distance only; nothing about the viewer is shared with them.
+  => No App Tracking Transparency prompt is required. Do NOT add one.
+
+--- MICROPHONE / CALL AUDIO — the one judgement call ---
+  Declare as NOT collected. Voice call audio is relayed live by LiveKit and is
+  never recorded, stored or transmitted to us. Apple's definition of "collect"
+  is transmission off-device beyond what is needed to service the request, and
+  real-time unrecorded call audio does not meet it.
+  If you ever add call recording, this answer must change immediately.
+
+
+===============================================================================
+SECTION 8 — AGE RATING
+===============================================================================
+
+Expect 12+ / 13+ or higher. The rating is driven by the questionnaire, and the
+answer that matters is:
+
+  "Does your app contain user-generated content?"   YES
+
+The app carries reviews, one-to-one chat, business-to-business chat, public
+question-and-offer threads on stall items, and user-uploaded photos.
+
+Apple will then ask whether you have moderation controls. See SECTION 12,
+blocker 2 — you currently do not, and answering honestly without them leads to
+rejection under Guideline 1.2 rather than merely a higher age band.
+
+Other questionnaire answers, all NO:
+  Violence, sexual content, profanity, horror, gambling, contests,
+  alcohol/tobacco/drugs, medical/treatment info, unrestricted web access.
+
+
+===============================================================================
+SECTION 9 — APP REVIEW INFORMATION
+===============================================================================
+
+SIGN-IN REQUIRED?  Yes — tick the box and supply the demo account below.
+  (Browsing works without it, but reviewers need an account to see ordering,
+   messaging and the business workspace. Supplying one avoids a "cannot
+   evaluate full functionality" rejection.)
+
+DEMO ACCOUNT
+  User name:  9812340001
+  Password:   localo123
+
+  IMPORTANT: the sign-in field takes a PHONE NUMBER, not an email address.
+  This is stated in the notes below so the reviewer is not confused.
+
+CONTACT INFORMATION
+  First name:    Sagar
+  Last name:     Rathore
+  Phone number:  <your phone, with +91 country code>
+  Email:         rathoresagar26@gmail.com
+
+  Apple uses this to contact you during review. Use a number you will answer.
+
+
+===============================================================================
+SECTION 10 — REVIEW NOTES  (paste verbatim into the Notes box)
+Replace YOUR-DOMAIN before submitting.
+===============================================================================
+
+Thank you for reviewing One Place.
+
+IMPORTANT — SET A LOCATION IN INDIA BEFORE TESTING
+One Place is a location-based local directory launching in India, and it shows
+only businesses physically near the device. On a device located outside India
+the home screen will legitimately appear empty.
+
+Please set a simulated location in Indore, India before testing:
+  Latitude 22.7196, Longitude 75.8577
+  (Simulator: Features > Location > Custom Location)
+  (Device: Xcode > Debug > Simulate Location)
+
+With that location set, the home screen, map, search and all category tabs will
+populate with our seeded businesses. Without it, the app will look empty. This
+is expected behaviour for a neighbourhood directory, not a bug.
+
+SIGN-IN IS NOT REQUIRED TO REVIEW THE APP
+Browsing, search, the map, and all business detail pages work fully as a guest.
+An account is needed only to order, message, call, review, or create a listing.
+
+TEST ACCOUNT (sign in with a PHONE NUMBER, not an email address)
+  Phone number: 9812340001
+  Password:     localo123
+
+  On the Account tab choose "Sign in". The first field takes a phone number.
+  This account is a regular customer AND owns a business, so it can be used to
+  review both the customer side and the business workspace.
+
+HOW TO REACH THE MAIN FEATURES
+  Browse         Home tab, then any category icon in the strip.
+  Map            "Map" button beside the location name on the home screen.
+  Business page  Tap any listing. Call / Chat / QR are in the top bar.
+  Ordering       Open a business, "What we offer", then the order button.
+  Selling        Explore/Stalls/My Business switcher at the top of the home
+                 screen. Stalls > "Sell something".
+  Business tools Switch to "My Business", tap the listed business.
+
+PERMISSIONS — WHY EACH IS REQUESTED
+  Location (while using)  Core function. Finds businesses near you and sorts
+                          every result by distance. The app is usable if
+                          declined, but the main list will be empty.
+  Location (background)   OPTIONAL, used by ONE feature only. If you manage a
+                          business with vehicles, a driver can switch on
+                          "Share my live location" for a shift so the owner and
+                          tracking customers see the vehicle move. It is off by
+                          default, is never enabled automatically, and shows a
+                          full explanation before the permission is requested.
+                          Reviewers will not be prompted for it during normal
+                          browsing.
+  Camera                  Scanning a business QR code, and photographing an
+                          item you are listing for sale.
+  Photo library           Adding pictures to your own listing.
+  Microphone              In-app voice calls only. Requested at the moment a
+                          call starts. Calls are never recorded.
+  Notifications           Alerting you to an incoming call or a business reply.
+
+VOICE CALLS
+Calls run over the internet using LiveKit. No phone numbers are exchanged. A
+call needs a person on the other end, so a full two-way call cannot be
+demonstrated with one device. Tapping Call on any business will show the
+pre-call screen and begin ringing, which demonstrates the flow. Please note
+that on iOS an incoming call currently rings only while the app is open;
+CallKit/PushKit integration is planned for a future release.
+
+ADVERTISING
+There is no third-party advertising SDK in this app and no ad network. Cards
+labelled "Sponsored" on the home screen are offers created by local businesses
+themselves and shown only to people nearby. No advertising identifier (IDFA) is
+collected and no App Tracking Transparency prompt is required.
+
+PAYMENTS
+The app processes no payments and contains no in-app purchases or
+subscriptions. Bills shown in the app are records only; money is settled
+directly between the customer and the business, off-app.
+
+EXTERNAL SERVICES — NO REVIEWER SETUP NEEDED
+  Supabase  Database, authentication and file storage.
+  LiveKit   Voice call audio relay.
+All credentials are already configured in the build. You do not need to create
+any account or supply any API key.
+
+ACCOUNT DELETION
+Account deletion is available in the app under Account > Delete account, and
+can also be requested at https://YOUR-DOMAIN/legal/privacy-policy.html or by
+emailing rathoresagar26@gmail.com.
+
+CONTACT
+Any question during review: rathoresagar26@gmail.com — I reply within 24 hours.
+
+  ^^ NOTE: the ACCOUNT DELETION paragraph above describes the in-app path that
+     does NOT EXIST YET. Build it first (see SECTION 12, blocker 1). If you
+     submit before then, delete the words "in the app under Account > Delete
+     account, and can also be requested" — but expect rejection, because Apple
+     requires the in-app route.
+
+
+===============================================================================
+SECTION 11 — BUILD, ASSETS AND COMPLIANCE
+===============================================================================
+
+VERSION       1.0.0        (app.json -> expo.version)
+BUILD NUMBER  handled automatically — eas.json has autoIncrement: true and
+              cli.appVersionSource: "remote"
+
+APP ICON
+  1024 x 1024, PNG, RGB, NO transparency, no rounded corners (Apple masks it).
+  Already generated and verified at:  assets/icon.png
+
+SCREENSHOTS — the part people underestimate
+  REQUIRED: iPhone 6.9" display   1290 x 2796  or  1320 x 2868  (portrait)
+  Apple scales this set down for smaller iPhones, so one set usually suffices.
+  Minimum 3 screenshots, maximum 10. No transparency. No device frames needed.
+
+  *** iPad SCREENSHOTS ARE ALSO REQUIRED ***
+  app.json sets  "ios": { "supportsTablet": true }
+  That commits you to supplying iPad screenshots (13" — 2064 x 2752 or
+  2048 x 2732) AND to the app working properly on iPad.
+  IF YOU DO NOT WANT THAT WORK: set supportsTablet to false in app.json before
+  building. That is a one-line change and removes the whole iPad requirement.
+
+  Suggested shots, in order: home with nearby listings; a business page;
+  the map; ordering; a stall grid; the business workspace.
+
+APP PREVIEW VIDEO  Optional. Skip for v1.
+
+EXPORT COMPLIANCE
+  Question: "Does your app use encryption?"
+  Answer:   Yes — but it qualifies for the standard exemption, because the only
+            encryption is HTTPS/TLS for network calls.
+  To stop App Store Connect asking on every single build, add this to app.json:
+      "ios": { "infoPlist": { "ITSAppUsesNonExemptEncryption": false } }
+  France has an additional declaration; answer it if prompted.
+
+CONTENT RIGHTS
+  "Does your app contain, show, or access third-party content?"  YES —
+  user-generated business listings. You must confirm you have the rights or
+  permission. See also SECTION 12 blocker 5 about the app icon.
+
+ROUTING APP COVERAGE FILE   Not applicable — leave blank.
+
+
+===============================================================================
+SECTION 12 — BLOCKERS. DO NOT SUBMIT UNTIL THESE ARE RESOLVED.
+===============================================================================
+
+BLOCKER 1 — NO IN-APP ACCOUNT DELETION
+  Apple Guideline 5.1.1(v). Automatic rejection.
+  Apps that let users create an account MUST let them delete it FROM INSIDE THE
+  APP. An email address or a web form is NOT sufficient for Apple (Google Play
+  does accept a web URL; Apple does not).
+  Current state: src/app/(tabs)/account.tsx offers only sign in, create account
+  and sign out. There is no deleteAccount anywhere in the codebase.
+  Fix: prompt P09 in prompt.txt.
+
+BLOCKER 2 — NO REPORT OR BLOCK FOR USER-GENERATED CONTENT
+  Apple Guideline 1.2. Automatic rejection.
+  Any app with user-generated content must provide ALL FOUR of:
+      a) a method for filtering objectionable material
+      b) a mechanism to REPORT offensive content, with timely responses
+      c) the ability to BLOCK abusive users
+      d) published contact information
+  This app has (d) only — the support page. A codebase search for report /
+  block / moderation tooling returns nothing.
+  Affected surfaces: reviews, customer chat, business-to-business chat, public
+  question-and-offer threads on stall items, business listings, stall photos.
+  Fix: not yet written as a prompt. Needs a report action on reviews, messages
+  and listings; a block-user capability; and a moderation route for you to act
+  on reports. Add it to prompt.txt as P12 before submitting.
+
+BLOCKER 3 — REVIEWER WILL SEE AN EMPTY APP
+  Apple Guideline 2.1 (App Completeness).
+  App Review operates from California. All seed data is in Indore. A location
+  based directory with nothing nearby looks like a broken or incomplete app.
+  Mitigation already applied: the location instruction is the FIRST thing in
+  the review notes, in capitals. Reviewers do sometimes skip notes.
+  Stronger fix: seed a handful of demo listings near Cupertino (37.3349,
+  -122.0090) so the app is never empty regardless of what the reviewer does.
+
+BLOCKER 4 — NO APPLE DEVELOPER ACCOUNT
+  $99/yr, and identity verification takes days to weeks. Nothing can be
+  submitted without it. Start this FIRST — it is pure waiting time and it
+  gates everything else, including the push certificates.
+
+BLOCKER 5 — APP ICON USES THIRD-PARTY IP
+  Apple Guideline 5.2 (Intellectual Property).
+  The icon pairs "OP" with Luffy's straw hat from One Piece, a Shueisha/Toei
+  property. Apple rejects for IP infringement, and rights holders in this
+  space are active. Commission an original mark before submitting; it is far
+  cheaper than a rejection and resubmission cycle.
+
+
+===============================================================================
+SECTION 13 — SUBMISSION SEQUENCE
+===============================================================================
+
+  1.  Enrol in the Apple Developer Program ($99/yr). Complete ID verification.
+      START HERE — everything below waits on it.
+  2.  Fix BLOCKER 1 (account deletion) and BLOCKER 2 (report/block).
+  3.  Replace the app icon (BLOCKER 5).
+  4.  Decide iPad: either commit to iPad screenshots and test on iPad, or set
+      supportsTablet:false in app.json.
+  5.  Host the three legal pages, confirm all three URLs load in a browser.
+      Replace every YOUR-DOMAIN in this file.
+  6.  In App Store Connect: create the app record with the bundle ID
+      com.localo.app.
+  7.  Build:            eas build --platform ios --profile production
+  8.  Upload:           eas submit --platform ios --latest
+  9.  Fill in every field from Sections 1-11 above.
+  10. Capture and upload screenshots.
+  11. Submit to TestFlight first. Install on a real iPhone and test the full
+      flow yourself — sign-in, ordering, a call, the permissions prompts.
+  12. Only then submit for App Store review.
+
+  EXPECTED REVIEW TIME: typically 24-48 hours for a first submission, but
+  first-time apps from a new developer account are scrutinised more closely.
+  Budget for at least one rejection round and do not schedule a launch date
+  against the first submission.
+
+
+===============================================================================
+SECTION 14 — RELATED FILES IN THIS REPO
+===============================================================================
+
+  docs/legal/privacy-policy.html     Privacy policy (Apple + Play compliant)
+  docs/legal/support.html            Support page with FAQ and contact
+  docs/legal/terms-of-service.html   Terms of service
+  prompt.txt                         Prompt pack for the remaining code work
+  app.json                           Icon, splash, permissions, bundle ID
+  eas.json                           Build and submit profiles
+  assets/icon.png                    1024x1024 RGB, no alpha — verified
+
+===============================================================================

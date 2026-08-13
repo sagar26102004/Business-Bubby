@@ -150,6 +150,16 @@ export interface BusinessRepository {
    * so team-membership checks follow the new owner.
    */
   reassignOwner(id: string, newOwnerId: string): Promise<Business>;
+  /**
+   * Take a listing down for good — the OWNER's call (that is exactly what the
+   * `businesses_delete` RLS policy allows, and the mock enforces the same).
+   * Everything hanging off it (team, orders, bills, chats, calls, campaigns)
+   * goes with it; in Postgres the foreign keys cascade.
+   *
+   * A super-admin who needs someone else's listing gone hands it back with
+   * `reassignOwner` first — deleting a stranger's shop is not a platform power.
+   */
+  remove(id: string, actorId: string): Promise<void>;
 }
 
 export interface EmployeeRepository {
@@ -239,12 +249,114 @@ export interface UserRepository {
   update(id: string, patch: Partial<User>): Promise<User>;
 }
 
+/**
+ * What it takes to create an account.
+ *
+ * A USERNAME and a password, and nothing else is required. Email and phone are
+ * ordinary contact details the person may add — they are not credentials, they
+ * are not verified, and nothing is ever sent to them at sign-up. `name` is the
+ * display name shown around the app; left blank it falls back to the username.
+ *
+ * This is deliberately the smallest sign-up that can work: no inbox to check,
+ * no SMS to pay for, nothing that can fail between choosing an account and
+ * having one.
+ */
 export interface SignUpInput {
-  name: string;
-  phone: string;
+  /** The login handle. Unique, lower-cased. See `assertUsername`. */
+  username: string;
+  /** Display name. Optional — falls back to the username. */
+  name?: string;
+  /** Contact detail only. Never a credential. */
+  email?: string;
+  /** Contact detail only. Never a credential. */
+  phone?: string;
   /** Required by the real (Supabase) auth backend; ignored by the mock. */
   password?: string;
 }
+
+/** Shortest password any backend will accept. One rule, one place. */
+export const MIN_PASSWORD_LENGTH = 6;
+
+/** Length bounds for a username, quoted back to the user in the error text. */
+export const USERNAME_MIN_LENGTH = 3;
+export const USERNAME_MAX_LENGTH = 20;
+
+/**
+ * The username rule, in ONE place. Returns the normalised (lower-cased) handle.
+ *
+ * ⚠️ THE SHAPE IS LOAD-BEARING, not decoration. The account's credential
+ * address is built from this handle (`<username>@localo.app`), so it has to be
+ * a legal email local-part — and it must NOT be able to look like a phone
+ * number, because phone sign-in derives its address from the same domain and
+ * two schemes colliding would let one person's handle land on another's
+ * account. Requiring a leading letter keeps the two sets disjoint for good.
+ */
+export function assertUsername(username: string | undefined): string {
+  const handle = (username ?? '').trim().toLowerCase();
+  if (handle.length < USERNAME_MIN_LENGTH || handle.length > USERNAME_MAX_LENGTH) {
+    throw new Error(
+      `Choose a username of ${USERNAME_MIN_LENGTH}–${USERNAME_MAX_LENGTH} characters.`,
+    );
+  }
+  if (!/^[a-z][a-z0-9._]*$/.test(handle)) {
+    throw new Error(
+      'Usernames start with a letter and can contain letters, numbers, dots and underscores.',
+    );
+  }
+  return handle;
+}
+
+/**
+ * Contact details, validated only if given. Never required, never verified —
+ * they exist so a business can reach a customer, not to prove who anyone is.
+ */
+export function assertContactDetails(input: { email?: string; phone?: string }): {
+  email?: string;
+  phone?: string;
+} {
+  const email = input.email?.trim().toLowerCase() || undefined;
+  const phone = input.phone?.trim() || undefined;
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('That email address doesn’t look right.');
+  }
+  if (phone && phone.replace(/\D/g, '').length < 10) {
+    throw new Error('Please enter a valid phone number (at least 10 digits).');
+  }
+  return { email, phone };
+}
+
+/** The password rule, in ONE place. Throws a user-facing message. */
+export function assertPassword(password: string | undefined): string {
+  if (!password || password.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`Please choose a password of at least ${MIN_PASSWORD_LENGTH} characters.`);
+  }
+  return password;
+}
+
+/**
+ * One listing standing in the way of closing an account.
+ *
+ * A business with staff or customers is never deleted along with its owner —
+ * it would take other people's records with it — so the account can't go until
+ * the owner hands it over or takes it down. `reasons` is written for the person
+ * to read ("has team members", "has issued bills").
+ */
+export interface AccountDeletionBlocker {
+  businessId: string;
+  name: string;
+  reasons: string[];
+}
+
+/**
+ * The outcome of `deleteAccount()`.
+ *
+ * A refusal is a RESULT, not an exception: owning a live business is an
+ * ordinary state to be in, and the screen has to render the list of what's in
+ * the way. Genuine faults (offline, server error) still throw.
+ */
+export type DeleteAccountResult =
+  | { deleted: true; listingsRemoved: number }
+  | { deleted: false; blockers: AccountDeletionBlocker[] };
 
 export interface AuthRepository {
   /** The signed-in user, or null when browsing as a guest. */
@@ -263,6 +375,41 @@ export interface AuthRepository {
    * guest for gating. If there's already a session, that user is returned as-is.
    */
   signInGuest(): Promise<User>;
+
+  /**
+   * Sign in (or sign up — Google does not distinguish) with a Google account.
+   *
+   * Opens Google's own consent screen in a secure browser session and comes
+   * back with a real Supabase session. Nothing about the password rules applies
+   * here: there is no password, which is also why this is the sturdiest
+   * recovery route the app has — an account created this way cannot be locked
+   * out by a forgotten password.
+   *
+   * Throws with a friendly message when the person backs out, which is an
+   * ordinary thing to do and not an error worth alarming them about.
+   */
+  signInWithGoogle(): Promise<User>;
+
+  /**
+   * Close the signed-in account for good. Google Play requires this path to
+   * exist in-app for any app that lets people sign up.
+   *
+   * Deletion is NOT a cascade. Personal data is erased (contact details, saved
+   * places, devices, their own alerts, the child/parcel records they track,
+   * their customer chats); the other party's commercial records — orders,
+   * bills, bookings, memberships, reviews, the public stall threads — SURVIVE
+   * with the person anonymised to "Deleted user", because they are the
+   * business's books and another customer's answered question. The profile row
+   * itself stays as a tombstone so nothing anywhere is left pointing at
+   * nothing. Empty listings they own go with them; a listing with staff or
+   * customers BLOCKS the deletion until it's transferred or taken down, which
+   * is what `{ deleted: false, blockers }` reports.
+   *
+   * Irreversible, immediate, and always about the CALLER — no backend accepts
+   * a user id here, so this can never be aimed at someone else.
+   */
+  deleteAccount(): Promise<DeleteAccountResult>;
+
 }
 
 export interface PlacesRepository {

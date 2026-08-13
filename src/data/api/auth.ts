@@ -6,7 +6,14 @@
  * the Express API (GET /users/:id), so the app never diverges on where user
  * data comes from once signed in.
  */
-import type { AuthRepository, SignUpInput } from '@/data/repositories';
+import {
+  assertContactDetails,
+  assertPassword,
+  assertUsername,
+  type AuthRepository,
+  type DeleteAccountResult,
+  type SignUpInput,
+} from '@/data/repositories';
 import type { User } from '@/domain/types';
 import { getSupabase } from '@/lib/supabase';
 import { clearCache } from '@/lib/queryCache';
@@ -16,7 +23,9 @@ import {
   fallbackUser,
   niceAuthError,
   phoneToEmail,
+  usernameToEmail,
 } from '@/data/supabase/shared';
+import { createSupabaseAuth } from '@/data/supabase/auth';
 import { http, seg } from './client';
 
 /**
@@ -46,6 +55,9 @@ async function fetchProfileViaApi(id: string, name?: string): Promise<User> {
 
 export function createApiAuth(): AuthRepository {
   const sb = getSupabase();
+  // The OTP flows are pure GoTrue and identical across backends — borrow them
+  // rather than keeping two copies of the flow-selection logic in step.
+  const supabaseAuth = createSupabaseAuth();
 
   return {
     async getCurrentUser(): Promise<User | null> {
@@ -67,22 +79,34 @@ export function createApiAuth(): AuthRepository {
       return fetchProfileViaApi(data.user.id, data.user.user_metadata?.name);
     },
 
+    /**
+     * ⚠️ MINIMALLY UPDATED FOR THE NEW IDENTITY MODEL — see [SYNC-025].
+     *
+     * Path B is synced in its own pass (CLAUDE.md → STANDING RULE), so this
+     * only does what it must to keep compiling and behaving correctly against
+     * the shared `SignUpInput`: honour a real email when one is given, fall
+     * back to the synthetic alias otherwise. The phone-number RESOLUTION on
+     * sign-in (migration 0016's RPC) is deliberately NOT implemented here yet.
+     */
     async signUp(input: SignUpInput): Promise<User> {
-      if (!input.password || input.password.length < 6) {
-        throw new Error('Please choose a password of at least 6 characters.');
-      }
+      const username = assertUsername(input.username);
+      const { email, phone } = assertContactDetails(input);
+      const password = assertPassword(input.password);
+      const loginEmail = usernameToEmail(username);
+      const displayName = input.name?.trim() || username;
+
       const { data, error } = await sb.auth.signUp({
-        email: phoneToEmail(input.phone),
-        password: input.password,
-        options: { data: { name: input.name, phone: input.phone } },
+        email: loginEmail,
+        password,
+        options: { data: { name: displayName, username, phone, email } },
       });
       if (error) throw new Error(niceAuthError(error.message));
 
       let userId = data.user?.id;
       if (!data.session) {
         const signedIn = await sb.auth.signInWithPassword({
-          email: phoneToEmail(input.phone),
-          password: input.password,
+          email: loginEmail,
+          password,
         });
         if (signedIn.error) throw new Error(niceAuthError(signedIn.error.message));
         userId = signedIn.data.user.id;
@@ -103,25 +127,33 @@ export function createApiAuth(): AuthRepository {
       // Hard-gated: impersonation must never be reachable in a release build.
       assertDevTool('Switching identity');
       const profile = await http.get<User | null>(`/users/${seg(userId)}`);
-      if (!profile?.phone) {
+      // Handle first, phone as the fallback — see the note in the Path A twin:
+      // an account given a username no longer answers to its phone address.
+      const address = profile?.username
+        ? usernameToEmail(profile.username)
+        : profile?.phone
+          ? phoneToEmail(profile.phone)
+          : null;
+      if (!address) {
         // `phone` lives in `profiles_private` and the API hands it over only to
         // the account itself or a platform super-admin — so for an ordinary
         // account this is the EXPECTED answer, not a broken read. Say that,
         // rather than implying the account has no phone number.
         throw new Error(
-          "Can't switch to this account — its phone number isn't visible to you. " +
-            'Identity switching needs a platform super-admin account.',
+          "Can't switch to this account — it has no username, and its phone " +
+            "number isn't visible to you. Identity switching needs a platform " +
+            'super-admin account.',
         );
       }
       const { data, error } = await sb.auth.signInWithPassword({
-        email: phoneToEmail(profile.phone),
+        email: address,
         password: TEST_PASSWORD,
       });
       if (error) {
         // Deliberately does NOT echo the password — error text ends up in Metro
         // logs, crash reporters and screenshots.
         throw new Error(
-          `Can't switch to ${profile.name} — this only works for seeded test accounts created with the shared dev password. Sign in manually instead.`,
+          `Can't switch to ${profile?.name ?? 'that account'} — this only works for seeded test accounts created with the shared dev password. Sign in manually instead.`,
         );
       }
       await clearCache();
@@ -150,5 +182,32 @@ export function createApiAuth(): AuthRepository {
       }
       return { id: data.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
     },
+
+    /**
+     * Identity is Supabase in Path B too — the Express API verifies a JWT and
+     * never issues one — so the Google and password-reset flows are the SAME
+     * GoTrue calls as Path A, delegated wholesale rather than reimplemented.
+     * Only the profile read afterwards goes through the API. See [SYNC-027].
+     */
+    async signInWithGoogle(): Promise<User> {
+      await supabaseAuth.signInWithGoogle();
+      const { data } = await sb.auth.getSession();
+      const userId = data.session?.user.id;
+      if (!userId) throw new Error('Google signed you in, but no session came back. Try again.');
+      return fetchProfileViaApi(userId, data.session?.user.user_metadata?.name);
+    },
+
+    /**
+     * Delegated for the same reason as Google above: the account being deleted
+     * is a SUPABASE auth user in Path B too — the Express API verifies JWTs and
+     * never issues them — so closing it is the same edge-function call, and a
+     * second implementation could only drift from it. Both backends share one
+     * database, so migration 0019's scrub covers Path B's data as well.
+     * See [SYNC-031].
+     */
+    async deleteAccount(): Promise<DeleteAccountResult> {
+      return supabaseAuth.deleteAccount();
+    },
+
   };
 }

@@ -48,6 +48,7 @@ import { isSuperAdminPhone } from '@/domain/superAdmin';
 import type {
   AdPlacement,
   PlacementOptions,
+  AccountDeletionBlocker,
   AdRepository,
   AuthRepository,
   BillRepository,
@@ -65,6 +66,7 @@ import type {
   ChatThreadSummary,
   CustomerRepository,
   CustomerSummary,
+  DeleteAccountResult,
   AcceptEnrollInput,
   CustomerThreadSummary,
   EmployeeRepository,
@@ -100,6 +102,9 @@ import type {
   TrackingRepository,
   UserRepository,
 } from '@/data/repositories';
+// Values, not types: the identity/password rules are shared with the real
+// backends so the mock refuses exactly what Supabase refuses.
+import { assertContactDetails, assertPassword, assertUsername } from '@/data/repositories';
 import { haversineKm } from '@/lib/geo';
 import { getDeviceLocation } from '@/lib/location';
 import { formatMoney, parsePrice } from '@/lib/money';
@@ -521,6 +526,50 @@ class MockBusinessRepository implements BusinessRepository {
     business.ownerId = newOwnerId;
     return clone(business);
   }
+
+  async remove(id: string, actorId: string): Promise<void> {
+    await delay(120);
+    const index = businesses.findIndex((b) => b.id === id);
+    if (index === -1) throw new Error(`Business ${id} not found`);
+    if (businesses[index].ownerId !== actorId) {
+      throw new Error('Only the owner can take a listing down.');
+    }
+    businesses.splice(index, 1);
+    // Postgres cascades on business_id; the mock has to sweep by hand so the
+    // two backends look the same after a delete.
+    dropByBusiness(id);
+  }
+}
+
+/**
+ * Delete everything that hangs off a listing. Mirrors the `on delete cascade`
+ * foreign keys in supabase/migrations/0001_schema.sql — see BusinessRepository
+ * .remove. Notifications are matched on their deep-link ids too, so a removed
+ * shop leaves no alert pointing at a page that no longer exists.
+ */
+function dropByBusiness(businessId: string): void {
+  const drop = <T>(list: T[], match: (row: T) => boolean) => {
+    for (let i = list.length - 1; i >= 0; i--) if (match(list[i])) list.splice(i, 1);
+  };
+  drop(employees, (e) => e.businessId === businessId);
+  // Customer chats hang off `threadKey` = "<businessId>:<participantId>"; B2B
+  // threads off the two business ids joined with '|'.
+  drop(messages, (m) => m.threadKey.split(':')[0] === businessId);
+  drop(bizMessages, (m) => m.threadKey.split('|').includes(businessId));
+  drop(bookings, (b) => b.businessId === businessId);
+  drop(orders, (o) => o.businessId === businessId);
+  drop(bills, (b) => b.businessId === businessId);
+  drop(calls, (c) => c.businessId === businessId);
+  drop(reviews, (r) => r.businessId === businessId);
+  drop(productMessages, (p) => p.businessId === businessId);
+  drop(memberships, (m) => m.businessId === businessId);
+  drop(membershipPayments, (p) => p.businessId === businessId);
+  drop(logEntries, (l) => l.businessId === businessId);
+  drop(adCampaigns, (c) => c.businessId === businessId);
+  drop(locationShares, (s) => s.businessId === businessId);
+  drop(vehicles, (v) => v.businessId === businessId);
+  drop(trackedItems, (t) => t.businessId === businessId);
+  drop(notifications, (n) => n.businessId === businessId);
 }
 
 class MockProductThreadRepository implements ProductThreadRepository {
@@ -723,6 +772,7 @@ class MockUserRepository implements UserRepository {
 // Session auth state. Starts null — the app opens as a guest.
 let currentUserId: string | null = null;
 
+
 /**
  * Stamp the derived super-admin flag onto a session user.
  *
@@ -745,20 +795,47 @@ class MockAuthRepository implements AuthRepository {
     return user ? asSessionUser(user) : null;
   }
 
-  async signIn(_email: string, _password?: string): Promise<User> {
+  /**
+   * Mock sign-in accepts a username, an email or a phone number, like the real
+   * one. A match signs in AS THAT PERSON — which makes the identity model
+   * testable offline — and anything else falls back to the demo user who owns
+   * the seed data, preserving the old "any credentials work" convenience.
+   */
+  async signIn(usernameEmailOrPhone: string, _password?: string): Promise<User> {
     await delay(150);
-    // Mock: any credentials sign you in as the demo user (who owns the seed data).
-    const demo = users.find((u) => u.id === 'u_demo')!;
-    currentUserId = demo.id;
-    return asSessionUser(demo);
+    const typed = (usernameEmailOrPhone ?? '').trim().toLowerCase();
+    const digits = typed.replace(/\D/g, '');
+    const match = typed
+      ? users.find(
+          (u) =>
+            (!!u.username && u.username.toLowerCase() === typed) ||
+            (!!u.email && u.email.toLowerCase() === typed) ||
+            (!!u.phone && digits.length >= 10 && u.phone.replace(/\D/g, '') === digits),
+        )
+      : undefined;
+    const user = match ?? users.find((u) => u.id === 'u_demo')!;
+    currentUserId = user.id;
+    return asSessionUser(user);
   }
 
   async signUp(input: SignUpInput): Promise<User> {
     await delay(180);
+    // The same rules the real backend enforces, from the same place — the mock
+    // is the behavioural spec, so it must refuse what Supabase refuses.
+    const username = assertUsername(input.username);
+    const { email, phone } = assertContactDetails(input);
+    assertPassword(input.password);
+    // Uniqueness comes free from `auth.users.email` on the real backend; offline
+    // it has to be checked, or the mock would accept what Supabase rejects.
+    if (users.some((u) => u.username?.toLowerCase() === username)) {
+      throw new Error('That username is taken. Try another one.');
+    }
     const user: User = {
       id: nextId('u'),
-      name: input.name.trim() || 'New user',
-      phone: input.phone.trim() || undefined,
+      name: input.name?.trim() || username,
+      username,
+      email,
+      phone,
       isProfilePublic: false,
     };
     users.push(user);
@@ -794,6 +871,172 @@ class MockAuthRepository implements AuthRepository {
     currentUserId = guest.id;
     return clone(guest);
   }
+
+  /**
+   * There is no Google offline, so this signs in as the demo user — the same
+   * convenience `signIn` offers. The screen still shows the button, because a
+   * flow that only exists against the real backend is one nobody tests.
+   */
+  async signInWithGoogle(): Promise<User> {
+    await delay(300);
+    const demo = users.find((u) => u.id === 'u_demo')!;
+    currentUserId = demo.id;
+    return asSessionUser(demo);
+  }
+
+  /**
+   * Close the account, mirroring migration 0019 exactly — the mock is the
+   * behavioural spec, so the offline answer has to be the one the real backend
+   * would give: the same refusal when a real business is in the way, and the
+   * same tombstone-and-scrub when there isn't.
+   */
+  async deleteAccount(): Promise<DeleteAccountResult> {
+    await delay(200);
+    const user = users.find((u) => u.id === currentUserId);
+    if (!user) throw new Error('You are not signed in.');
+
+    const blockers = accountDeletionBlockers(user.id);
+    if (blockers.length > 0) return { deleted: false, blockers };
+
+    const listingsRemoved = anonymizeAccount(user.id);
+    currentUserId = null;
+    return { deleted: true, listingsRemoved };
+  }
+
+}
+
+/**
+ * Listings that stop this account being deleted, and why.
+ *
+ * A business with counterparties — staff, orders, bills, bookings, members,
+ * reviews, customer chats, calls, an ad campaign, tracked items — is never
+ * taken down with its owner: it would destroy other people's records, and 0008
+ * makes transfer owner-only, so cascading would delete the one person able to
+ * hand it over. An EMPTY listing has no such problem and goes with the account.
+ */
+function accountDeletionBlockers(userId: string): AccountDeletionBlocker[] {
+  return businesses
+    .filter((b) => b.ownerId === userId)
+    .map((b) => {
+      const reasons = [
+        employees.some((e) => e.businessId === b.id) && 'has team members',
+        orders.some((o) => o.businessId === b.id) && 'has customer orders',
+        bills.some((x) => x.businessId === b.id) && 'has issued bills',
+        bookings.some((x) => x.businessId === b.id) && 'has bookings',
+        memberships.some((m) => m.businessId === b.id) && 'has members',
+        reviews.some((r) => r.businessId === b.id) && 'has reviews',
+        messages.some((m) => m.threadKey.split(':')[0] === b.id) && 'has customer chats',
+        calls.some((c) => c.businessId === b.id) && 'has call history',
+        adCampaigns.some((c) => c.businessId === b.id) && 'has an ad campaign',
+        trackedItems.some((t) => t.businessId === b.id) && 'is tracking items for customers',
+      ].filter((r): r is string => typeof r === 'string');
+      return { businessId: b.id, name: b.name, reasons };
+    })
+    .filter((b) => b.reasons.length > 0);
+}
+
+/**
+ * The scrub, in memory. The twin of `public.anonymize_account` (migration 0019)
+ * — read that file's header for WHY each row is deleted, anonymised or kept.
+ * Returns how many (empty) listings went with the account.
+ *
+ * Two things the real backend does have no counterpart here: saved places are
+ * global in the mock (no `userId` on `SavedPlace`) and push tokens are keyed by
+ * token alone, so neither can be scoped to a person offline.
+ */
+function anonymizeAccount(userId: string): number {
+  const DELETED_NAME = 'Deleted user';
+  const drop = <T>(list: T[], match: (row: T) => boolean) => {
+    for (let i = list.length - 1; i >= 0; i--) if (match(list[i])) list.splice(i, 1);
+  };
+
+  // Their own listings — provably empty, or we would not be here.
+  const owned = businesses.filter((b) => b.ownerId === userId).map((b) => b.id);
+  for (const id of owned) {
+    drop(businesses, (b) => b.id === id);
+    dropByBusiness(id);
+  }
+
+  // Deleted outright: personal, and nobody else's record.
+  drop(notifications, (n) => n.recipientId === userId);
+  // Carries a child's name.
+  drop(trackedItems, (t) => t.customerId === userId);
+  drop(locationShares, (s) => s.userId === userId);
+  // The whole customer thread, both sides — threadKey is "<businessId>:<participantId>".
+  drop(messages, (m) => m.threadKey.split(':')[1] === userId);
+
+  // Unlinked, but kept for the business: the roster entry and its displayName
+  // are the business's own record.
+  for (const employee of employees) {
+    if (employee.userId === userId) employee.userId = undefined;
+  }
+
+  // Anonymised in place. Ids stay pointing at the tombstone on purpose — they
+  // identify nobody once the account is gone, and keeping them means no
+  // surprise undefined reaches a screen.
+  for (const order of orders) {
+    if (order.customerId !== userId) continue;
+    order.customerName = DELETED_NAME;
+    delete order.note;
+    delete order.enrollees;
+  }
+  for (const bill of bills) {
+    if (bill.customerId === userId) bill.customerName = DELETED_NAME;
+  }
+  for (const booking of bookings) {
+    if (booking.customerId !== userId) continue;
+    booking.customerName = DELETED_NAME;
+    delete booking.note;
+  }
+  for (const call of calls) {
+    if (call.customerId !== userId) continue;
+    call.customerName = DELETED_NAME;
+    call.participants = call.participants.map((p) =>
+      p.id === userId ? { ...p, name: DELETED_NAME } : p,
+    );
+  }
+  for (const membership of memberships) {
+    if (membership.customerId !== userId) continue;
+    membership.customerName = DELETED_NAME;
+    delete membership.enrolleeName;
+    // A plan with nobody left to attend it is over; past months stay as the
+    // business's revenue record.
+    if (membership.status === 'pending' || membership.status === 'active') {
+      membership.status = 'cancelled';
+      membership.endedAt = new Date().toISOString();
+    }
+  }
+  for (const payment of membershipPayments) {
+    if (payment.customerId !== userId) continue;
+    payment.reportedByName = DELETED_NAME;
+    delete payment.note;
+  }
+  for (const review of reviews) {
+    if (review.customerId === userId) review.customerName = DELETED_NAME;
+  }
+  for (const message of productMessages) {
+    if (message.authorId === userId) message.authorName = DELETED_NAME;
+  }
+  // The business's record book, reached through the order it records: a
+  // LogEntry carries only a customerName, with no id to match on.
+  const theirOrders = new Set(orders.filter((o) => o.customerId === userId).map((o) => o.id));
+  for (const entry of logEntries) {
+    if (entry.orderId && theirOrders.has(entry.orderId)) entry.customerName = DELETED_NAME;
+  }
+
+  // The tombstone: rebuilt from scratch, so nothing personal can survive in a
+  // field this function forgot to name.
+  const index = users.findIndex((u) => u.id === userId);
+  if (index !== -1) {
+    users[index] = {
+      id: userId,
+      name: DELETED_NAME,
+      isProfilePublic: false,
+      deletedAt: new Date().toISOString(),
+    };
+  }
+
+  return owned.length;
 }
 
 class MockPlacesRepository implements PlacesRepository {

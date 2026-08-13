@@ -33,8 +33,14 @@ export const supabase: SupabaseClient | null = isSupabaseConfigured
         storage: AsyncStorage,
         autoRefreshToken: true,
         persistSession: true,
-        // We are not a web app handling magic-link redirects in the URL.
+        // We are not a web app handling magic-link redirects in the URL — the
+        // Google flow reads its own redirect and exchanges the code by hand.
         detectSessionInUrl: false,
+        // PKCE so Google's redirect carries a one-time CODE rather than the
+        // tokens themselves. Tokens in a URL end up in browser history and in
+        // anything logging along the way; a code is useless without the
+        // verifier held on this device. Required by `exchangeCodeForSession`.
+        flowType: 'pkce',
       },
     })
   : null;

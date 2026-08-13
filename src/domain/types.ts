@@ -65,6 +65,14 @@ export interface BusinessLocation {
 export interface User {
   id: string;
   name: string;
+  /**
+   * The login handle, lower-cased and unique. PUBLIC (it lives on the directory
+   * card) because it is a handle, not a secret — the password is the secret.
+   *
+   * Absent on accounts that never chose one: the seeded test accounts, and
+   * anyone who signed in with Google.
+   */
+  username?: string;
   /** Private (profiles_private) — absent unless it's you or a super-admin. */
   email?: string;
   /** Private (profiles_private) — absent unless it's you or a super-admin. */
@@ -101,6 +109,15 @@ export interface User {
    * silences order pings without losing a single order.
    */
   mutedNotifications?: string[];
+  /**
+   * Set when the account was closed (`AuthRepository.deleteAccount`).
+   *
+   * The row survives as a TOMBSTONE — name "Deleted user", nothing else — so
+   * that the orders, bills and reviews which still reference this id resolve to
+   * something instead of dangling. Nobody can sign in as it; there is no auth
+   * user behind it any more. See supabase/migrations/0019_account_deletion.sql.
+   */
+  deletedAt?: string;
 }
 
 /**

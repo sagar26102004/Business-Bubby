@@ -67,14 +67,20 @@
           ]
         }
       ],
-      "expo-video"
+      "expo-video",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "ios": {
       "bundleIdentifier": "com.localo.app",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
     },
     "android": {
       "package": "com.localo.app",
@@ -89,7 +95,6 @@
         "android.permission.FOREGROUND_SERVICE_LOCATION",
         "android.permission.ACCESS_NETWORK_STATE",
         "android.permission.INTERNET",
-        "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.WAKE_LOCK",
         "android.permission.BLUETOOTH"
       ],

@@ -296,5 +296,20 @@ export function createSupabaseBusinesses(): BusinessRepository {
       if (error) throw error;
       return this.getById(id) as Promise<Business>;
     },
+
+    async remove(id: string, actorId: string): Promise<void> {
+      const current = await this.getById(id);
+      if (!current) throw new Error(`Business ${id} not found`);
+      // RLS (`businesses_delete`, migration 0002) allows the owner only, and a
+      // blocked delete comes back as 0 rows rather than an error — so say what
+      // happened instead of reporting a silent success.
+      if (current.ownerId !== actorId) {
+        throw new Error('Only the owner can take a listing down.');
+      }
+      const { error } = await sb().from('businesses').delete().eq('id', id);
+      if (error) throw error;
+      // Everything scoped to the business (team, orders, bills, chats, calls,
+      // campaigns) is removed by the schema's `on delete cascade`.
+    },
   };
 }

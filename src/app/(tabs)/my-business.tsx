@@ -2,6 +2,12 @@
  * My Business tab — every business the signed-in user owns or belongs to.
  * Tapping one opens its workspace. Users can own several; if they have none,
  * they're pointed at registration.
+ *
+ * ONE EXCEPTION: a platform super-admin. Their "business" is the app itself,
+ * so this side of the app shows the PLATFORM CONSOLE instead of a list of
+ * shops (`features/admin/AdminConsole.tsx`) — the same thing `/admin` renders.
+ * Anything still listed under their account shows up inside that console, to be
+ * handed to its real owner or removed.
  */
 import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -9,8 +15,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tabs, useFocusEffect, useRouter } from 'expo-router';
 import type { Business } from '@/domain/types';
 import { getType } from '@/domain/catalog';
+import { isSuperAdminUser } from '@/domain/superAdmin';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { Button, Card, Icon, LoadingView, Screen, Tag, Text } from '@/components/ui';
+import { AdminConsole } from '@/features/admin/AdminConsole';
 import { ModePills } from '@/features/shell/ModePills';
 import { radius, spacing, useColors } from '@/theme/theme';
 
@@ -24,8 +32,12 @@ export default function MyBusinessScreen() {
   const [businesses, setBusinesses] = useState<Business[] | null>(null);
   const [stall, setStall] = useState<Business | null>(null);
 
+  // A super-admin runs the platform, not a shop — the console below fetches
+  // its own numbers, so don't pay for the business list they'll never see.
+  const isAdmin = isSuperAdminUser(currentUser);
+
   const load = useCallback(() => {
-    if (!currentUser) {
+    if (!currentUser || isAdmin) {
       setBusinesses([]);
       setStall(null);
       return;
@@ -41,7 +53,7 @@ export default function MyBusinessScreen() {
       setBusinesses(Array.from(byId.values()));
       setStall(myStall);
     });
-  }, [repos, currentUser]);
+  }, [repos, currentUser, isAdmin]);
 
   // Refresh whenever the tab regains focus (e.g. after registering one).
   useFocusEffect(useCallback(() => load(), [load]));
@@ -113,6 +125,18 @@ export default function MyBusinessScreen() {
           </Text>
           <Button title="Sign in / Sign up" onPress={() => router.push('/sign-in')} style={styles.cta} />
         </View>
+      </Screen>
+    );
+  }
+
+  // Super-admin: this whole side of the app is the platform console. No B2B
+  // FAB — supplier chats belong to a business, and the platform isn't one.
+  if (isAdmin) {
+    return (
+      <Screen scroll>
+        {headerAction}
+        {topBar}
+        <AdminConsole />
       </Screen>
     );
   }

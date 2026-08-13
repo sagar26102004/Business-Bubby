@@ -23,6 +23,10 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { startBackgroundShare, stopBackgroundShare } from '@/lib/backgroundLocation';
 import {
+  BackgroundLocationDisclosure,
+  useBackgroundLocationDisclosure,
+} from '@/features/fleet/BackgroundLocationDisclosure';
+import {
   Card,
   EmptyView,
   ErrorView,
@@ -79,6 +83,9 @@ export default function WorkspaceScreen() {
   useEffect(() => {
     if (data) setSharingOn(data.sharing);
   }, [data]);
+
+  // Above the early returns — hooks cannot run conditionally.
+  const { confirm, disclosureProps } = useBackgroundLocationDisclosure();
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
@@ -160,7 +167,9 @@ export default function WorkspaceScreen() {
     setSharingBusy(true);
     try {
       if (value) {
-        const res = await startBackgroundShare();
+        // `confirm` shows the Play-required disclosure, and only if the OS is
+        // actually about to be asked for background location.
+        const res = await startBackgroundShare(confirm);
         if (!res.ok) {
           setSharingOn(false);
           Alert.alert(
@@ -169,7 +178,9 @@ export default function WorkspaceScreen() {
           );
           return;
         }
-        if (res.background === false && res.reason !== 'web') {
+        // `declined` is the driver having just read the disclosure and said no
+        // — pointing them at Settings would argue with an answer we asked for.
+        if (res.background === false && res.reason !== 'web' && res.reason !== 'declined') {
           Alert.alert(
             'Sharing while the app is open',
             'For your vehicle to keep moving on the map when the app is closed, set location access to "Allow all the time" in Settings.',
@@ -372,6 +383,7 @@ export default function WorkspaceScreen() {
   return (
     <Screen scroll>
       <Stack.Screen options={{ title: 'Workspace' }} />
+      <BackgroundLocationDisclosure {...disclosureProps} />
 
       <Text variant="title" weight="bold">
         {business.name}

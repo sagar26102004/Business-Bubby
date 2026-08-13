@@ -327,17 +327,61 @@ export function phoneToEmail(phoneOrEmail: string): string {
   return `${digits}@localo.app`;
 }
 
+/** Does this look like an email address rather than a phone number? */
+export function looksLikeEmail(value: string): boolean {
+  return value.includes('@');
+}
+
+/**
+ * The credential address for a username.
+ *
+ * Supabase Auth keys every account to an email column, so a username-first app
+ * has to manufacture one. `<handle>@localo.app` is derived purely from the
+ * handle, which buys two things for nothing:
+ *
+ *   * UNIQUENESS, enforced by the database. `auth.users.email` is unique, so a
+ *     second person choosing a taken handle is rejected by Postgres rather than
+ *     by a check-then-insert race we would have to write and could lose.
+ *   * NO LOOKUP AT SIGN-IN. The address is computed on the device from what was
+ *     typed, so there is no "which account owns this handle" query, and
+ *     therefore nothing to leak and no oracle to harden.
+ *
+ * `assertUsername` guarantees a leading letter, so these can never collide with
+ * the `<digits>@localo.app` addresses phone-first accounts were given.
+ */
+export function usernameToEmail(username: string): string {
+  return `${username.trim().toLowerCase()}@localo.app`;
+}
+
+/**
+ * Is this address one we manufactured from a phone number, rather than a real
+ * mailbox somebody owns?
+ *
+ * Synthetic aliases must never be shown to a user or treated as a contact
+ * address — nothing sent there arrives anywhere.
+ */
+export function isSyntheticEmail(email: string | undefined): boolean {
+  return !!email && email.trim().toLowerCase().endsWith('@localo.app');
+}
+
 /** Turn a raw Supabase/PostgREST error into a friendlier message. */
 export function niceAuthError(message: string): string {
   const m = message.toLowerCase();
-  if (m.includes('invalid login')) return 'Wrong phone number or password.';
+  // Deliberately vague about WHICH half was wrong, and identical whether the
+  // account exists or not — saying "no account with that number" would turn
+  // sign-in into the enumeration oracle 0016 went out of its way to avoid.
+  if (m.includes('invalid login')) return 'Wrong username or password.';
   // Guest calls and guest chat both mint an anonymous identity. When the
   // project toggle is off, Supabase just says "Anonymous sign-ins are disabled",
   // which reads like a dead end — say where to turn it on instead.
   if (m.includes('anonymous'))
     return 'Guest access is off for this project. Turn on Supabase → Authentication → Sign In / Providers → “Allow anonymous sign-ins”, or sign in to continue.';
+  // The credential address IS the username (`<handle>@localo.app`), so GoTrue
+  // rejecting a duplicate address means one thing only: the handle is taken.
+  // That is not an enumeration leak — a sign-up form has to be able to say a
+  // name is unavailable, or nobody can pick one.
   if (m.includes('already registered') || m.includes('already been registered'))
-    return 'An account with this phone number already exists. Sign in instead.';
+    return 'That username is taken. Try another one.';
   if (m.includes('password')) return message;
   if (m.includes('email not confirmed'))
     return 'Email confirmation is on for this project — turn it off in Supabase (Auth → Providers → Email) for phone sign-up to work.';
