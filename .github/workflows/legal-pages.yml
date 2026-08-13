@@ -1,0 +1,58 @@
+# Publish the legal / support pages to GitHub Pages.
+#
+# WHY THIS EXISTS
+# Google Play requires publicly reachable URLs for the privacy policy, the
+# account-deletion request page and a support page before the app can be
+# published. Those pages live in `docs/legal/` and this workflow serves them.
+#
+# It uploads ONLY `docs/legal` as the site, so the rest of `docs/` (internal
+# design notes, the play-store checklists) is not published as a website.
+#
+# ONE-TIME SETUP
+# GitHub → Settings → Pages → "Build and deployment" → Source: **GitHub Actions**.
+# Then push to main (or run this workflow by hand) and the pages go live at
+#   https://sagar26102004.github.io/Business-Bubby/
+#   https://sagar26102004.github.io/Business-Bubby/privacy-policy.html
+#   https://sagar26102004.github.io/Business-Bubby/terms-of-service.html
+#   https://sagar26102004.github.io/Business-Bubby/delete-account.html
+#   https://sagar26102004.github.io/Business-Bubby/support.html
+# The first deploy can take a couple of minutes to become reachable.
+
+name: Legal pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/legal/**'
+      - '.github/workflows/legal-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once; let a newer one win.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      # Only the legal folder becomes the site root.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/legal
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
