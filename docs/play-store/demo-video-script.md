@@ -1,5 +1,18 @@
 # Background location demo video — shot-by-shot script
 
+> 🔁 **DEFERRED TO v1.1 — DO NOT RECORD THIS FOR THE 1.0 SUBMISSION.**
+>
+> `ACCESS_BACKGROUND_LOCATION` is not in the 1.0 manifest (see
+> `background-location-disclosure.md` for the switch), so there is no Location
+> Permissions form to attach a video to. Recording it now would cost a day and
+> demonstrate a permission the uploaded AAB does not request — which invites
+> questions rather than answering them.
+>
+> The script below is unchanged and stays correct for 1.1. Re-read the
+> "What to prepare" section when you get there: it needs a **production or
+> preview build** with the flag flipped back on, since a 1.0 build physically
+> cannot show the OS dialog.
+
 Google requires a video for `ACCESS_BACKGROUND_LOCATION`. Its job is to prove three things, in
 this order, on screen:
 

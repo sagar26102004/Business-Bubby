@@ -192,8 +192,9 @@ Skip them unless you want tablet placement. If you do add them: 7-inch and 10-in
 minimum 2 each. Play will show a "not optimised for tablets" note without them, which is harmless.
 
 ### Promo video — optional
-A YouTube URL. Skip it for v1 — the background-location demo video is **not** this, and must never
-be attached here. It goes only in the permission declaration form.
+A YouTube URL. Skip it for v1. *(There is no background-location demo video in 1.0 — that feature
+is deferred to v1.1. When it returns, that video is **not** this field and must never be attached
+here; it goes only in the permission declaration form.)*
 
 ---
 

@@ -106,8 +106,13 @@ Then work through the left-hand checklist. Everything you need is already writte
 | App content → Ads | No |
 | App content → Government apps, News, COVID | No to all |
 
-Record the background-location video **before** filling the sensitive-permissions form — the form
-asks for the link.
+> 🔁 **v1.0: skip the background-location video and the location half of the sensitive-permissions
+> form.** `ACCESS_BACKGROUND_LOCATION` is not in the 1.0 manifest (see `permission-declarations.md`
+> §1). You still owe the `USE_FULL_SCREEN_INTENT` declaration (§2) and the
+> `FOREGROUND_SERVICE_MEDIA_PLAYBACK` service-type declaration (§6).
+
+~~Record the background-location video **before** filling the sensitive-permissions form — the form
+asks for the link.~~ *(v1.1)*
 
 ---
 
@@ -124,7 +129,9 @@ catch the things that only appear in a real signed build:
 - [ ] Place an order end to end and receive the bill
 - [ ] Send a chat message and get the notification
 - [ ] **Voice call rings on a real device with the app closed** — the FCM path
-- [ ] Background location: disclosure → permission → vehicle moves while locked
+- [ ] Live sharing: driver toggle works **foreground-only** (vehicle moves while the app is open,
+      stops when backgrounded — this is expected in 1.0, not a bug)
+- [ ] ~~Background location: disclosure → permission → vehicle moves while locked~~ *(v1.1)*
 - [ ] Take a photo for a stall item and confirm it uploads and displays
 - [ ] **Delete an account** and confirm the tombstone (`account-deletion.md` §7)
 - [ ] The Privacy Policy link in Account opens the hosted page
@@ -188,14 +195,23 @@ everyone. Ramp to 100% over a few days.
 The **first** production review of a **new developer account** with **background location** is the
 slowest combination Play has. Assume two weeks and be pleasantly surprised.
 
+> 🔁 **This no longer describes 1.0.** With background location deferred, you are a new developer
+> account *without* the slow permission — the realistic range is the normal 1–3 days, up to 7 for a
+> brand-new account. Removing that variable was the main reason for deferring. The warning above
+> applies again to the v1.1 update that re-enables it.
+
 ---
 
 ## 7. If you are rejected
 
 Normal, especially the first time. The rejection email names the policy. The two likely ones here:
 
-- **Background location** — the disclosure was not visible in the video, or the wording in the
-  form did not match the app. Re-record against `demo-video-script.md` and resubmit.
+- ~~**Background location** — the disclosure was not visible in the video, or the wording in the
+  form did not match the app. Re-record against `demo-video-script.md` and resubmit.~~ *(v1.1 —
+  cannot happen in 1.0, the permission is not shipped)*
+- **Full-screen intent** — `USE_FULL_SCREEN_INTENT` was refused because the app was not accepted as
+  a calling app. Calls still ring via the overlay route and a notification, so this degrades rather
+  than breaks; answer with §2 of `permission-declarations.md`.
 - **Data safety mismatch** — a form answer contradicts the privacy policy. Fix both to agree,
   using `data-safety.md`.
 

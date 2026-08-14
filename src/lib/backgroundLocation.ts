@@ -32,6 +32,39 @@ export const DRIVER_LOCATION_TASK = 'localo-driver-location';
  */
 const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
+/**
+ * ⛔ BACKGROUND LOCATION IS OFF FOR THE v1.0 PLAY RELEASE.
+ *
+ * Everything below is FULLY IMPLEMENTED and deliberately left intact — this one
+ * flag is the whole switch. It is off because declaring
+ * ACCESS_BACKGROUND_LOCATION obliges us to file Google Play's Location
+ * Permissions declaration (a form plus a demo video of the disclosure → OS
+ * prompt → live-sharing flow) before the app can publish. We ship 1.0 without
+ * that review round-trip and turn this on in 1.1.
+ *
+ * With it off, drivers still share while the workspace is open:
+ * `startBackgroundShare` returns { ok: true, background: false } and the vehicle
+ * simply stops moving once the app is closed. No caller changes either way.
+ *
+ * ── TO RE-ENABLE — all four steps, or you ship a permission the app can't use:
+ *   1. Set this to `true`.
+ *   2. app.json → expo.plugins → "expo-location": set
+ *      `isAndroidBackgroundLocationEnabled` AND
+ *      `isAndroidForegroundServiceEnabled` back to `true`.
+ *   3. app.json → expo.android: move ACCESS_BACKGROUND_LOCATION and
+ *      FOREGROUND_SERVICE_LOCATION out of `blockedPermissions` and back into
+ *      `permissions`.
+ *   4. Play Console: complete the Location Permissions declaration AND the
+ *      Foreground Service Types declaration. Record the video from a dev or
+ *      production build — Expo Go cannot run background location at all.
+ *
+ * Deliberately NOT an EXPO_PUBLIC_ env var: env vars only reach the JS bundle,
+ * whereas the permission Play actually scans is baked into AndroidManifest.xml
+ * at prebuild. A runtime-only flag would hide the feature and still ship the
+ * permission — the worst of both. Steps 1–3 have to move together.
+ */
+const BACKGROUND_LOCATION_ENABLED = false;
+
 let latestFix: (GeoPoint & { at: number }) | null = null;
 
 // Register the headless task once, at module load, on native only. It runs
@@ -102,10 +135,12 @@ export async function startBackgroundShare(
     const fg = await Location.requestForegroundPermissionsAsync();
     if (fg.status !== 'granted') return { ok: false, reason: 'denied' };
 
-    // Expo Go can't run background updates — share foreground-only and skip the
-    // background APIs so expo-location doesn't warn about the unsupported task.
-    // Nothing is disclosed here either: we are not about to ask for anything.
-    if (isExpoGo) return { ok: true, background: false };
+    // Two cases share one path: Expo Go can't run background updates, and
+    // BACKGROUND_LOCATION_ENABLED is off for the 1.0 Play release. Either way we
+    // share foreground-only and never touch the background APIs — which also
+    // keeps expo-location from throwing on a permission that is not in the
+    // manifest. Nothing is disclosed here: we are not about to ask for anything.
+    if (isExpoGo || !BACKGROUND_LOCATION_ENABLED) return { ok: true, background: false };
 
     let bg = await Location.getBackgroundPermissionsAsync().catch(() => null);
     if (bg?.status !== 'granted') {

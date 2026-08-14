@@ -1,5 +1,19 @@
 # Background location — prominent in-app disclosure
 
+> 🔁 **DEFERRED TO v1.1 — NOT NEEDED FOR THE 1.0 SUBMISSION.**
+>
+> Background location is switched off for the first Play release.
+> `BACKGROUND_LOCATION_ENABLED = false` in `src/lib/backgroundLocation.ts`, and
+> `ACCESS_BACKGROUND_LOCATION` is in `app.json` → `android.blockedPermissions`,
+> so the permission is **not in the shipped manifest** and no Location
+> Permissions declaration is owed. Drivers share foreground-only in 1.0.
+>
+> **Everything below stays accurate and stays valid** — the disclosure component
+> is still in the app, still wired, still required at the type level. Nothing
+> here needs rewriting when the feature returns; follow the four re-enable steps
+> in the comment above `BACKGROUND_LOCATION_ENABLED`, then work this file as
+> written.
+
 **What this file is for.** Google Play requires a *prominent in-app disclosure*
 shown **before** the system background-location permission dialog, and requires
 that the same wording appears in the Play Console permission declaration form

@@ -5,31 +5,48 @@ permissions**, and Google reads them. The text below is written to be pasted as-
 feature, says why the permission is the only way to build it, and says what happens when it is
 denied. That last part matters — a permission the app cannot survive without reads as a red flag.
 
-Verified against the codebase on **13 August 2026**.
+Verified against the codebase on **13 August 2026**. Background-location rows re-verified
+**14 August 2026**, when the feature was deferred to v1.1 (see §1).
 
 **Permissions the app declares** (`app.json` → `android.permissions`, plus config plugins and
 `modules/call-notification/android/src/main/AndroidManifest.xml`):
 
 | Permission | Declared where | Needs a form? |
 |---|---|---|
-| `ACCESS_BACKGROUND_LOCATION` | `app.json` + expo-location plugin | **Yes — with a demo video** |
+| `ACCESS_BACKGROUND_LOCATION` | ~~`app.json` + expo-location plugin~~ **blocked in 1.0** | **No — deferred to v1.1 (§1)** |
 | `ACCESS_FINE_LOCATION` / `ACCESS_COARSE_LOCATION` | `app.json` | No |
 | `USE_FULL_SCREEN_INTENT` | call-notification module manifest:11 | **Yes** |
 | `SYSTEM_ALERT_WINDOW` | `@config-plugins/react-native-webrtc` | Only if challenged |
 | `RECORD_AUDIO` | `app.json` + WebRTC plugin | No, but be ready |
 | `CAMERA` | `app.json` + expo-camera/image-picker plugins | No, but be ready |
-| `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_LOCATION` | `app.json` | Type must be declared |
+| `FOREGROUND_SERVICE` | `app.json` | No |
+| ~~`FOREGROUND_SERVICE_LOCATION`~~ | **blocked in 1.0** | Deferred with §1 |
+| `FOREGROUND_SERVICE_MEDIA_PLAYBACK` | expo-audio | **Type must be declared** (§6) |
+| `POST_NOTIFICATIONS` / `VIBRATE` | `app.json` + expo-notifications | No |
 | `WAKE_LOCK`, `BLUETOOTH`, `MODIFY_AUDIO_SETTINGS`, `INTERNET`, `ACCESS_NETWORK_STATE`, `VIBRATE` | various | No |
 
 ---
 
-## 1. ACCESS_BACKGROUND_LOCATION — the hard one
+## 1. ACCESS_BACKGROUND_LOCATION — the hard one · 🔁 DEFERRED TO v1.1
+
+> **Skip this section for the 1.0 submission.** The permission is not in the shipped manifest, so
+> the Location Permissions form does not apply and there is nothing to fill in. Leave the
+> sensitive-permissions location questions untouched.
+>
+> **Why it was deferred:** this is the item that decides the timeline, and it is the one part of
+> the submission that is slow rather than dangerous — a rejection here costs weeks, not the
+> account. 1.0 ships without it; drivers share foreground-only. The switch is
+> `BACKGROUND_LOCATION_ENABLED` in `src/lib/backgroundLocation.ts`, which carries the four-step
+> re-enable recipe.
+>
+> **Everything below is still correct and still the text to paste — in v1.1.** It was written
+> against the shipping implementation, which has not changed; only the flag has. Do not rewrite it.
 
 This is the permission that causes multi-week review loops. Google requires the justification
 below **and** a demo video (see `demo-video-script.md`) **and** a prominent in-app disclosure shown
 before the OS prompt. All three exist; the disclosure is
 `src/features/fleet/BackgroundLocationDisclosure.tsx`, called from `startBackgroundShare()` in
-`src/lib/backgroundLocation.ts:114`, *before* `requestBackgroundPermissionsAsync()` on line 116.
+`src/lib/backgroundLocation.ts:149`, *before* `requestBackgroundPermissionsAsync()` on line 151.
 
 **Paste this:**
 
@@ -67,14 +84,14 @@ before the OS prompt. All three exist; the disclosure is
 
 **Supporting facts if a reviewer asks for detail:**
 - Sampling: `Accuracy.Balanced`, every 15 seconds or 25 metres
-  (`src/lib/backgroundLocation.ts:124–127`).
+  (`src/lib/backgroundLocation.ts:160–162`).
 - A persistent foreground-service notification reads "Sharing your live location — Your vehicle is
-  visible to the owner and tracking customers" (`:130–131`), so the driver can never be unaware.
-- `showsBackgroundLocationIndicator: true` (`:128`).
+  visible to the owner and tracking customers" (`:165–166`), so the driver can never be unaware.
+- `showsBackgroundLocationIndicator: true` (`:163`).
 - Storage: `location_shares`, primary key `(business_id, user_id)` — one row, replaced in place
   (`supabase/migrations/0001_schema.sql:223`).
 - Declining is a first-class outcome, not an error: `{ ok: true, background: false, reason:
-  'declined' }` (`:115`).
+  'declined' }` (`:150`).
 
 ---
 
@@ -127,6 +144,16 @@ If you would rather not ship it at all, it can be stripped with a small config p
 so risks the incoming-call screen on some OEM Android builds (Xiaomi, Oppo, Vivo in particular),
 which is a worse trade than answering one question.
 
+> ⛔ **DO NOT add this to `android.blockedPermissions`.** It was blocked on 14 August 2026 and
+> reverted the same day once the call module was read properly. `CallNotifications.showCallScreen`
+> tries the overlay as **Route 1** — `if (canDrawOverlays(context)) { startActivity(screen) }`
+> (`CallNotifications.kt:301–304`) — and only falls through to the full-screen intent as Route 2.
+> Blocking the permission makes `Settings.canDrawOverlays()` permanently false, deleting the
+> primary path and leaving incoming calls dependent on `USE_FULL_SCREEN_INTENT`, which Android 14+
+> does **not** grant at install until Google classifies the app as a calling app (§2). The two
+> routes are attempted on every call precisely because either permission can be revoked while the
+> app is closed — see the comment at `CallNotifications.kt:286–288`.
+
 ---
 
 ## 4. RECORD_AUDIO
@@ -166,19 +193,39 @@ selling."*
 
 ---
 
-## 6. FOREGROUND_SERVICE_LOCATION
+## 6. Foreground service types
 
-Not a written justification, but Play requires the **foreground service type** to be declared and
-matched to a use case. Declare it as **location**, tied to the same driver live-sharing feature as
-§1. The service runs only while a driver has sharing switched on, and its notification is visible
-for the entire time (`src/lib/backgroundLocation.ts:129–132`).
+Play requires every declared **foreground service type** to be declared in Console and matched to a
+use case. This is not a written justification, but it is a form you must complete.
+
+### `FOREGROUND_SERVICE_MEDIA_PLAYBACK` — the only one in the 1.0 manifest
+
+Added by `expo-audio`, which plays the incoming-call ringtone
+(`assets/call_ringtone.wav`). Declare it as **media playback**, tied to in-app voice calling:
+the service exists so a call keeps ringing audibly while the app is backgrounded, and it stops when
+the call is answered, declined or times out after 30 seconds.
+
+This is a light form — a short description, no video.
+
+### ~~`FOREGROUND_SERVICE_LOCATION`~~ — 🔁 deferred to v1.1 with §1
+
+Not in the 1.0 manifest. `isAndroidForegroundServiceEnabled: false` on the expo-location plugin,
+plus a `blockedPermissions` entry, because nothing starts a location foreground service while
+`BACKGROUND_LOCATION_ENABLED` is off.
+
+When §1 returns, declare it as **location**, tied to the driver live-sharing feature. The service
+runs only while a driver has sharing switched on, and its notification is visible for the entire
+time (`src/lib/backgroundLocation.ts:164–167`). **Dropping this was half the point of deferring
+§1** — leaving it in would have kept a Console declaration owed for a service the app never starts.
 
 ---
 
 ## Filling the form — practical notes
 
-1. **Answer §1 first and get it right.** Background location is the item that decides your
-   timeline. A rejection here costs one to three weeks per round.
+1. ~~**Answer §1 first and get it right.**~~ **For 1.0, skip §1 entirely** — background location is
+   deferred, so the item that decides your timeline is no longer in play. The heaviest remaining
+   form is §2 (`USE_FULL_SCREEN_INTENT`). When §1 returns in v1.1, this note applies again:
+   a rejection there costs one to three weeks per round.
 2. **The video, the disclosure and this text must agree.** A reviewer checks that the wording you
    promised is the wording the app shows. The in-app text lives in
    `src/features/fleet/BackgroundLocationDisclosure.tsx` and is reproduced in

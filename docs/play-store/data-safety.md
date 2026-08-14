@@ -117,12 +117,17 @@ Order and bill records are declared under **App activity → Other actions** ins
 - **Why:** Two distinct uses, and they must be described separately in the permission declaration
   (see `permission-declarations.md`):
   1. **Foreground** — nearby search, distance sorting, and pinning a business's location on the
-     map when listing it.
-  2. **Background** — *only* for a driver who explicitly switches on live sharing for a shift, so
-     the business owner and tracking customers can see the vehicle move. Off by default, per
-     business, and switched off from the same screen.
-- **Cite:** foreground `src/lib/location.ts`; background `src/lib/backgroundLocation.ts:124`
-  (`Accuracy.Balanced`, 15s / 25m, with a visible foreground-service notification).
+     map when listing it. **This is the only precise-location use in 1.0.**
+  2. 🔁 **Background** — **DEFERRED TO v1.1; do not describe it in the 1.0 Data safety form.**
+     `ACCESS_BACKGROUND_LOCATION` is not in the shipped manifest, so declaring background
+     collection would overstate what the app does — and a form answer that contradicts the
+     manifest is the "data safety mismatch" rejection in `release-checklist.md`. In 1.1 it returns
+     as: *only* for a driver who explicitly switches on live sharing for a shift, so the business
+     owner and tracking customers can see the vehicle move. Off by default, per business, and
+     switched off from the same screen.
+- **Cite:** foreground `src/lib/location.ts`; background `src/lib/backgroundLocation.ts:160`
+  (`Accuracy.Balanced`, 15s / 25m, with a visible foreground-service notification) — gated off in
+  1.0 by `BACKGROUND_LOCATION_ENABLED` at the top of that file.
 - **Retention note worth knowing:** one row per driver per business holds the *latest* position
   only — each update replaces the last, so no trail or history is kept
   (`location_shares`, `supabase/migrations/0001_schema.sql:223`, primary key
