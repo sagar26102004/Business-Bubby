@@ -7,18 +7,18 @@
  *
  *   • Hand over — `reassignOwner`, the right move for a real business. It keeps
  *     the page, its orders and its history; only the owner changes.
- *   • Remove — `BusinessRepository.remove`, for a test or duplicate listing.
- *     Irreversible and cascading (team, orders, bills, chats, calls, ads go
- *     with it), so it asks for the name to be typed rather than showing a
- *     one-tap confirm.
+ *   • Remove — for a test or duplicate listing. Irreversible and cascading, and
+ *     the same `DeleteListingPanel` the owner gets in Manage, so the console
+ *     and the owner are warned about exactly the same thing.
  */
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Business, User } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
+import { DeleteListingPanel } from '@/features/businesses/DeleteListing';
 import { OwnerPicker } from '@/features/businesses/OwnerPicker';
-import { Button, Card, Input, Tag, Text } from '@/components/ui';
+import { Button, Card, Tag, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
 
 type Mode = 'handover' | 'remove';
@@ -40,7 +40,6 @@ export function AdminOwnedListings({
   const [openId, setOpenId] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>('handover');
   const [newOwner, setNewOwner] = useState<User | null>(null);
-  const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -49,7 +48,6 @@ export function AdminOwnedListings({
     setOpenId(same ? null : id);
     setMode(next);
     setNewOwner(null);
-    setTyped('');
     setMessage(null);
   };
 
@@ -64,22 +62,6 @@ export function AdminOwnedListings({
       onChanged();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Could not change the owner.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const remove = async (business: Business) => {
-    if (!currentUser) return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      await repos.businesses.remove(business.id, currentUser.id);
-      setOpenId(null);
-      setTyped('');
-      onChanged();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Could not remove that listing.');
     } finally {
       setBusy(false);
     }
@@ -150,26 +132,15 @@ export function AdminOwnedListings({
             ) : null}
 
             {isOpen && mode === 'remove' ? (
-              <View style={styles.panel}>
-                <Text variant="caption" tone="danger">
-                  This deletes the page and everything on it — team, orders, bills, chats, calls
-                  and ad campaigns. It can’t be undone.
-                </Text>
-                <Input
-                  label={`Type “${b.name}” to confirm`}
-                  value={typed}
-                  onChangeText={setTyped}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                />
-                <Button
-                  title="Remove this listing"
-                  variant="secondary"
-                  onPress={() => remove(b)}
-                  loading={busy}
-                  disabled={typed.trim().toLowerCase() !== b.name.trim().toLowerCase()}
-                />
-              </View>
+              // The warning and the type-the-name rule are shared with the
+              // owner's own delete in Manage, so the two can't drift apart.
+              <DeleteListingPanel
+                business={b}
+                onDeleted={() => {
+                  setOpenId(null);
+                  onChanged();
+                }}
+              />
             ) : null}
 
             {isOpen && message ? (

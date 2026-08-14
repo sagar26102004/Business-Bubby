@@ -521,5 +521,67 @@ re-derivation from the Supabase diff is required:
 
 ---
 
+## [SYNC-032] `AuthRepository.changePassword` — already delegated, verify only
+
+- **Area:** AuthRepository / auth
+- **Supabase change:** `src/data/supabase/auth.ts` gained `changePassword(currentPassword,
+  newPassword)`. It re-checks the current password by calling `signInWithPassword` with
+  `session.user.email` (the credential address — `<username>@localo.app`, the phone alias, or a
+  real address) and only then calls `sb.auth.updateUser({ password })`. Supabase's own
+  `updateUser` does NOT ask for the old password, and trusting an open session would let anyone
+  holding an unlocked phone lock the owner out; hence the explicit re-auth. Accounts with no
+  credential address (Google) are refused with a message pointing at Google. `assertPassword`
+  enforces the shared minimum; "same as current" is refused before the network call.
+- **Domain/interface:** `changePassword` added to `AuthRepository` in `src/data/repositories.ts`
+  (shared — already done). Mock implemented in `src/data/mock/mockRepositories.ts`: it has no
+  stored passwords, so it reproduces every REFUSAL in the same words and order and otherwise
+  succeeds, keeping the screen's error paths reachable offline.
+- **Path B — backend/:** **NOTHING TO DO.** Passwords live in GoTrue; the Express API verifies
+  JWTs and never issues them. Adding an endpoint here could only drift from Path A.
+- **Path B — src/data/api/:** **ALREADY DONE** — `src/data/api/auth.ts` delegates to
+  `supabaseAuth.changePassword`, the same pattern `signInWithGoogle` ([SYNC-027]) and
+  `deleteAccount` ([SYNC-031]) already use. Left in place so the interface typechecks.
+- **DB/migration:** none.
+- **Verify:** `npm run typecheck && npm run build` in `backend/` still passes; with
+  `EXPO_PUBLIC_BACKEND=api`, change a throwaway account's password, confirm a wrong current
+  password is refused, and confirm the new password signs in.
+
+---
+
+## [SYNC-033] Saved places become writable — `savePlace` / `removePlace`
+
+- **Area:** PlacesRepository / places
+- **Supabase change:** `src/data/supabase/places.ts` gained `savePlace(input)` and
+  `removePlace(id)` over the existing `saved_places` table. Notes:
+  - `savedPlaces()` now selects `id, data` and lets the ROW id win over any `id` inside `data` —
+    the column is what a delete keys on and the only id the database guarantees is unique.
+  - `savePlace` inserts `{ user_id, data }` and reads the `gen_random_uuid()` id back with
+    `.select('id').single()`, so no uuid is manufactured on a device whose runtime may lack
+    `crypto.randomUUID`.
+  - `kind: 'home' | 'work'` REPLACES the existing place of that kind (delete-then-insert; there
+    is no natural key to upsert on). `custom` places accumulate. `kind: 'current'` is not
+    storable — it's the device GPS fix — and is excluded by the interface type.
+  - `removePlace` does no existence check: RLS scopes the delete to the caller's own rows, so an
+    unknown or someone else's id is a no-op rather than an error.
+- **Domain/interface:** `savePlace`/`removePlace` + `NewSavedPlaceInput` added to
+  `PlacesRepository` in `src/data/repositories.ts` (shared — already done). Mock implemented with
+  the same replace-home/work semantics.
+- **Path B — backend/:** **NOTHING TO DO** for now. `src/data/api/index.ts` maps
+  `places: mock.places` (device GPS + saved places are client-side in Path B, as noted at the top
+  of that file), so both new methods arrive from the mock and the interface typechecks.
+  ⚠️ **Known behaviour gap, pre-existing and now user-visible:** under `EXPO_PUBLIC_BACKEND=api`
+  saved places are IN-MEMORY and die on reload, where Path A persists them to `saved_places`.
+  Closing it means either pointing `src/data/api/`'s places at the Supabase implementation (the
+  cheap fix — the table and its RLS are shared and need no API involvement) or adding
+  `GET/POST/DELETE /places` to Express over the same table. Prefer the former unless Path B is
+  meant to run without any Supabase client at all.
+- **DB/migration:** none — `saved_places` and its owner-scoped RLS policy (`saved_places_all`,
+  migration 0002) already permit insert and delete; nothing was opened up.
+- **Verify:** `npm run typecheck && npm run build` in `backend/`; in the app, add Home from
+  `/saved-places`, confirm it appears in the Home location dropdown, reload, confirm it survives
+  (Path A), and confirm saving Home twice leaves ONE Home.
+
+---
+
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
 

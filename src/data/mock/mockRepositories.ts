@@ -87,6 +87,7 @@ import type {
   NewOrderLineInput,
   NewProductMessageInput,
   NewReviewInput,
+  NewSavedPlaceInput,
   NewTrackedItemInput,
   NewUserInput,
   NewVehicleInput,
@@ -903,6 +904,22 @@ class MockAuthRepository implements AuthRepository {
     return { deleted: true, listingsRemoved };
   }
 
+  /**
+   * Offline there are no passwords to change — `signIn` accepts anything — so
+   * this can't be a real credential swap. What it CAN do faithfully is refuse
+   * everything the real backend refuses, in the same words and the same order,
+   * so the screen's error paths are all reachable without a backend and the
+   * happy path still ends in success.
+   */
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await delay(200);
+    if (!currentUserId) throw new Error('You are not signed in.');
+    if (!currentPassword) throw new Error('Enter your current password.');
+    assertPassword(newPassword);
+    if (currentPassword === newPassword) {
+      throw new Error('That is already your password. Choose a different one.');
+    }
+  }
 }
 
 /**
@@ -1061,6 +1078,39 @@ class MockPlacesRepository implements PlacesRepository {
       a.kind === 'current' ? -1 : b.kind === 'current' ? 1 : 0,
     );
     return Promise.all(ordered.map((p) => this.withDeviceLocation(p)));
+  }
+
+  async savePlace(input: NewSavedPlaceInput): Promise<SavedPlace> {
+    await delay(120);
+    const label = input.label.trim();
+    if (!label) throw new Error('Give this place a name.');
+
+    // One home, one work. Replacing beats appending: a dropdown offering "Home"
+    // twice is a mess the user then has to tidy up by hand.
+    const existing =
+      input.kind === 'home' || input.kind === 'work'
+        ? places.find((p) => p.kind === input.kind)
+        : undefined;
+    if (existing) {
+      Object.assign(existing, { label, point: input.point, address: input.address });
+      return clone(existing);
+    }
+
+    const place: SavedPlace = {
+      id: nextId('p'),
+      label,
+      kind: input.kind,
+      point: input.point,
+      address: input.address,
+    };
+    places.push(place);
+    return clone(place);
+  }
+
+  async removePlace(id: string): Promise<void> {
+    await delay(80);
+    const index = places.findIndex((p) => p.id === id && p.kind !== 'current');
+    if (index >= 0) places.splice(index, 1);
   }
 }
 

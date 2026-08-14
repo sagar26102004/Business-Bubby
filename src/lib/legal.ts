@@ -15,19 +15,21 @@
  * They are static, self-contained HTML — any static host works (GitHub Pages,
  * Netlify, a folder on a domain). Upload them, then paste the real URLs below.
  *
+ * HOSTED ON GITHUB PAGES from this same repo. `.github/workflows/legal-pages.yml`
+ * publishes `docs/legal/` as the site root — which is why the URLs below have no
+ * `/legal/` segment. Editing any page under `docs/legal/` and pushing to `main`
+ * redeploys it in about a minute; the URLs never change.
+ *
  * The value in the Play Console listing MUST be the same URL as
  * `PRIVACY_POLICY_URL`.
  */
 import { Linking } from 'react-native';
 
-/** TODO(sagar): replace with the real hosted URL before the first Play upload. */
-export const PRIVACY_POLICY_URL = 'https://example.com/one-place/privacy-policy.html';
+export const PRIVACY_POLICY_URL = 'https://sagar26102004.github.io/Business-Bubby/privacy-policy.html';
 
-/** TODO(sagar): replace with the real hosted URL before the first Play upload. */
-export const TERMS_URL = 'https://example.com/one-place/terms-of-service.html';
+export const TERMS_URL = 'https://sagar26102004.github.io/Business-Bubby/terms-of-service.html';
 
-/** TODO(sagar): replace with the real hosted URL before the first Play upload. */
-export const SUPPORT_URL = 'https://example.com/one-place/support.html';
+export const SUPPORT_URL = 'https://sagar26102004.github.io/Business-Bubby/support.html';
 
 /**
  * Account deletion, on the web.
@@ -37,10 +39,8 @@ export const SUPPORT_URL = 'https://example.com/one-place/support.html';
  * uninstalled the app — or never installed it — can use. This URL is declared
  * in the Play Console under Data safety → Account deletion, and it must be
  * reachable WITHOUT signing in, or the reviewer marks it failed.
- *
- * TODO(sagar): replace with the real hosted URL before the first Play upload.
  */
-export const ACCOUNT_DELETION_URL = 'https://example.com/one-place/delete-account.html';
+export const ACCOUNT_DELETION_URL = 'https://sagar26102004.github.io/Business-Bubby/delete-account.html';
 
 /**
  * Open a legal page in the system browser.

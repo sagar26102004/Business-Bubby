@@ -441,7 +441,9 @@ export function OfferingsEditor<T extends OfferingItem>({
           </View>
         </View>
       ) : (
-        <Button title={addLabel} variant="secondary" onPress={add} />
+        // "＋ Add product" — the same add affordance the menu builder uses, so
+        // one glance finds it on every catalog screen.
+        <Button title={`＋ ${addLabel}`} variant="secondary" onPress={add} />
       )}
     </View>
   );

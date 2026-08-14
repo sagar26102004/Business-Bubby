@@ -356,6 +356,55 @@ export function createSupabaseAuth(): AuthRepository {
       return { deleted: true, listingsRemoved: result.listingsRemoved ?? 0 };
     },
 
+    /**
+     * Change the password, re-checking the current one first.
+     *
+     * Supabase's `updateUser({ password })` does NOT ask for the old password —
+     * it trusts the session. That is the wrong trade for a phone someone leaves
+     * unlocked on a counter, so the check is done here: sign in again with the
+     * credential address off the session and the password the person typed. A
+     * wrong one fails that sign-in and nothing is written.
+     *
+     * Re-signing in mints a NEW session for the SAME account, which is why it's
+     * safe to do mid-flight — the app never sees a signed-out moment.
+     *
+     * `session.user.email` is the credential address (`<username>@localo.app`
+     * for a handle account, the real address for a Google or email one), so no
+     * derivation and no lookup is needed here — unlike `signIn`, which only has
+     * what the user typed into a box.
+     */
+    async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+      if (!currentPassword) throw new Error('Enter your current password.');
+      const next = assertPassword(newPassword);
+
+      const { data: sessionData } = await sb.auth.getSession();
+      const session = sessionData.session;
+      if (!session || session.user.is_anonymous) throw new Error('You are not signed in.');
+
+      const address = session.user.email;
+      if (!address) {
+        // A Google account has no password to change, and inventing one here
+        // would quietly create a second way into an account whose owner still
+        // believes Google is the only door.
+        throw new Error(
+          'This account signs in with Google, so it has no password to change. ' +
+            'Manage it in your Google account instead.',
+        );
+      }
+
+      if (currentPassword === next) {
+        throw new Error('That is already your password. Choose a different one.');
+      }
+
+      const { error: checkError } = await sb.auth.signInWithPassword({
+        email: address,
+        password: currentPassword,
+      });
+      if (checkError) throw new Error('That’s not your current password.');
+
+      const { error } = await sb.auth.updateUser({ password: next });
+      if (error) throw new Error(niceAuthError(error.message));
+    },
   };
 }
 

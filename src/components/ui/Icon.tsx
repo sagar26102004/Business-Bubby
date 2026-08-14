@@ -35,7 +35,15 @@ export type IconName =
   | 'chevronDown'
   | 'chevronRight'
   | 'store'
-  | 'phone';
+  | 'phone'
+  | 'mail'
+  | 'lock'
+  | 'settings'
+  | 'shield'
+  | 'camera'
+  | 'logout'
+  | 'trash'
+  | 'info';
 
 export interface IconProps {
   name: IconName;
@@ -183,6 +191,67 @@ export function Icon({ name, size = 24, color = '#000', filled, strokeWidth = 2 
           d="M21 16.5v3a1.8 1.8 0 0 1-2 1.8 17.8 17.8 0 0 1-7.7-2.8 17.5 17.5 0 0 1-5.4-5.4A17.8 17.8 0 0 1 3.1 5.4 1.8 1.8 0 0 1 4.9 3.5h3a1.8 1.8 0 0 1 1.8 1.6c.1.9.3 1.7.6 2.5a1.8 1.8 0 0 1-.4 1.9l-1.2 1.2a14 14 0 0 0 5.4 5.4l1.2-1.2a1.8 1.8 0 0 1 1.9-.4c.8.3 1.6.5 2.5.6a1.8 1.8 0 0 1 1.6 1.9z"
           {...solid}
         />
+      ) : null}
+
+      {name === 'mail' ? (
+        <>
+          <Rect x={2.5} y={5} width={19} height={14} rx={2} {...s} />
+          <Path d="m3.5 6.5 8.5 6.5 8.5-6.5" {...s} />
+        </>
+      ) : null}
+
+      {name === 'lock' ? (
+        <>
+          <Rect x={4} y={10} width={16} height={11} rx={2} {...solid} />
+          <Path d="M7.5 10V7.5a4.5 4.5 0 0 1 9 0V10" {...s} />
+        </>
+      ) : null}
+
+      {/*
+        Sliders, not a gear. A gear at 18px — the size the settings rows draw it
+        — loses its teeth and reads as a sun or an asterisk; three tracks with
+        knobs stay legible all the way down.
+      */}
+      {name === 'settings' ? (
+        <>
+          <Path d="M4 7h16M4 12h16M4 17h16" {...s} />
+          <Circle cx={9} cy={7} r={2.2} fill={color} stroke="none" />
+          <Circle cx={15} cy={12} r={2.2} fill={color} stroke="none" />
+          <Circle cx={8} cy={17} r={2.2} fill={color} stroke="none" />
+        </>
+      ) : null}
+
+      {name === 'shield' ? (
+        <Path d="M12 2.5 20 5.5v6c0 5-3.4 8.7-8 10.5-4.6-1.8-8-5.5-8-10.5v-6z" {...solid} />
+      ) : null}
+
+      {name === 'camera' ? (
+        <>
+          <Path d="M3 8.5h3.5L8.5 5.5h7l2 3H21a1.5 1.5 0 0 1 1.5 1.5v8a1.5 1.5 0 0 1-1.5 1.5H3A1.5 1.5 0 0 1 1.5 18v-8A1.5 1.5 0 0 1 3 8.5z" {...solid} />
+          {!filled ? <Circle cx={12} cy={13.5} r={3.5} {...s} /> : null}
+        </>
+      ) : null}
+
+      {name === 'logout' ? (
+        <>
+          <Path d="M14.5 3.5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h8.5" {...s} />
+          <Path d="M18 8.5 21.5 12 18 15.5M21.5 12h-11" {...s} />
+        </>
+      ) : null}
+
+      {name === 'trash' ? (
+        <>
+          <Path d="M3.5 6.5h17M9.5 6.5V4.5a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v2" {...s} />
+          <Path d="M5.5 6.5 6.6 20a1.6 1.6 0 0 0 1.6 1.5h7.6a1.6 1.6 0 0 0 1.6-1.5l1.1-13.5" {...s} />
+        </>
+      ) : null}
+
+      {name === 'info' ? (
+        <>
+          <Circle cx={12} cy={12} r={9} {...s} />
+          <Path d="M12 11v5.5" {...s} />
+          <Circle cx={12} cy={7.8} r={0.9} fill={color} stroke="none" />
+        </>
       ) : null}
     </Svg>
   );

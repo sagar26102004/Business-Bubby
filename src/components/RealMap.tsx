@@ -36,6 +36,12 @@ type Props = {
   ringsKm?: number[];
   selectedId?: string;
   onMarkerPress?: (id: string) => void;
+  /**
+   * Tap anywhere on the map to get that coordinate back. Used by the saved-place
+   * picker to drop Home somewhere other than wherever the phone happens to be.
+   * Omitted on read-only maps, where a stray tap should do nothing.
+   */
+  onMapPress?: (point: GeoPoint) => void;
   style?: StyleProp<ViewStyle>;
   /** Keep the map mounted and push marker moves in live (no reload per update). */
   live?: boolean;
@@ -56,9 +62,10 @@ function buildHtml(
   ringsKm: number[],
   selectedId?: string,
   route: GeoPoint[] = [],
+  tappable = false,
 ) {
   const hasRoute = route.length >= 2;
-  const data = JSON.stringify({ center, markers, rings: ringsKm, selectedId, route });
+  const data = JSON.stringify({ center, markers, rings: ringsKm, selectedId, route, tappable });
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -193,6 +200,14 @@ function buildHtml(
 
     draw({ markers: D.markers, selectedId: D.selectedId, follow: false });
 
+    // Pick-a-point mode. Leaflet fires 'click' only for taps that aren't a drag
+    // or a marker hit, so panning the map never drops a pin by accident.
+    if (D.tappable) {
+      map.on('click', function (e) {
+        send({ type: 'tap', latitude: e.latlng.lat, longitude: e.latlng.lng });
+      });
+    }
+
     // Imperative update channel (used only in live mode).
     function applyPayload(P) { try { draw(P); } catch (e) {} }
     window.__applyMap = function (P) { applyPayload(P); };       // native (injected JS)
@@ -213,9 +228,13 @@ export default function RealMap(props: Props) {
   return Platform.OS === 'web' ? <WebMap {...props} /> : <NativeMap {...props} />;
 }
 
-function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, style, live, follow, route }: Props) {
+function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route }: Props) {
   const onPress = useRef(onMarkerPress);
   onPress.current = onMarkerPress;
+  // Same ref trick as the marker handler: the listener is registered once, so
+  // it must read the CURRENT callback rather than the one from first render.
+  const onTap = useRef(onMapPress);
+  onTap.current = onMapPress;
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const readyRef = useRef(false);
   const payloadRef = useRef({ markers, selectedId, follow });
@@ -233,6 +252,9 @@ function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, style, li
       try {
         const d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
         if (d?.type === 'marker') onPress.current?.(d.id);
+        if (d?.type === 'tap') {
+          onTap.current?.({ latitude: d.latitude, longitude: d.longitude });
+        }
         if (d?.type === 'ready') {
           readyRef.current = true;
           if (live) postUpdate();
@@ -257,14 +279,14 @@ function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, style, li
   const builtRouteKey = useRef<string | null>(null);
   if (live) {
     if (htmlRef.current === null || builtRouteKey.current !== routeKey) {
-      htmlRef.current = buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? []);
+      htmlRef.current = buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress);
       builtRouteKey.current = routeKey;
       readyRef.current = false; // the reloaded page announces ready again
     }
   }
   const html = live
     ? (htmlRef.current as string)
-    : buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? []);
+    : buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress);
 
   return (
     <View style={[styles.fill, style]}>
@@ -279,7 +301,7 @@ function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, style, li
   );
 }
 
-function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, style, live, follow, route }: Props) {
+function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route }: Props) {
   // Required lazily so the web bundle never touches the native module.
   const { WebView } = require('react-native-webview');
   const webRef = useRef<any>(null);
@@ -304,14 +326,14 @@ function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, style,
   const builtRouteKey = useRef<string | null>(null);
   if (live) {
     if (htmlRef.current === null || builtRouteKey.current !== routeKey) {
-      htmlRef.current = buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? []);
+      htmlRef.current = buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress);
       builtRouteKey.current = routeKey;
       readyRef.current = false;
     }
   }
   const html = live
     ? (htmlRef.current as string)
-    : buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? []);
+    : buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress);
 
   return (
     <WebView
@@ -328,6 +350,7 @@ function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, style,
         try {
           const d = JSON.parse(e.nativeEvent.data);
           if (d?.type === 'marker') onMarkerPress?.(d.id);
+          if (d?.type === 'tap') onMapPress?.({ latitude: d.latitude, longitude: d.longitude });
         } catch {}
       }}
     />

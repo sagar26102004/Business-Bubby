@@ -209,5 +209,13 @@ export function createApiAuth(): AuthRepository {
       return supabaseAuth.deleteAccount();
     },
 
+    /**
+     * Delegated for the third time and the same reason: passwords live in
+     * GoTrue, not in the Express API, so there is no endpoint to add here and a
+     * second implementation could only drift. See [SYNC-032].
+     */
+    async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+      return supabaseAuth.changePassword(currentPassword, newPassword);
+    },
   };
 }

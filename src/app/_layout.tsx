@@ -235,6 +235,18 @@ export default function RootLayout() {
           <Stack.Screen name="chat/[businessId]/index" options={{ title: 'Chat' }} />
           <Stack.Screen name="customers/[businessId]" options={{ title: 'Customers' }} />
           <Stack.Screen name="manage/[businessId]" options={{ title: 'Manage' }} />
+          <Stack.Screen name="manage/[businessId]/details" options={{ title: 'Name & details' }} />
+          <Stack.Screen name="manage/[businessId]/tags" options={{ title: 'Tags' }} />
+          <Stack.Screen name="manage/[businessId]/hours" options={{ title: 'Opening hours' }} />
+          <Stack.Screen name="manage/[businessId]/availability" options={{ title: 'Availability' }} />
+          <Stack.Screen name="manage/[businessId]/menu" options={{ title: 'Menu' }} />
+          <Stack.Screen name="manage/[businessId]/products" options={{ title: 'Products' }} />
+          <Stack.Screen name="manage/[businessId]/services" options={{ title: 'Services' }} />
+          <Stack.Screen name="manage/[businessId]/rentals" options={{ title: 'For rent' }} />
+          <Stack.Screen name="manage/[businessId]/tables" options={{ title: 'Tables' }} />
+          <Stack.Screen name="manage/[businessId]/parties" options={{ title: 'Party packages' }} />
+          <Stack.Screen name="manage/[businessId]/calls" options={{ title: 'Calls & chat' }} />
+          <Stack.Screen name="manage/[businessId]/tools" options={{ title: 'Workspace tools' }} />
           <Stack.Screen name="stall/[businessId]" options={{ title: 'Manage stall' }} />
           <Stack.Screen name="fleet/[businessId]/vehicles" options={{ title: 'Vehicles' }} />
           <Stack.Screen name="fleet/[businessId]/journey" options={{ title: 'Journeys' }} />
@@ -253,6 +265,11 @@ export default function RootLayout() {
             options={{ title: 'Notifications' }}
           />
           <Stack.Screen name="notification-settings" options={{ title: 'Notifications' }} />
+          <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+          <Stack.Screen name="edit-profile" options={{ title: 'Edit profile' }} />
+          <Stack.Screen name="contact-details" options={{ title: 'Contact details' }} />
+          <Stack.Screen name="change-password" options={{ title: 'Password' }} />
+          <Stack.Screen name="saved-places" options={{ title: 'Saved places' }} />
           <Stack.Screen name="delete-account" options={{ title: 'Delete account' }} />
           <Stack.Screen name="workspace/[businessId]/fleet" options={{ title: 'Fleet & tracking' }} />
           <Stack.Screen name="workspace/[businessId]/team" options={{ title: 'Team' }} />
@@ -268,10 +285,6 @@ export default function RootLayout() {
           <Stack.Screen name="admin/catalog" options={{ title: 'Tags & offerings' }} />
           <Stack.Screen name="ad-review" options={{ title: 'Ad review' }} />
           <Stack.Screen name="sign-in" options={{ presentation: 'modal', title: 'Sign in' }} />
-          <Stack.Screen
-            name="reset-password"
-            options={{ presentation: 'modal', title: 'Reset password' }}
-          />
         </Stack>
         {/* Keeps the splash up until the session is restored. */}
         <SplashGate />

@@ -36,6 +36,7 @@ import type {
   OrderFulfillment,
   PartyDetails,
   PaymentStatus,
+  PlaceKind,
   ProductMessage,
   RentalBasis,
   RentalItem,
@@ -410,6 +411,18 @@ export interface AuthRepository {
    */
   deleteAccount(): Promise<DeleteAccountResult>;
 
+  /**
+   * Change the signed-in account's password.
+   *
+   * The CURRENT password is required and genuinely re-checked, not taken on
+   * trust: a session left open on a shared phone must not be enough to lock the
+   * owner out of their own account. A wrong one throws "That's not your current
+   * password." and nothing is written.
+   *
+   * Always about the CALLER — no backend accepts a user id here. Accounts with
+   * no password (Google) throw, because there is nothing to change.
+   */
+  changePassword(currentPassword: string, newPassword: string): Promise<void>;
 }
 
 export interface PlacesRepository {
@@ -421,6 +434,25 @@ export interface PlacesRepository {
    * (Home, Work, …). The current place is always first.
    */
   listPlaces(): Promise<SavedPlace[]>;
+  /**
+   * Save a place to browse around later (Home, Work, or a named custom one).
+   *
+   * Saving a `home` or `work` place REPLACES the existing one of that kind —
+   * there is one home, and a list offering "Home" twice is a bug the user has
+   * to clean up. Custom places accumulate. Never accepts `kind: 'current'`:
+   * that one is the device's GPS fix and is not storable.
+   */
+  savePlace(input: NewSavedPlaceInput): Promise<SavedPlace>;
+  /** Forget a saved place. Unknown ids are a no-op, not an error. */
+  removePlace(id: string): Promise<void>;
+}
+
+/** A place being saved. `id` is assigned by the backend. */
+export interface NewSavedPlaceInput {
+  label: string;
+  kind: Exclude<PlaceKind, 'current'>;
+  point: GeoPoint;
+  address?: string;
 }
 
 export interface NotificationRepository {

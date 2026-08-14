@@ -1,15 +1,19 @@
 /**
- * Account screen — the signed-in user's profile and settings. Businesses live
- * in the "My Business" tab.
+ * Account screen — who you are, and the way in to everything about your
+ * account. Businesses live in the "My Business" tab.
+ *
+ * Deliberately SHORT. The profile card is the subject of the screen, then the
+ * handful of rows people actually open a settings area to find; the long tail
+ * (privacy, alerts, legal, version, sign out, delete) is one tap away in
+ * `/settings` rather than crowding the page it sits under.
  */
-import { useState } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { isSuperAdminUser } from '@/domain/superAdmin';
-import { useAuth, useRepositories } from '@/data/DataProvider';
+import { useAuth } from '@/data/DataProvider';
 import { DEV_TOOLS_ENABLED } from '@/lib/devTools';
 import { PRIVACY_POLICY_URL, openLegalPage } from '@/lib/legal';
-import { Avatar, Button, Card, LoadingView, Screen, Text } from '@/components/ui';
+import { Avatar, Button, ListGroup, ListRow, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
 
 /**
@@ -33,11 +37,9 @@ function PrivacyLink() {
 }
 
 export default function AccountScreen() {
-  const { currentUser, authLoading, setCurrentUser, signOut } = useAuth();
-  const repos = useRepositories();
+  const { currentUser, authLoading } = useAuth();
   const router = useRouter();
   const colors = useColors();
-  const [savingVisibility, setSavingVisibility] = useState(false);
 
   if (authLoading) return <LoadingView />;
 
@@ -61,6 +63,13 @@ export default function AccountScreen() {
             onPress={() => router.push('/sign-in')}
             style={styles.guestBtn}
           />
+          {/* Guests still have alerts and a location, so settings are theirs too. */}
+          <Button
+            title="Settings"
+            variant="ghost"
+            onPress={() => router.push('/settings')}
+            style={styles.guestBtn}
+          />
           {DEV_TOOLS_ENABLED ? (
             <Button
               title="🧪 Dev tools"
@@ -75,86 +84,55 @@ export default function AccountScreen() {
     );
   }
 
-  const togglePublic = async (value: boolean) => {
-    setSavingVisibility(true);
-    try {
-      const updated = await repos.users.update(currentUser.id, { isProfilePublic: value });
-      setCurrentUser(updated);
-    } finally {
-      setSavingVisibility(false);
-    }
-  };
-
   return (
     <Screen scroll>
       <View style={styles.header}>
-        <Avatar name={currentUser.name} uri={currentUser.avatarUrl} size={72} />
+        <Avatar name={currentUser.name} uri={currentUser.avatarUrl} size={88} />
         <Text variant="heading" weight="bold" style={styles.name}>
           {currentUser.name}
         </Text>
-        {currentUser.email ? <Text tone="muted">{currentUser.email}</Text> : null}
+        {currentUser.username ? <Text tone="muted">@{currentUser.username}</Text> : null}
+        {currentUser.bio ? (
+          <Text tone="muted" variant="caption" style={styles.bio}>
+            {currentUser.bio}
+          </Text>
+        ) : null}
+        <Button
+          title="Edit profile"
+          variant="secondary"
+          onPress={() => router.push('/edit-profile')}
+          style={styles.editBtn}
+        />
       </View>
 
-      {currentUser.bio ? <Text style={styles.bio}>{currentUser.bio}</Text> : null}
-
-
-      <Card style={styles.card}>
-        <View style={styles.switchRow}>
-          <View style={styles.switchLabel}>
-            <Text weight="medium">Public profile</Text>
-            <Text variant="caption" tone="muted">
-              When on, businesses can list you as an employee and customers can view your profile.
-            </Text>
-          </View>
-          <Switch
-            value={currentUser.isProfilePublic}
-            onValueChange={togglePublic}
-            disabled={savingVisibility}
-          />
-        </View>
-      </Card>
+      <ListGroup style={styles.group}>
+        <ListRow
+          icon="mail"
+          label="Contact details"
+          // Shows what's actually there, so "Not added" is itself the prompt.
+          value={currentUser.email ?? currentUser.phone ?? 'Not added'}
+          onPress={() => router.push('/contact-details')}
+        />
+        <ListRow icon="bell" label="Notifications" onPress={() => router.push('/notification-settings')} />
+        <ListRow icon="pin" label="Saved places" onPress={() => router.push('/saved-places')} />
+        <ListRow icon="lock" label="Password" onPress={() => router.push('/change-password')} />
+        <ListRow icon="settings" label="Settings" onPress={() => router.push('/settings')} />
+      </ListGroup>
 
       {isSuperAdminUser(currentUser) ? (
-        <Button
-          title="🛡️ Platform console"
-          variant="secondary"
-          onPress={() => router.push('/admin')}
-          style={styles.signOut}
-        />
+        <ListGroup style={styles.group}>
+          <ListRow icon="shield" label="Platform console" onPress={() => router.push('/admin')} />
+        </ListGroup>
       ) : null}
 
       {DEV_TOOLS_ENABLED ? (
         <Button
           title="🧪 Dev tools"
-          variant="secondary"
+          variant="ghost"
           onPress={() => router.push('/dev')}
-          style={isSuperAdminUser(currentUser) ? styles.signOutGhost : styles.signOut}
+          style={styles.devBtn}
         />
       ) : null}
-      <Button
-        title="Sign out"
-        variant="ghost"
-        onPress={() => signOut()}
-        // Keeps its breathing room when nothing sits above it.
-        style={
-          isSuperAdminUser(currentUser) || DEV_TOOLS_ENABLED ? styles.signOutGhost : styles.signOut
-        }
-      />
-
-      {/*
-        Play requires an in-app deletion path for any app with sign-up, and
-        requires it to be FINDABLE — buried behind a support email doesn't pass.
-        It sits below Sign out, in the danger colour, and leads to a screen that
-        explains itself rather than deleting on the spot.
-      */}
-      <Text
-        variant="caption"
-        weight="medium"
-        style={[styles.delete, { color: colors.danger }]}
-        onPress={() => router.push('/delete-account')}
-      >
-        Delete my account
-      </Text>
 
       <PrivacyLink />
     </Screen>
@@ -162,15 +140,12 @@ export default function AccountScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: { alignItems: 'center', gap: spacing.xs, marginBottom: spacing.lg },
+  header: { alignItems: 'center', gap: spacing.xs, marginBottom: spacing.xl },
   name: { marginTop: spacing.sm },
-  bio: { marginBottom: spacing.lg },
-  card: { marginBottom: spacing.lg },
-  switchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  switchLabel: { flex: 1 },
-  signOut: { marginTop: spacing.xl },
-  signOutGhost: { marginTop: spacing.sm },
-  delete: { marginTop: spacing.lg, textAlign: 'center' },
+  bio: { textAlign: 'center', marginTop: spacing.xs },
+  editBtn: { marginTop: spacing.md, minWidth: 160 },
+  group: { marginBottom: spacing.lg },
+  devBtn: { marginTop: spacing.sm },
   guest: { alignItems: 'center', paddingTop: spacing.xxl },
   guestLogo: { fontSize: 44 },
   guestTitle: { marginTop: spacing.md, textAlign: 'center' },

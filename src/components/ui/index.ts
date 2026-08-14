@@ -10,6 +10,7 @@ export { Avatar } from './Avatar';
 export { Stars } from './Stars';
 export { AutoCarousel } from './AutoCarousel';
 export { Icon, type IconName } from './Icon';
+export { ListRow, ListGroup } from './ListRow';
 export { SearchIcon } from './SearchIcon';
 export { SearchField } from './SearchField';
 export { ScanIcon } from './ScanIcon';

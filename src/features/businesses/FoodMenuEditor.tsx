@@ -830,7 +830,7 @@ function DishEditor({
           </View>
         </View>
       ) : (
-        <Button title="Add dish" variant="secondary" onPress={add} />
+        <Button title="＋ Add dish" variant="secondary" onPress={add} />
       )}
     </View>
   );
