@@ -154,11 +154,20 @@ squircles and rounded squares. The in-app adaptive icon is separate and already 
 | Size | **1024 × 500 px** |
 | Format | PNG or JPEG, **no alpha** |
 | Max file size | 15 MB |
+| **Ready to upload** | **`docs/play-store/play-feature-graphic-1024x500.png`** — already generated (1024×500 RGB, no alpha, 31 KB) |
 
 This is the banner at the top of your store page. Two rules that matter more than the design:
 **no screenshots of the app inside it**, and **keep text away from the edges** — it gets cropped on
 some surfaces. A clean background, the icon, the name, and one short line ("Your neighbourhood, in
 one app") is enough.
+
+The generated file is exactly that: the app mark, the name, and the tagline on the same black the
+icon and splash use. Regenerate it after any icon change — it composes from `assets/icon.png`, so
+the banner cannot drift from the launcher mark:
+
+```bash
+python scripts/make-feature-graphic.py
+```
 
 ### Phone screenshots — required
 | | |
@@ -168,6 +177,10 @@ one app") is enough.
 | Recommended | **1080 × 1920 px** portrait |
 | Format | PNG or JPEG |
 | Max file size | 8 MB each |
+| **Ready to upload** | **`docs/play-store/screenshots/`** — five captured at 1080×1920. Read that folder's `README.md`: they must be **re-captured after the data cleanup**, and two more are still owed. |
+
+Capture them with `node scripts/play-screenshots.mjs` against a running `npx expo start --web`
+rather than by hand, so the whole set can be redone in one command whenever the data changes.
 
 **Shoot these six, in this order** — the first two are what people actually see in search results,
 so lead with the strongest:

@@ -9,9 +9,14 @@
  * a business's video ad actually plays instead of sitting still.
  *
  * THE THREE CONTROLS, all applied to one fetch:
- *   RANGE      — the customer's own radius, in km. It goes to the repository
- *                (`listPlacements(near, { radiusKm })`), because widening the
- *                range must fetch further, not just filter what's on hand.
+ *   RANGE      — the customer's own radius, in km, from 1 km all the way to
+ *                "Anywhere". It goes to the repository (`listPlacements(near,
+ *                { radiusKm })`), because widening the range must fetch
+ *                further, not just filter what's on hand. Nothing caps it at a
+ *                neighborhood: a customer willing to scroll through what's on
+ *                offer 100 km away is inventory delivered for free, and ads are
+ *                no longer sold by radius (domain/ads.ts) so a wider look costs
+ *                the advertiser nothing either.
  *   CATEGORY   — the same INTENT_CATEGORIES as Home, matched with
  *                `intentMatches`, so "Food" means the same thing on both.
  *   REELS ONLY — narrows to offers with a video. Only offered when a video is
@@ -20,8 +25,10 @@
  *
  * COUNTING. A page reaching the screen is an impression, and the ad's tap is
  * the CTA, exactly as on Home — same `recordImpression` / `recordTap`, so a
- * business's numbers mean one thing across both surfaces. Both are
- * fire-and-forget: a counter must never delay or break browsing.
+ * business's numbers mean one thing across both surfaces. The viewer's DISTANCE
+ * rides along with the impression, because that's what decides whether the view
+ * counts toward what the advertiser bought. Both are fire-and-forget: a counter
+ * must never delay or break browsing.
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -40,6 +47,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { AdPlacement } from '@/data/repositories';
 import type { Business, SavedPlace } from '@/domain/types';
 import { INTENT_CATEGORIES, intentMatches } from '@/domain/intents';
+import { ANY_RANGE_KM, DEFAULT_FEED_RANGE_KM, FEED_RANGES_KM, formatRangeKm } from '@/domain/ads';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { shareText } from '@/lib/share';
@@ -48,12 +56,11 @@ import { DealReelCard } from '@/features/ads/DealReelCard';
 import { radius, spacing } from '@/theme/theme';
 
 /**
- * The ranges on offer. Small steps where people actually walk, then a couple of
- * big ones for a thin neighborhood — the same ladder the ad plans are priced
- * on, so "my ad reaches 6 km" and "show me 5 km" are comparable numbers.
+ * The ranges on offer live in domain/ads.ts beside the plans, so "views within
+ * 5 km" and "show me 5 km" stay the same units — and so the ladder's top end
+ * ("Anywhere") is one number the whole app agrees on.
  */
-const RANGES_KM = [1, 2, 5, 10, 25] as const;
-const DEFAULT_RANGE_KM = 5;
+const RANGES_KM = [...FEED_RANGES_KM, ANY_RANGE_KM];
 
 export default function DealsScreen() {
   const repos = useRepositories();
@@ -65,7 +72,7 @@ export default function DealsScreen() {
   // rather than resetting them to everything.
   const { place: placeId, intent } = useLocalSearchParams<{ place?: string; intent?: string }>();
 
-  const [rangeKm, setRangeKm] = useState<number>(DEFAULT_RANGE_KM);
+  const [rangeKm, setRangeKm] = useState<number>(DEFAULT_FEED_RANGE_KM);
   const [categoryId, setCategoryId] = useState<string | null>(intent ?? null);
   const [reelsOnly, setReelsOnly] = useState(false);
   const [rangeOpen, setRangeOpen] = useState(false);
@@ -117,7 +124,9 @@ export default function DealsScreen() {
     const campaignId = placement.campaign?.id;
     if (campaignId && !counted.current.has(campaignId)) {
       counted.current.add(campaignId);
-      void repos.ads.recordImpression(campaignId);
+      // The viewer's distance decides whether this view counts toward what the
+      // business bought (domain/ads.ts), so it travels with the impression.
+      void repos.ads.recordImpression(campaignId, placement.distanceKm);
     }
   }).current;
 
@@ -144,7 +153,7 @@ export default function DealsScreen() {
   // 9:16 inside the window is what the ad was filmed for.
   const pageWidth = Platform.OS === 'web' ? Math.min(width, Math.round(pageHeight * 0.62)) : width;
 
-  const rangeLabel = `${rangeKm} km`;
+  const rangeLabel = formatRangeKm(rangeKm);
 
   return (
     <View style={styles.screen}>
@@ -188,9 +197,15 @@ export default function DealsScreen() {
         ) : null}
       </View>
 
-      {/* Range row — open only when asked for, so the feed keeps the screen. */}
+      {/* Range row — open only when asked for, so the feed keeps the screen.
+          It scrolls because the ladder now runs past the neighborhood and out
+          to "Anywhere", which is more rungs than a phone's width holds. */}
       {rangeOpen ? (
-        <View style={styles.rangeRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.rangeRow}
+        >
           {RANGES_KM.map((km) => (
             <Pressable
               key={km}
@@ -198,11 +213,11 @@ export default function DealsScreen() {
               style={[styles.pill, km === rangeKm && styles.pillOn]}
             >
               <Text variant="caption" weight="bold" tone="inverse">
-                {km} km
+                {km >= ANY_RANGE_KM ? '🌍 Anywhere' : `${km} km`}
               </Text>
             </Pressable>
           ))}
-        </View>
+        </ScrollView>
       ) : null}
 
       {/* ── Category chips ── the same intents as Home, kept to the ones that
@@ -266,8 +281,8 @@ export default function DealsScreen() {
             {reelsOnly ? 'No video ads in range' : 'No deals in range'}
           </Text>
           <Text tone="inverse" style={styles.stateBody}>
-            {rangeKm < RANGES_KM[RANGES_KM.length - 1]
-              ? `Nothing on offer within ${rangeLabel}. Widen the range to look further out.`
+            {rangeKm < ANY_RANGE_KM
+              ? `Nothing on offer within ${rangeLabel}. Widen the range to look further out — it goes all the way to “Anywhere”.`
               : 'Nothing on offer around you just yet. Businesses nearby post deals as they run them.'}
           </Text>
         </View>

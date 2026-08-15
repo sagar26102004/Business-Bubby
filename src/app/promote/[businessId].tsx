@@ -2,10 +2,12 @@
  * Promote — where a business buys the Home ad slot.
  *
  * The pitch has to be concrete or nobody buys: this screen says what the offer
- * already reaches for free (FREE_REACH_KM), what each plan widens it to, and
- * what it costs — then shows, for every campaign already bought, how many
- * people actually saw and tapped it. That last part is the reason a business
- * buys a SECOND one.
+ * already reaches for free (FREE_REACH_KM), what each plan PROMISES — a number
+ * of views from people inside a given band — and what that works out at per
+ * view. Then, for every campaign already bought, it shows how many people
+ * actually saw it and from how far away. That last part is the reason a
+ * business buys a SECOND one, and it's the honest answer to "did I get what I
+ * paid for?": the promise and the delivery sit side by side.
  *
  * A request lands as `pending` and shows nothing until a platform admin
  * approves it (the app has no payment gateway — money is settled off-app; see
@@ -22,10 +24,15 @@ import type { AdCampaign, Offer } from '@/domain/types';
 import {
   AD_PLANS,
   FREE_REACH_KM,
+  adCostPerView,
+  campaignGoal,
+  campaignNearViews,
   campaignStatusLabel,
   campaignTapRate,
+  campaignViewBands,
   formatAdAmount,
   getAdPlan,
+  isCampaignInMakeGood,
   isCampaignRunning,
 } from '@/domain/ads';
 import { liveOffers } from '@/domain/offers';
@@ -135,7 +142,7 @@ export default function PromoteScreen() {
       reload();
       Alert.alert(
         'Request sent',
-        `We'll review it shortly. Once it's approved, “${chosen.title}” runs for ${plan.days} days across ${plan.radiusKm} km.`,
+        `We'll review it shortly. Once it's approved, “${chosen.title}” runs for ${plan.days} days and keeps going until at least ${plan.views} people within ${plan.withinKm} km have seen it.`,
       );
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Could not send that request.');
@@ -170,7 +177,9 @@ export default function PromoteScreen() {
       </Text>
       <Text tone="muted" style={styles.subtitle}>
         Your live offers already show on the Home screen to people within {FREE_REACH_KM} km.
-        Promoting one carries it further, and puts it in front of everyone else's.
+        Promoting one puts it in front of everyone else's, carries it as far as anyone is
+        looking, and promises you a set number of views from people close enough to actually
+        come in — we keep it running until they've landed.
       </Text>
 
       {/* ── 1. Which offer ── */}
@@ -238,9 +247,14 @@ export default function PromoteScreen() {
             );
           })}
 
-          {/* ── 2. How far, how long ── */}
+          {/* ── 2. How many people, how close ── */}
           <Text variant="label" weight="semibold" style={styles.sectionLabel}>
-            2. How far should it reach?
+            2. How many people should see it?
+          </Text>
+          <Text variant="caption" tone="muted" style={styles.sectionHint}>
+            Every plan shows your card to anyone who looks, however far away. What you're buying
+            is views from people NEAR you — someone 1 km away might walk in this afternoon,
+            someone 100 km away won't — so the tighter the circle, the dearer the view.
           </Text>
           {AD_PLANS.map((p) => {
             const active = planId === p.id;
@@ -262,13 +276,21 @@ export default function PromoteScreen() {
                     <Text weight="semibold">{p.label}</Text>
                     {p.popular ? <Tag label="Most picked" tone="brand" /> : null}
                   </View>
+                  <Text variant="caption" weight="semibold">
+                    At least {p.views} views from within {p.withinKm} km
+                  </Text>
                   <Text variant="caption" tone="muted">
-                    {p.days} days · {p.radiusKm} km · {p.description}
+                    {p.days} days · {p.description}
                   </Text>
                 </View>
-                <Text weight="bold" tone={active ? 'brand' : undefined}>
-                  {formatAdAmount(p.amount)}
-                </Text>
+                <View style={styles.planPrice}>
+                  <Text weight="bold" tone={active ? 'brand' : undefined}>
+                    {formatAdAmount(p.amount)}
+                  </Text>
+                  <Text variant="caption" tone="muted">
+                    {adCostPerView(p)}/view
+                  </Text>
+                </View>
               </Pressable>
             );
           })}
@@ -277,9 +299,10 @@ export default function PromoteScreen() {
           {plan ? (
             <Card style={styles.summary}>
               <Text variant="caption" tone="muted">
-                {chosen ? `“${chosen.title}”` : 'Your offer'} would run for {plan.days} days across{' '}
-                {plan.radiusKm} km — {(plan.radiusKm / FREE_REACH_KM).toFixed(1)}× the reach it has
-                now — marked “Sponsored”.
+                {chosen ? `“${chosen.title}”` : 'Your offer'} would run for {plan.days} days,
+                marked “Sponsored” and ahead of the free offers — and if fewer than {plan.views}{' '}
+                people within {plan.withinKm} km have seen it by then, it keeps running until
+                they have.
               </Text>
               <Text variant="caption" tone="muted" style={styles.hint}>
                 Nothing is charged in the app. We'll review the request and get in touch about
@@ -331,7 +354,7 @@ export default function PromoteScreen() {
                   <View style={styles.stat}>
                     <Text weight="bold">{campaign.impressions}</Text>
                     <Text variant="caption" tone="muted">
-                      seen
+                      views
                     </Text>
                   </View>
                   <View style={styles.stat}>
@@ -354,6 +377,12 @@ export default function PromoteScreen() {
                   </View>
                 </View>
 
+                {/* What was promised, and how much of it has landed. */}
+                <CampaignPromise campaign={campaign} />
+
+                {/* Who actually saw it — the whole audience, by distance. */}
+                <CampaignAudience campaign={campaign} />
+
                 {running || campaign.status === 'pending' ? (
                   <View style={styles.cta}>
                     <Button
@@ -369,6 +398,87 @@ export default function PromoteScreen() {
         </>
       ) : null}
     </Screen>
+  );
+}
+
+/**
+ * THE PROMISE, and how much of it has landed. Only view-priced campaigns have
+ * one — a legacy campaign bought a radius and was never told a number, so
+ * showing it a progress bar against nothing would be inventing a promise after
+ * the fact.
+ */
+function CampaignPromise({ campaign }: { campaign: AdCampaign }) {
+  const colors = useColors();
+  const goal = campaignGoal(campaign);
+  if (!goal) return null;
+
+  const delivered = campaignNearViews(campaign);
+  const met = delivered >= goal.views;
+  const pct = Math.min(100, Math.round((delivered / goal.views) * 100));
+
+  return (
+    <View style={[styles.promise, { borderTopColor: colors.border }]}>
+      <View style={styles.promiseHead}>
+        <Text variant="caption" weight="semibold">
+          {delivered} of {goal.views} views from within {goal.withinKm} km
+        </Text>
+        <Text variant="caption" tone={met ? 'success' : 'muted'}>
+          {met ? '✓ delivered' : `${goal.views - delivered} to go`}
+        </Text>
+      </View>
+      <View style={[styles.bar, { backgroundColor: colors.border }]}>
+        <View
+          style={[
+            styles.barFill,
+            { width: `${pct}%`, backgroundColor: met ? colors.success : colors.brand },
+          ]}
+        />
+      </View>
+      {isCampaignInMakeGood(campaign) ? (
+        <Text variant="caption" tone="muted" style={styles.hint}>
+          Its {campaign.days} days are up, so it's running on extra days at no charge until the
+          views you were promised have landed.
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * WHO SAW IT. The same views broken down by how far the viewer was standing —
+ * because 400 views means one thing at 2 km and quite another at 90, and a
+ * business deciding whether to buy again deserves to see which it got.
+ */
+function CampaignAudience({ campaign }: { campaign: AdCampaign }) {
+  const colors = useColors();
+  const bands = campaignViewBands(campaign);
+  if (bands.length === 0) return null;
+  const most = Math.max(...bands.map((b) => b.views));
+
+  return (
+    <View style={[styles.audience, { borderTopColor: colors.border }]}>
+      <Text variant="caption" weight="semibold" style={styles.hint}>
+        Who saw it
+      </Text>
+      {bands.map((band) => (
+        <View key={band.key} style={styles.bandRow}>
+          <Text variant="caption" tone="muted" style={styles.bandLabel}>
+            {band.label}
+          </Text>
+          <View style={[styles.bar, styles.bandBar, { backgroundColor: colors.border }]}>
+            <View
+              style={[
+                styles.barFill,
+                { width: `${Math.round((band.views / most) * 100)}%`, backgroundColor: colors.brand },
+              ]}
+            />
+          </View>
+          <Text variant="caption" weight="semibold" style={styles.bandCount}>
+            {band.views}
+          </Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -390,6 +500,36 @@ const styles = StyleSheet.create({
   taken: { opacity: 0.5 },
   pickBody: { flex: 1 },
   planHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  planPrice: { alignItems: 'flex-end' },
+  sectionHint: { marginBottom: spacing.md },
+  promise: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  promiseHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  bar: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: 3 },
+  audience: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  bandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  bandLabel: { width: 96 },
+  bandBar: { flex: 1 },
+  bandCount: { width: 40, textAlign: 'right' },
   summary: { marginTop: spacing.md, marginBottom: spacing.md },
   stats: {
     flexDirection: 'row',

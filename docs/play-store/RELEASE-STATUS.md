@@ -4,7 +4,7 @@
 submission: what is done, what is decided, and what is next. The other files in this folder are
 *reference* (what to paste, what to record); this one is *status*.
 
-Last updated **14 August 2026**.
+Last updated **14 August 2026** (second pass: assets built, privacy policy corrected).
 
 ---
 
@@ -32,24 +32,40 @@ Play-only run:
 | 3 | Play Console account ($25, ID verification) | A.1 | ❓ **Unknown — check first.** Approval takes days and gates everything after it. |
 | 4 | Production build + keystore backup | A.2 / Phase 3 | ⬜ Not started |
 | 5 | Create app in Play Console | A.3 | ⬜ Not started |
-| 6 | Setup checklist: listing, content rating, target audience, data safety | A.4 / 6.2 | ⬜ Not started — text drafted in `store-listing.md`, `data-safety.md`, `android_description.txt` |
-| 7 | Play service account key | A.5 | 🔴 **BLOCKER — see below** |
+| 6 | Setup checklist: listing, content rating, target audience, data safety | A.4 / 6.2 | 🟡 **All assets and copy now exist** — nothing left to author, only to paste. See "Ready to upload" below. |
+| 7 | Play service account key | A.5 | 🟡 **Optional for v1.0 — see below** |
 | 8 | `eas submit` + create release | A.6 / A.7 | ⬜ Not started |
 | 9 | Review (1–3 days; up to 7 for a new account) | A.8 | ⬜ |
 
 ---
 
+## Ready to upload — built 14 Aug 2026
+
+| Asset | Where | Notes |
+|---|---|---|
+| Store icon 512×512 | `play-icon-512.png` | Was already there |
+| **Feature graphic 1024×500** | **`play-feature-graphic-1024x500.png`** | RGB, no alpha, 31 KB. Regenerate with `python scripts/make-feature-graphic.py` |
+| **Phone screenshots ×5** | **`screenshots/`** | 1080×1920 each. Regenerate with `node scripts/play-screenshots.mjs` |
+| Listing copy | `store-listing.md` | Final text, within every character limit |
+| Release notes | `release-notes.md` | "What's new" for 1.0, under the 500-char cap |
+| Data safety answers | `data-safety.md` | |
+| Permission declarations | `permission-declarations.md` | |
+
 ## Open blockers
 
-1. 🔴 **`play-service-account.json` does not exist.** Both submit profiles in `eas.json` reference
-   it and `eas submit` fails immediately without it. Correctly gitignored, so it must be placed
-   locally or moved to EAS-managed credentials. Walkthrough: guide §A.5.
-2. ⬜ **Feature graphic, 1024×500** — required by Play, no iOS equivalent, does not exist. Cannot be
-   cropped from the icon; it is a different composition.
-3. ⬜ **Screenshots** — minimum 2 phone shots. `app-store/screenshots/` and `screenshot/` are both
-   empty.
-4. ⬜ **Privacy policy still describes background location** (see decision 2). Live page, so
-   changing it is Sagar's call — left as-is deliberately.
+1. ⬜ **Screenshots must be re-captured after the data cleanup.** They currently show generated test
+   rows (`Vehicles Stall #633`, `Abc's Stall`, an item called `Bottel`), which reads as an
+   unfinished app. Do `production-setup.md` §2.3–2.4, then re-run the one command. Details and the
+   two shots still missing (an order, a chat — both were empty states) are in
+   `screenshots/README.md`.
+2. ⬜ **The corrected legal pages are not live yet.** `docs/legal/privacy-policy.html` and
+   `support.html` were rewritten on 14 Aug so they no longer describe background location the app
+   does not ship (blocker 4, now fixed in source). GitHub Pages republishes on push to `main`, so
+   **they are only true once Sagar commits and pushes**. The Play form and the live page must agree.
+3. 🟡 **`play-service-account.json` still does not exist**, so `eas submit` cannot upload. This is
+   **not a blocker for v1.0**: uploading the `.aab` by hand in the Play Console works and skips the
+   Google Cloud service-account setup entirely. Create it later, when automating uploads is worth
+   it. Walkthrough if you want it now: guide §A.5.
 
 ---
 
@@ -82,6 +98,13 @@ Not removed — **switched off**. `BACKGROUND_LOCATION_ENABLED = false` in
 Rationale: declaring the permission obliges a Location Permissions declaration plus a demo video,
 which is the slowest item in a first submission. Drivers share foreground-only in 1.0. The feature
 is fully built and its docs are intact, marked `DEFERRED TO v1.1` throughout this folder.
+
+**The published legal pages were brought into line on 14 Aug 2026.** Play compares the Data safety
+form against the privacy policy and a contradiction is a rejection, so
+`docs/legal/privacy-policy.html` now states plainly that the app does not collect background
+location, and the driver-sharing paragraph says sharing runs only while the app is on screen.
+`support.html`'s "Why does the app ask for background location?" FAQ was rewritten for the same
+reason. Both keep a forward-looking sentence so re-enabling in v1.1 is an edit, not a rewrite.
 
 It was **not** done with an `EXPO_PUBLIC_` env var on purpose: env vars only reach the JS bundle,
 while the permission Play scans is baked into `AndroidManifest.xml` at prebuild. A runtime-only

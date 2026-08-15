@@ -158,21 +158,27 @@ export default function BrowseScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [placements, businesses, selected]);
 
-  /** Campaign id behind an ad card, so a view can be counted against it. */
-  const campaignIdByKey = useMemo(() => {
-    const map = new Map<string, string>();
+  /**
+   * Campaign behind an ad card, so a view can be counted against it — with how
+   * far away the viewer is, which is what decides whether the view counts
+   * toward the promise the business bought (domain/ads.ts).
+   */
+  const campaignByKey = useMemo(() => {
+    const map = new Map<string, { id: string; distanceKm?: number }>();
     for (const p of placements ?? []) {
-      if (p.campaign) map.set(`${p.business.id}:${p.offer.id}`, p.campaign.id);
+      if (p.campaign) {
+        map.set(`${p.business.id}:${p.offer.id}`, { id: p.campaign.id, distanceKm: p.distanceKm });
+      }
     }
     return map;
   }, [placements]);
 
   const countImpression = useCallback(
     (key: string) => {
-      const campaignId = campaignIdByKey.get(key);
-      if (campaignId) void repos.ads.recordImpression(campaignId);
+      const seen = campaignByKey.get(key);
+      if (seen) void repos.ads.recordImpression(seen.id, seen.distanceKm);
     },
-    [campaignIdByKey, repos],
+    [campaignByKey, repos],
   );
 
   // Subcategory tiles for the selected category — its tags found on nearby

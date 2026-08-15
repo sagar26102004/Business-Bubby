@@ -38,7 +38,7 @@ import type {
   Vehicle,
 } from '@/domain/types';
 import { getVehicleKind } from '@/domain/catalog';
-import { getAdPlan, isCampaignRunning } from '@/domain/ads';
+import { campaignGoal, campaignPlanSummary, getAdPlan, isCampaignRunning, viewBandKey } from '@/domain/ads';
 import { isOfferLive } from '@/domain/offers';
 import { buildPlacements } from '@/data/adPlacements';
 import { applyCatalogEntries, catalogKey, isCodeCatalogName } from '@/domain/catalogEntries';
@@ -3230,7 +3230,8 @@ class MockAdRepository implements AdRepository {
       planId: plan.id,
       // Frozen from the plan, so a later price change never rewrites what this
       // business was quoted.
-      radiusKm: plan.radiusKm,
+      targetViews: plan.views,
+      withinKm: plan.withinKm,
       days: plan.days,
       amount: plan.amount,
       status: 'pending',
@@ -3240,6 +3241,8 @@ class MockAdRepository implements AdRepository {
       requestedByName: input.requestedByName,
       impressions: 0,
       taps: 0,
+      viewsNear: 0,
+      viewsByBand: {},
     };
     adCampaigns.push(campaign);
     return clone(campaign);
@@ -3263,7 +3266,7 @@ class MockAdRepository implements AdRepository {
         recipientId: business.ownerId,
         kind: 'ad_update',
         title: `📣 Your ad is live · ${campaign.businessName}`,
-        body: `It runs for ${campaign.days} days and reaches ${campaign.radiusKm} km around you.`,
+        body: `${campaignPlanSummary(campaign)}. We'll keep it running until those views land.`,
         businessId: campaign.businessId,
       });
     }
@@ -3306,9 +3309,20 @@ class MockAdRepository implements AdRepository {
   }
 
   // Counters never throw: they fire from a carousel someone is scrolling past.
-  async recordImpression(id: string): Promise<void> {
+  async recordImpression(id: string, distanceKm?: number): Promise<void> {
     const campaign = adCampaigns.find((c) => c.id === id);
-    if (campaign && isCampaignRunning(campaign)) campaign.impressions += 1;
+    if (!campaign || !isCampaignRunning(campaign)) return;
+    campaign.impressions += 1;
+
+    // Where the viewer stood is the product: only views from inside the band
+    // the business bought count toward its promise, and every view is bucketed
+    // so the business can see who its audience actually was.
+    const band = viewBandKey(distanceKm);
+    campaign.viewsByBand = { ...campaign.viewsByBand, [band]: (campaign.viewsByBand?.[band] ?? 0) + 1 };
+    const goal = campaignGoal(campaign);
+    if (goal && distanceKm !== undefined && distanceKm <= goal.withinKm) {
+      campaign.viewsNear = (campaign.viewsNear ?? 0) + 1;
+    }
   }
 
   async recordTap(id: string): Promise<void> {

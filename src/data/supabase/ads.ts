@@ -24,7 +24,7 @@ import type {
   PlacementOptions,
 } from '@/data/repositories';
 import { buildPlacements } from '@/data/adPlacements';
-import { getAdPlan, isCampaignRunning } from '@/domain/ads';
+import { campaignPlanSummary, getAdPlan, isCampaignRunning } from '@/domain/ads';
 import { isOfferLive } from '@/domain/offers';
 import { sb, uuid, nowIso, notify, byNewest, mapData, serverNow } from './shared';
 
@@ -186,7 +186,8 @@ export function createSupabaseAds(): AdRepository {
         planId: plan.id,
         // Frozen from the plan, so a later price change never rewrites what
         // this business was quoted.
-        radiusKm: plan.radiusKm,
+        targetViews: plan.views,
+        withinKm: plan.withinKm,
         days: plan.days,
         amount: plan.amount,
         status: 'pending',
@@ -196,6 +197,8 @@ export function createSupabaseAds(): AdRepository {
         requestedByName: input.requestedByName,
         impressions: 0,
         taps: 0,
+        viewsNear: 0,
+        viewsByBand: {},
       };
 
       const { error } = await sb().from('ad_campaigns').insert({
@@ -226,7 +229,7 @@ export function createSupabaseAds(): AdRepository {
       await notifyOwner(
         saved,
         `📣 Your ad is live · ${saved.businessName}`,
-        `It runs for ${saved.days} days and reaches ${saved.radiusKm} km around you.`,
+        `${campaignPlanSummary(saved)}. We'll keep it running until those views land.`,
       );
       return saved;
     },
@@ -258,8 +261,8 @@ export function createSupabaseAds(): AdRepository {
       return writeCampaign({ ...current, paid });
     },
 
-    async recordImpression(id: string): Promise<void> {
-      await recordEvent(id, 'impression');
+    async recordImpression(id: string, distanceKm?: number): Promise<void> {
+      await recordEvent(id, 'impression', distanceKm);
     },
 
     async recordTap(id: string): Promise<void> {
@@ -269,14 +272,36 @@ export function createSupabaseAds(): AdRepository {
 }
 
 /**
- * Bump a counter through the SECURITY DEFINER RPC (migration 0014) — the viewer
- * has no write access to a stranger's campaign row, by design.
+ * Bump a counter through the SECURITY DEFINER RPC (migrations 0014/0020) — the
+ * viewer has no write access to a stranger's campaign row, by design.
+ *
+ * `p_distance_km` is how far the viewer was from the business; the function
+ * buckets the view and decides whether it counts toward the campaign's promise.
+ * It is a defaulted argument, so a project still on 0014 keeps counting plain
+ * impressions rather than erroring.
  *
  * Swallows everything: this is fired from a carousel the customer is merely
  * scrolling past, and a missing migration or a dropped request must never
  * surface as an error on that screen.
  */
-async function recordEvent(id: string, kind: 'impression' | 'tap'): Promise<void> {
+async function recordEvent(
+  id: string,
+  kind: 'impression' | 'tap',
+  distanceKm?: number,
+): Promise<void> {
+  try {
+    const { error } = await sb().rpc('ad_record_event', {
+      p_id: id,
+      p_kind: kind,
+      p_distance_km: distanceKm ?? null,
+    });
+    if (!error) return;
+  } catch {
+    /* fall through to the older signature */
+  }
+  // A project still on migration 0014 has no `p_distance_km` argument. Count
+  // the plain view rather than losing it: a view with no band is worth more
+  // than no view at all.
   try {
     await sb().rpc('ad_record_event', { p_id: id, p_kind: kind });
   } catch {

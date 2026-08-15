@@ -581,6 +581,70 @@ re-derivation from the Supabase diff is required:
   `/saved-places`, confirm it appears in the Home location dropdown, reload, confirm it survives
   (Path A), and confirm saving Home twice leaves ONE Home.
 
+## [SYNC-034] Ads are sold by VIEWS-in-a-band, not by radius (+ the /deals range goes to "Anywhere")
+
+> Depends on **[SYNC-023]** and **[SYNC-024]**. Path B still delegates `ads` to the mock, so
+> nothing is broken today — if 023/024 have not landed, FOLD THIS INTO THEM rather than
+> implementing the old radius model first and rewriting it. Where this entry contradicts
+> 023/024 (the `radiusKm` freeze, the sponsored reach cap), THIS entry wins.
+
+- **Area:** `AdRepository` — the plan model, the reach rule, and view counting.
+- **Why:** a radius capped how many people could ever see an ad (against the platform's own
+  interest — every extra view is free inventory) and charged the same for an audience one street
+  away as one across the district. Distance is really INTENT: someone 1 km from a shop might walk
+  in, someone 100 km away won't. So plans now sell a number of views from people inside a band,
+  priced per view, and the card itself travels as far as the viewer is looking.
+- **Supabase change:** `src/data/supabase/ads.ts` — `request()` freezes `targetViews`/`withinKm`
+  from the plan instead of `radiusKm`, and seeds `viewsNear: 0`, `viewsByBand: {}`;
+  `recordImpression(id, distanceKm?)` passes `p_distance_km` to the RPC (falling back to the old
+  2-arg call if the migration hasn't run); the approval notification quotes
+  `campaignPlanSummary` instead of "reaches N km".
+- **Domain/interface (SHARED — already done, do not redo):**
+  - `src/domain/types.ts` — `AdCampaign.radiusKm` is now **optional and LEGACY** (only campaigns
+    bought before this change have it); new `targetViews?`, `withinKm?`, `viewsNear?`,
+    `viewsByBand?: Record<string, number>`.
+  - `src/domain/ads.ts` — `AdPlan` is now `{ days, views, withinKm, amount }` (no `radiusKm`);
+    new `SPONSORED_REACH_KM` (25 — how far a sponsored card carries on HOME, where the viewer has
+    no range control), `FEED_RANGES_KM`, `ANY_RANGE_KM` (20 000 — a finite "Anywhere" so it
+    survives a query string), `DEFAULT_FEED_RANGE_KM`, `VIEW_BANDS_KM`, `viewBandKey`,
+    `viewBandLabel`, `campaignGoal`, `campaignNearViews`, `isCampaignGoalMet`, `campaignReachKm`,
+    `campaignViewsOwed`, `isCampaignInMakeGood`, `campaignViewBands`, `campaignPlanSummary`,
+    `adPlanSummary`, `adCostPerView`, `MAX_RUN_FACTOR`.
+  - **`isCampaignRunning` CHANGED — this is the important one.** A campaign whose `endsAt` has
+    passed KEEPS RUNNING while it still owes views (`viewsNear < targetViews`), up to
+    `MAX_RUN_FACTOR` (2) × `days` from `startsAt`. That make-good is what makes "at least 200
+    views" true rather than aspirational. It is derived on read — no sweep job, no status change.
+  - `src/data/adPlacements.ts` — sponsored reach is now
+    `min(campaignReachKm(campaign), viewerRadiusKm ?? SPONSORED_REACH_KM)`, where
+    `campaignReachKm` is `campaign.radiusKm ?? Infinity`. So legacy campaigns are still held to
+    exactly the radius they bought, and view-priced ones reach 25 km on Home and the viewer's
+    full chosen range in the feed. Everything else in that file is unchanged.
+  - `src/data/repositories.ts` — `recordImpression(id: string, distanceKm?: number)`.
+    `recordTap` is unchanged (taps are not banded).
+- **Path B — backend/:** in `backend/src/services/ads.ts`:
+  - `request()` freezes `targetViews: plan.views`, `withinKm: plan.withinKm`, `days`, `amount`
+    and seeds `viewsNear: 0`, `viewsByBand: {}`. It must NOT write `radiusKm` any more.
+  - `POST /ads/:id/events` takes `{ kind, distanceKm? }`. For `kind: 'impression'`: `impressions`
+    +1 always; bucket the view into `viewsByBand[viewBandKey(distanceKm)]` (bands 1/2/5/10/25/50/
+    100/`far`, unknown distance ⇒ `far`); and `viewsNear` +1 only when
+    `distanceKm !== undefined && distanceKm <= data.withinKm`. Still 204 on every failure, still
+    only counts while the campaign is running.
+  - Approve/placement code picks up the new run window automatically **provided it calls the
+    shared `isCampaignRunning`** — do not re-implement the window check in SQL or in the router.
+  - `GET /ads/placements` keeps its optional `radiusKm` param; the value now ranges up to
+    `ANY_RANGE_KM` (20 000), so do not clamp it to 25.
+- **Path B — src/data/api/:** `createApiAds().recordImpression(id, distanceKm)` sends
+  `distanceKm` in the `/events` body (omit when undefined). Still swallows every error.
+- **DB/migration:** `supabase/migrations/0020_ad_view_bands.sql` — SHARED DB, apply once. It
+  DROPS `ad_record_event(uuid, text)` and creates `ad_record_event(uuid, text, double precision)`
+  (the old 2-arg form must go: with a defaulted 3rd argument, keeping both makes a 2-arg call
+  ambiguous and counting fails outright). Path B does not call the RPC — its `/events` route
+  plays that role — but the migration is still needed for Path A.
+- **Verify:** `cd backend && npm run typecheck && npm run build`; app `npx tsc --noEmit` and
+  `npx expo export --platform web`. Smoke: buy a plan → approve → view the ad from a point inside
+  the band and one outside it → `viewsNear` counts only the first, `viewsByBand` counts both, and
+  Workspace › Promote shows the "Who saw it" breakdown.
+
 ---
 
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->

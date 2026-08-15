@@ -9,26 +9,36 @@
  * up being the place the rule quietly drifts.
  *
  * The ordering IS the business model (see domain/ads.ts):
- *   1. Sponsored placements — a running, approved campaign, within the radius
- *      that was bought. This is what the money buys.
+ *   1. Sponsored placements — a running, approved campaign. What the money buys
+ *      is the promise of nearby views and the spot at the front; the card
+ *      itself carries as far as the viewer is looking (SPONSORED_REACH_KM on
+ *      Home, the chosen range in /deals), because every extra view is free
+ *      inventory delivered. Legacy radius-priced campaigns are still held to
+ *      the radius they were sold.
  *   2. Free placements — any live offer from a business inside FREE_REACH_KM,
  *      widened toward COLD_START_REACH_KM only while the slot is too thin to
  *      be worth showing. A shop has to see the slot working before it will pay
  *      for it, and an empty carousel proves nothing.
  * Nearest first inside each band.
  *
- * VIEWER-CHOSEN RADIUS. The /deals feed lets the customer set their own range,
- * and that answers a different question — "what's on around me?" rather than
- * "what belongs in the four cards on Home". Passing `viewerRadiusKm` therefore
- * replaces the free band with exactly what was asked for and switches the
- * cold-start top-up off (it exists to fill a fixed slot; a feed has no slot to
- * fill). What it does NOT do is widen a campaign past the reach it bought:
- * priority is what the money paid for, and an offer beyond its bought radius
- * still shows if the viewer asked that far — as an ordinary card, unlabelled,
- * because it isn't a sponsored placement there.
+ * VIEWER-CHOSEN RADIUS. The /deals feed lets the customer set their own range —
+ * now all the way out to "anywhere" — and that answers a different question:
+ * "what's on around me?" rather than "what belongs in the four cards on Home".
+ * Passing `viewerRadiusKm` therefore replaces the free band with exactly what
+ * was asked for, lets sponsored cards travel that whole distance, and switches
+ * the cold-start top-up off (it exists to fill a fixed slot; a feed has no slot
+ * to fill). A viewer looking 100 km out costs the advertiser nothing extra —
+ * only views from inside the band they bought count toward their promise — and
+ * a wider look is more inventory delivered, which is the platform's interest.
  */
 import type { AdCampaign, Business, GeoPoint } from '@/domain/types';
-import { COLD_START_REACH_KM, FREE_REACH_KM, MIN_SLOT_CARDS } from '@/domain/ads';
+import {
+  COLD_START_REACH_KM,
+  FREE_REACH_KM,
+  MIN_SLOT_CARDS,
+  SPONSORED_REACH_KM,
+  campaignReachKm,
+} from '@/domain/ads';
 import { isOfferLive } from '@/domain/offers';
 import { haversineKm } from '@/lib/geo';
 import type { AdPlacement } from './repositories';
@@ -59,14 +69,16 @@ export function buildPlacements(
     if (!offer || !isOfferLive(offer, now)) continue;
 
     const distanceKm = distanceTo(business);
-    // Reach is what was paid for, and never more than the viewer asked to see.
+    // How far this card may travel: as far as the viewer is looking, and never
+    // past the reach a LEGACY campaign specifically bought.
+    const limitKm = Math.min(campaignReachKm(campaign), viewerRadiusKm ?? SPONSORED_REACH_KM);
     // An UNKNOWN distance (no viewer location, or a business that never pinned
     // itself) still shows on Home: the slot was bought, and silently dropping
     // it is the worse failure of the two. In the feed, where the whole point is
     // a chosen range, an unplaceable business can't honestly be included.
     if (distanceKm === undefined) {
       if (viewerRadiusKm !== undefined) continue;
-    } else if (distanceKm > Math.min(campaign.radiusKm, viewerRadiusKm ?? Infinity)) {
+    } else if (distanceKm > limitKm) {
       continue;
     }
 

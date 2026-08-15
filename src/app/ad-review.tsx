@@ -20,6 +20,9 @@ import { Alert, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { AdCampaign, Business } from '@/domain/types';
 import {
+  campaignGoal,
+  campaignNearViews,
+  campaignPlanSummary,
   campaignStatusLabel,
   campaignTapRate,
   formatAdAmount,
@@ -235,7 +238,7 @@ export default function AdReviewScreen() {
             </Text>
 
             <Text variant="caption" tone="muted" style={styles.detail}>
-              {plan?.label ?? campaign.planId} · {campaign.days} days · {campaign.radiusKm} km ·{' '}
+              {plan?.label ?? campaign.planId} · {campaignPlanSummary(campaign)} ·{' '}
               {formatAdAmount(campaign.amount)}
             </Text>
 
@@ -252,9 +255,21 @@ export default function AdReviewScreen() {
                 <View style={styles.stat}>
                   <Text weight="bold">{campaign.impressions}</Text>
                   <Text variant="caption" tone="muted">
-                    seen
+                    views
                   </Text>
                 </View>
+                {/* Delivery against the promise — the number that decides
+                    whether this run is still owed extra days. */}
+                {campaignGoal(campaign) ? (
+                  <View style={styles.stat}>
+                    <Text weight="bold">
+                      {campaignNearViews(campaign)}/{campaignGoal(campaign)?.views}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                      within {campaignGoal(campaign)?.withinKm} km
+                    </Text>
+                  </View>
+                ) : null}
                 <View style={styles.stat}>
                   <Text weight="bold">{campaign.taps}</Text>
                   <Text variant="caption" tone="muted">

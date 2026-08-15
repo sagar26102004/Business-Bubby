@@ -1094,7 +1094,7 @@ export interface NewAdCampaignInput {
   businessId: string;
   /** The `Offer` to promote — it must already exist and be live. */
   offerId: string;
-  /** An `AD_PLANS` id (domain/ads.ts). Price/days/radius come from it. */
+  /** An `AD_PLANS` id (domain/ads.ts). Price/days/views/band come from it. */
   planId: string;
   requestedById: string;
   requestedByName: string;
@@ -1121,9 +1121,11 @@ export interface AdPlacement {
 /** How the caller wants placements picked. */
 export interface PlacementOptions {
   /**
-   * A range the VIEWER chose, in km — the /deals feed's distance filter. Given
-   * one, every live offer inside it comes back (no free-reach cut, no
-   * cold-start widening); omitted, the Home slot's own reach rules apply.
+   * A range the VIEWER chose, in km — the /deals feed's distance filter, which
+   * runs from 1 km out to `ANY_RANGE_KM` ("Anywhere"). Given one, every live
+   * offer inside it comes back (no free-reach cut, no cold-start widening) and
+   * sponsored cards travel the full distance; omitted, the Home slot's own
+   * reach rules apply.
    */
   radiusKm?: number;
 }
@@ -1147,9 +1149,9 @@ export interface AdRepository {
    * than showing nothing.
    *
    * `options.radiusKm` is the /deals feed asking for a range the CUSTOMER set,
-   * which replaces the built-in free-reach and cold-start rules (data/
-   * adPlacements.ts explains why, and why it still never widens a campaign past
-   * the reach it paid for).
+   * which replaces the built-in free-reach and cold-start rules and lets
+   * sponsored cards travel the whole way out (data/adPlacements.ts explains
+   * why, and why legacy radius-priced campaigns are still held to their radius).
    */
   listPlacements(near?: GeoPoint, options?: PlacementOptions): Promise<AdPlacement[]>;
 
@@ -1182,8 +1184,15 @@ export interface AdRepository {
    * fired from a scrolling carousel by viewers who have no write access to the
    * campaign, and a failed counter must never surface as an error on a screen
    * the customer is just browsing.
+   *
+   * `distanceKm` is how far the VIEWER was from the business, and it is the
+   * whole billing model: a view only counts toward the campaign's promise when
+   * it came from inside the band that was bought, and the rest are bucketed
+   * (`VIEW_BANDS_KM`) for the business's report. Where someone was standing
+   * can't be recovered afterwards, so it has to be passed at the moment of the
+   * view; omitted, the view counts as a far one.
    */
-  recordImpression(id: string): Promise<void>;
+  recordImpression(id: string, distanceKm?: number): Promise<void>;
   recordTap(id: string): Promise<void>;
 }
 

@@ -346,9 +346,11 @@ export type AdCampaignStatus = 'pending' | 'active' | 'rejected' | 'stopped';
  * already built, and the ad card is rendered from that offer live. So editing
  * the offer updates the running ad, and there's no second copy to drift.
  *
- * What money buys is REACH and PRIORITY. Every live offer already shows on the
- * Home ad slot to people close by; a campaign widens the radius to the plan's
- * `radiusKm` and sorts the offer ahead of the unpaid ones, marked "Sponsored".
+ * What money buys is VIEWS and PRIORITY. Every live offer already shows on the
+ * Home ad slot to people close by; a campaign carries it as far as anyone cares
+ * to look, sorts it ahead of the unpaid ones (marked "Sponsored") and promises
+ * `targetViews` views from people inside `withinKm` — because a view from 1 km
+ * away is worth far more than one from 100 km, and that is what's being sold.
  *
  * Nothing here charges a card — the app has no payment gateway (CLAUDE.md). A
  * request lands as `pending`, a platform admin approves it once payment is
@@ -364,8 +366,22 @@ export interface AdCampaign {
   offerId: string;
   /** Which `AD_PLANS` entry was bought (domain/ads.ts). */
   planId: string;
-  /** How far the ad reaches, in km. Frozen from the plan at request time. */
-  radiusKm: number;
+  /**
+   * LEGACY — how far the ad reached, in km, back when a plan sold a radius.
+   * Present only on campaigns bought before the switch to view-priced plans;
+   * those keep being capped at exactly the reach they paid for. Absent on every
+   * new campaign, which reaches as far as the viewer is looking.
+   */
+  radiusKm?: number;
+  /**
+   * Views the plan promises, and the band they have to come from — frozen from
+   * the plan at request time. The run keeps going past `endsAt` (up to
+   * `MAX_RUN_FACTOR` × `days`) until the promise is kept, so "at least 200
+   * views within 5 km" is a fact rather than a hope. Undefined on legacy
+   * radius-priced campaigns.
+   */
+  targetViews?: number;
+  withinKm?: number;
   /** How long the run lasts once approved. Frozen from the plan. */
   days: number;
   /** Rupees owed for the run. Frozen from the plan, so a later price change
@@ -384,9 +400,22 @@ export interface AdCampaign {
   reviewedAt?: string;
   /** Why it was rejected, or a note on an approval. Shown to the business. */
   reviewNote?: string;
-  /** Times the card has been shown, and tapped. What the business bought. */
+  /** Times the card has been shown, and tapped — at ANY distance. */
   impressions: number;
   taps: number;
+  /**
+   * Of those views, the ones that count toward the promise: viewers who were
+   * inside `withinKm`. Counted at view time from the viewer's own distance,
+   * because where someone was standing can't be recovered later.
+   */
+  viewsNear?: number;
+  /**
+   * The whole picture for the business: views bucketed by how far away the
+   * viewer was, keyed by the band's upper edge in km (`VIEW_BANDS_KM`) with
+   * `'far'` for everything past the last one. This is what answers "who
+   * actually saw my ad?" — 400 views means one thing at 2 km and another at 90.
+   */
+  viewsByBand?: Record<string, number>;
 }
 
 /** A single line on a shop's menu (cafe/restaurant/bakery, etc.). */
