@@ -11,7 +11,11 @@ needs the Play Console, the Supabase dashboard, or a push that reaches GitHub).
 
 ## Scope
 
-**Google Play only.** iOS/App Store is not being prepared. The working plan is the guide at
+**Google Play only.** iOS/App Store is not being prepared.
+
+**v1.0 goes to a TESTING TRACK, not production** — decided 15 Aug 2026, see decision 4. Everything
+below still has to be done; the only thing that changes is which track the release is rolled out
+to at the end, and that the demo listings are deliberately kept rather than deleted. The working plan is the guide at
 `Complete Guide_ Expo App to App Store (and Play Store).docx` in the repo root — but that document
 is iOS-first with Play as an addendum, so the phase numbers do **not** map one-to-one. For a
 Play-only run:
@@ -30,13 +34,14 @@ Play-only run:
 |---|---|---|---|
 | 1 | End-to-end testing | Phase 1 | ✅ Done informally — tested over a long period. Final ring/vibration pass deferred until everything else is submission-ready. |
 | 2 | Config + assets | Phase 2 | ✅ **Complete** — see "Phase 2 record" below. |
-| 3 | Play Console account ($25, ID verification) | A.1 | ❓ **Unknown — check first.** Approval takes days and gates everything after it. |
+| 3 | Play Console account ($25, ID verification) | A.1 | 🟡 **Account created, ID documents submitted — awaiting Google's verification** (15 Aug 2026). Nothing uploaded yet, no track live. Testing to date has been EAS **preview** APKs on Sagar's own device — real testing, but not a Play artefact. Verification takes days; steps 4 and §2.1 below do not wait on it. |
 | 4 | Production build + keystore backup | A.2 / Phase 3 | ⬜ Not started |
 | 5 | Create app in Play Console | A.3 | ⬜ Not started |
 | 6 | Setup checklist: listing, content rating, target audience, data safety | A.4 / 6.2 | 🟡 **All assets and copy now exist** — nothing left to author, only to paste. See "Ready to upload" below. |
 | 7 | Play service account key | A.5 | 🟡 **Optional for v1.0 — see below** |
-| 8 | `eas submit` + create release | A.6 / A.7 | ⬜ Not started |
+| 8 | `eas submit` + create release | A.6 / A.7 | ⬜ Not started. **Testing track, not production** — decision 4. Use the `internal` submit profile in `eas.json`, never `production`. |
 | 9 | Review (1–3 days; up to 7 for a new account) | A.8 | ⬜ |
+| 10 | Closed test → apply for production access | — | ⬜ **Check whether this applies to you** — a personal account registered after 13 Nov 2023 needs 12 testers for 14 continuous days on a *closed* track first. Decision 4. |
 
 ---
 
@@ -72,22 +77,25 @@ severity — 1 and 2 have waiting built into them, so start them first.
    repo — the commit is sound.
 2. ❓ **Play Console account status is still unknown** (phase 3). Approval takes days and gates
    every step after it. Check it today even if nothing else moves.
-3. ⬜ **Screenshots must be re-captured after the data cleanup.** They currently show generated test
-   rows (`Vehicles Stall #633`, `Abc's Stall`, an item called `Bottel`), which reads as an
-   unfinished app. Do `production-setup.md` §2.3–2.4, then re-run the one command. Details and the
-   two shots still missing (an order, a chat — both were empty states) are in
+3. 🟡 **Screenshots still show obviously-fake names** — `Vehicles Stall #633`, `Abc's Stall`, `Fth`.
+   Downgraded by decision 4: for a testing track these are seen by testers, not the public, and
+   renaming those three listings is enough (one `update … jsonb_set` on `businesses.data`).
+   **Recapturing against real listings is a production-promotion blocker, not a v1.0 one.** The two
+   shots still missing (an order, a chat — both came out as empty states) are in
    `screenshots/README.md`.
-4. ⬜ **The `production-setup.md` §2 pre-flight has not been started**, and two items in it are live
-   exposure the moment the app is public: the super-admin password is still the one written down in
-   project notes (§2.1), and ten accounts share the password `localo123` (§2.4). Paste
-   `supabase/scripts/check_security_state.sql` into the SQL editor first — as of 15 Aug it also
-   reports the launch-readiness items and the 0020 check below, so one run tells you the whole
-   database story.
-5. 🟡 **Migration `0020_ad_view_bands.sql` is not confirmed applied to the live DB.** The remote
-   migration history is empty (everything was pasted by hand), so nothing here can tell. It is
-   **not** a crash risk — `recordEvent` in `src/data/supabase/ads.ts` falls back to the 0014
-   signature — but if it is missing, every ad view lands unbanded and the distance report a
-   business paid for stays empty, silently. `check_security_state.sql` now answers this in one row.
+4. 🟡 **`production-setup.md` §2 is half done.** §2.4 is **complete** — the shared-password test
+   accounts are gone from `auth.users`, verified 15 Aug. Still open and still real exposure: **§2.1,
+   rotating the super-admin password**, which is short, guessable and written down in project notes,
+   on an account that can read every user's private contact details and reassign listing ownership.
+   Then §2.5 (auth settings), §2.6 (migrations + edge functions) and §2.7 (advisors). Paste
+   `supabase/scripts/check_security_state.sql` — one run covers §2.6, §2.7's main case and the
+   launch-readiness rows.
+5. ✅ **Migration `0020_ad_view_bands.sql` is applied** (confirmed 15 Aug). It is idempotent — two
+   `drop function if exists`, a `create`, a `comment` and a `grant`, with no data backfill — so
+   re-running it is safe if ever in doubt. The one thing that can still go wrong is PostgREST
+   caching the old signature, which fails **silently**: `recordEvent` in `src/data/supabase/ads.ts`
+   falls back to the 2-arg call, so every view lands unbanded and the distance report stays empty
+   while everything looks fine. Fix with `notify pgrst, 'reload schema';`.
 6. 🟡 **`play-service-account.json` still does not exist**, so `eas submit` cannot upload. This is
    **not a blocker for v1.0**: uploading the `.aab` by hand in the Play Console works and skips the
    Google Cloud service-account setup entirely. Create it later, when automating uploads is worth
@@ -169,6 +177,48 @@ Blocked on 14 Aug 2026 and reverted the same day. It is **Route 1** of
 `CallNotifications.showCallScreen` (`CallNotifications.kt:301`), not dead weight from WebRTC.
 Blocking it makes `Settings.canDrawOverlays()` permanently false and deletes the primary path to
 the incoming-call screen. Full reasoning in `permission-declarations.md` §3.
+
+---
+
+### 4. v1.0 ships to a testing track, and the demo listings STAY
+
+Decided 15 Aug 2026, after actually looking at the live database. The inventory (`production-setup.md`
+§2.2) returned **8 businesses, and every one of them is test data**: School Bus Service and
+Vehicles Stall #633 (seed identity Aarav Mehta), Ananya Iyer's Stall (seed identity), Abc's Stall,
+Prajapat Tent house (a Dev Tools account), Fth and Gayatri Tent House (the super-admin), Cafe
+Corner (Sagar's own). **There is not one real business in the directory.**
+
+That makes a production launch self-defeating in a way no Play checklist catches: someone in Indore
+installs a local directory, sees nothing near them, and uninstalls. So v1.0 goes to a testing track
+and the demo listings are kept — testers need something to test against.
+
+**What this changes:**
+- §2.3 "Remove the demo listings" is **deferred to the production promotion**, not done now. Do not
+  delete them as routine cleanup; the empty directory is the problem, not the fake one.
+- §2.4 is **already done** — the ten `9812340001`–`10` accounts and the Dev Tools `78…` accounts
+  no longer exist in `auth.users` (verified 15 Aug). What remains of §2 is §2.1 (rotate the
+  super-admin password), §2.5, §2.6 and §2.7.
+- The screenshots problem softens but does not vanish: they are testers' first impression rather
+  than the public's. Renaming the three obviously-fake names is enough for a testing track;
+  recapturing against real listings is a **production-promotion** blocker.
+
+⚠️ **Check this before planning dates.** Google requires a personal developer account registered
+after 13 Nov 2023 to run a **closed** test with **12 testers opted in for 14 continuous days**
+before it can even apply for production access. Internal testing does *not* satisfy it — only
+closed testing does, which is the detail that catches people, because internal is the easier track.
+
+**Testers are volunteers, not a cost.** A tester is anyone with a Gmail address who taps an opt-in
+link and leaves the app installed — friends, family, classmates. Nobody is paid and nothing beyond
+the one-time $25 registration fee is spent. Invite ~18–20 people to land 12; some never tap the
+link.
+
+The account here is personal, so plan on this applying. The practical consequence is ordering, not
+effort: **the 14-day clock should start as early as the app is stable**, because it runs while you
+keep polishing. Internal testing first (bugs on real phones — especially call ringing and the
+lock-screen call UI, which has never run outside a dev build), then closed testing with the 12,
+then apply for production access.
+
+Confirm the current numbers in the Console; this is a policy Google has revised more than once.
 
 ---
 
