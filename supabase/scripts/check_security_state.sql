@@ -135,6 +135,60 @@ begin
            then '❌ NOBODY is a super-admin — grant with scripts/grant_super_admin.sql'
            else '✅ ' || n || ' admin(s) — audit them in grant_super_admin.sql' end::text;
   end if;
+
+  -- ── The later migrations (0016 onward), added for the 1.0 release ─────────
+  return query select 'fn · resolve_login_email (username sign-in)'::text,
+    case when to_regprocedure('public.resolve_login_email(text,text)') is null
+         then '❌ missing — run migrations/0016_real_identity.sql'
+         else '✅ present' end::text;
+
+  return query select 'fn · anonymize_account (account deletion)'::text,
+    case when to_regprocedure('public.anonymize_account(uuid)') is null
+         then '❌ missing — run migrations/0019_account_deletion.sql'
+         else '✅ present' end::text;
+
+  return query select 'storage · media bucket (listing photos)'::text,
+    case when not exists (select 1 from storage.buckets where id = 'media')
+         then '❌ missing — run migrations/0015_media_bucket.sql'
+         else '✅ present' end::text;
+
+  return query select 'table · ad_campaigns (promoted listings)'::text,
+    case when to_regclass('public.ad_campaigns') is null
+         then '❌ missing — run migrations/0014_ad_campaigns.sql'
+         else '✅ present' end::text;
+
+  -- 0020 replaced the 2-argument counter with a 3-argument one that buckets a
+  -- view by the viewer's distance. The app FALLS BACK to the old signature
+  -- rather than erroring (src/data/supabase/ads.ts), so a missing 0020 is
+  -- silent — every view lands unbanded and the report a business paid for
+  -- stays empty. That is why this is checked rather than assumed.
+  return query select 'fn · ad_record_event carries a distance band (0020)'::text,
+    case when to_regprocedure('public.ad_record_event(uuid,text,double precision)') is not null
+         then '✅ 3-arg signature present'
+         when to_regprocedure('public.ad_record_event(uuid,text)') is not null
+         then '⚠️ still on 0014 — views count but are not banded; run 0020_ad_view_bands.sql'
+         else '❌ absent — run migrations/0014 then 0020' end::text;
+
+  -- ── Launch readiness (production-setup.md §2.3–2.4) ───────────────────────
+  -- Not security bugs; things that must not still be true on launch day.
+  select count(*) into n from auth.users
+   where email ~ '^98123400[0-9]+@localo\.app$' or email ~ '^78[0-9]+@localo\.app$';
+  return query select 'launch · shared-password test accounts removed'::text,
+    case when n > 0
+         then '❌ ' || n || ' still live — scripts/rotate_test_accounts.sql'
+         else '✅ none' end::text;
+
+  select count(*) into n from public.businesses b
+   where not exists (select 1 from auth.users u where u.id = b.owner_id);
+  return query select 'launch · no listing owned by a tombstone profile'::text,
+    case when n > 0
+         then '❌ ' || n || ' orphaned — nobody can edit or take these down'
+         else '✅ none' end::text;
+
+  select count(*) into n from public.businesses;
+  return query select 'launch · how many listings are in the directory'::text,
+    ('ℹ️ ' || n || ' — list them before deleting anything: '
+      || 'select id, data->>''name'', type from businesses order by created_at')::text;
 end;
 $$;
 

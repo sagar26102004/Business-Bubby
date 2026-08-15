@@ -5,7 +5,8 @@ the file cited. **Wrong answers here are a policy violation, not a mistake** —
 this form against what the app actually does, and against your privacy policy. If you change what
 the app collects, change this file in the same commit.
 
-Verified against the codebase on **13 August 2026**.
+Verified against the codebase on **13 August 2026**; re-checked against the ad view-band change on
+**15 August 2026** (§8).
 
 ---
 
@@ -239,6 +240,17 @@ Amplitude, Mixpanel or Facebook SDK.
 > with impression/tap counts used for reporting to that business only, never for profiling or
 > targeting.
 
+**Ad view distance bands — why this adds no declaration (decided 15 August 2026).** Migration
+`0020_ad_view_bands.sql` made a promoted-listing view carry how far the viewer was from the
+business, because plans now sell views inside a distance band rather than a radius
+(`src/domain/ads.ts`). The distance is computed on-device and sent to a `SECURITY DEFINER`
+function that increments a counter in `ad_campaigns.data.viewsByBand` — a bucket name and a
+running total. **No row ties a view to a user, a session, or a coordinate**, and the campaign
+owner reads only totals. Google's Data safety form exempts data that is aggregated such that it
+cannot be linked to a user, so no new data type is declared and the Advertising ID answer is
+unchanged. It **is** disclosed in `privacy-policy.html` §5 ("Promoted listings"), because the
+policy must describe what the app does even where the form does not ask.
+
 ---
 
 ## Section 9 — Data handling practices
@@ -253,7 +265,7 @@ Amplitude, Mixpanel or Facebook SDK.
 **On children.** Set the target audience to **18+**. The app is not directed at children, and the
 store listing says so. The only place a child appears is as a *tracked passenger label* entered by
 a parent or a school — an adult recording a label about a child, with no account, photo or contact
-detail for that child. This is disclosed in `privacy-policy.html` §9. Answering "yes" to the
+detail for that child. This is disclosed in `privacy-policy.html` §10. Answering "yes" to the
 Families policy would be wrong and would pull in requirements the app does not meet.
 
 ---

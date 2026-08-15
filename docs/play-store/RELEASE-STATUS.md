@@ -4,7 +4,8 @@
 submission: what is done, what is decided, and what is next. The other files in this folder are
 *reference* (what to paste, what to record); this one is *status*.
 
-Last updated **14 August 2026** (second pass: assets built, privacy policy corrected).
+Last updated **15 August 2026** (third pass: everything authorable is now written; what remains
+needs the Play Console, the Supabase dashboard, or a push that reaches GitHub).
 
 ---
 
@@ -53,19 +54,71 @@ Play-only run:
 
 ## Open blockers
 
-1. ⬜ **Screenshots must be re-captured after the data cleanup.** They currently show generated test
+**Nothing on this list needs more writing.** Every one of them needs an account, a dashboard, or a
+network connection this repo cannot reach. They are ordered by how long they take to clear, not by
+severity — 1 and 2 have waiting built into them, so start them first.
+
+1. ⬜ **The corrected legal pages are still not live. This is now the oldest open item.**
+   `docs/legal/privacy-policy.html` and `support.html` were rewritten on 14 Aug so they no longer
+   describe background location the app does not ship, and extended again on 15 Aug (see below).
+   They were **committed** on 15 Aug as `d1274c7` — but that commit **has not reached GitHub**:
+   `git log origin/main..main` still lists it, and fetching `github.com` times out from this
+   machine. Verified the same day by loading the live URL: it still serves the **13 August** text,
+   which says the app collects background location. That directly contradicts the Data safety form
+   you are about to submit, and a contradiction there is a rejection.
+   **Do:** `git push origin main`, wait ~1 min for Pages, then open
+   `https://sagar26102004.github.io/Business-Bubby/privacy-policy.html` **in a private window** and
+   confirm it reads "Last updated 15 August 2026". If the push fails, it is the network, not the
+   repo — the commit is sound.
+2. ❓ **Play Console account status is still unknown** (phase 3). Approval takes days and gates
+   every step after it. Check it today even if nothing else moves.
+3. ⬜ **Screenshots must be re-captured after the data cleanup.** They currently show generated test
    rows (`Vehicles Stall #633`, `Abc's Stall`, an item called `Bottel`), which reads as an
    unfinished app. Do `production-setup.md` §2.3–2.4, then re-run the one command. Details and the
    two shots still missing (an order, a chat — both were empty states) are in
    `screenshots/README.md`.
-2. ⬜ **The corrected legal pages are not live yet.** `docs/legal/privacy-policy.html` and
-   `support.html` were rewritten on 14 Aug so they no longer describe background location the app
-   does not ship (blocker 4, now fixed in source). GitHub Pages republishes on push to `main`, so
-   **they are only true once Sagar commits and pushes**. The Play form and the live page must agree.
-3. 🟡 **`play-service-account.json` still does not exist**, so `eas submit` cannot upload. This is
+4. ⬜ **The `production-setup.md` §2 pre-flight has not been started**, and two items in it are live
+   exposure the moment the app is public: the super-admin password is still the one written down in
+   project notes (§2.1), and ten accounts share the password `localo123` (§2.4). Paste
+   `supabase/scripts/check_security_state.sql` into the SQL editor first — as of 15 Aug it also
+   reports the launch-readiness items and the 0020 check below, so one run tells you the whole
+   database story.
+5. 🟡 **Migration `0020_ad_view_bands.sql` is not confirmed applied to the live DB.** The remote
+   migration history is empty (everything was pasted by hand), so nothing here can tell. It is
+   **not** a crash risk — `recordEvent` in `src/data/supabase/ads.ts` falls back to the 0014
+   signature — but if it is missing, every ad view lands unbanded and the distance report a
+   business paid for stays empty, silently. `check_security_state.sql` now answers this in one row.
+6. 🟡 **`play-service-account.json` still does not exist**, so `eas submit` cannot upload. This is
    **not a blocker for v1.0**: uploading the `.aab` by hand in the Play Console works and skips the
    Google Cloud service-account setup entirely. Create it later, when automating uploads is worth
    it. Walkthrough if you want it now: guide §A.5.
+
+## Third pass record — 15 Aug 2026
+
+- **Privacy policy extended, and `data-safety.md` brought back into agreement with it.** Two real
+  gaps were found by reading the two documents against each other:
+  - The §4 processors table listed only Supabase, LiveKit and Expo push — while `data-safety.md`
+    §10 asserted the policy discloses OpenStreetMap/OSRM/unpkg, Google sign-in and Expo updates.
+    It did not. All three are now in the table. That assertion was going to fail the moment a
+    reviewer checked it.
+  - Nothing disclosed **promoted listings** at all, and migration 0020 had just made an ad view
+    carry the viewer's distance band. New **§5 "Promoted listings"** covers both. The Data safety
+    *form* is unchanged and the Advertising ID answer is still **no** — the reasoning is recorded
+    in `data-safety.md` §8, because "we decided this needs no declaration" is worth being able to
+    defend later.
+  - Sections renumbered 5→13 as a result; the one cross-reference (`data-safety.md` → policy §9,
+    children) was updated to §10.
+- **`supabase/scripts/rotate_test_accounts.sql` was stale and dangerous.** It told you deleting the
+  test accounts cascades their listings away. Since migration 0019 that is false — the profile
+  survives as a tombstone and the listing stays live in the directory owned by an account nobody
+  can sign into, with no in-app way to remove it. Its "check what would go first" query also
+  referenced a `businesses.name` column that does not exist in the document model, so it would have
+  errored mid-cleanup. Rewritten: take listings down first, then the accounts, then the tombstones
+  **by id** — with a warning against the blanket tombstone delete, which would cascade real users'
+  anonymised orders and reviews away and undo the point of 0019.
+- **`check_security_state.sql` extended** to cover 0014/0015/0016/0019/0020 and three
+  launch-readiness rows (test accounts still live, listings owned by a tombstone, directory size).
+- **Verified:** `npx tsc --noEmit` and `npx expo export --platform web` both exit 0.
 
 ---
 
