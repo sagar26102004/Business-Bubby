@@ -56,6 +56,20 @@ serviceAccountKey.json
 # The Play service-account key lets anyone upload releases to your listing.
 # Referenced by eas.json -> submit.production.android.serviceAccountKeyPath.
 play-service-account.json
+
+# App signing credentials pulled down from EAS
+# `eas credentials` -> Credentials JSON -> Download writes BOTH of these:
+# credentials.json holds the keystore password, key alias and key password in
+# PLAINTEXT, and credentials/ holds the .jks itself. Anyone with the pair can
+# sign a build that Play accepts as an update to this app. *.jks above covers
+# the keystore; these two cover the passwords and the folder around it.
+credentials.json
+credentials/
+# The base64 transcription made when pasting the keystore into a GitHub secret.
+# Same private key, just text — and text is exactly what `git add .` sweeps up.
+# Delete it once the secret is saved; this is the belt to that braces.
+keystore.b64
+*.jks.b64
 # NOTE: google-services.json is deliberately NOT ignored. It is not a secret —
 # it ships inside the APK — and EAS cloud builds skip gitignored files, so the
 # build needs it committed.

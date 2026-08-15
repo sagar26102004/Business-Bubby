@@ -1,0 +1,284 @@
+# Build a SIGNED Android App Bundle (.aab) for Google Play, without EAS.
+#
+# WHY THIS EXISTS
+# `android-apk.yml` next door builds an installable APK for putting the app on a
+# phone by hand. Play will not take an APK for a new app — it wants an .aab —
+# and it will not take a bundle signed with Expo's debug keystore. This workflow
+# is that gap: same free Ubuntu runner, same prebuild, but `bundleRelease` and a
+# real upload key.
+#
+# It also exists because EAS Build's free tier is a handful of Android builds a
+# month, and running out mid-release would otherwise stall the submission until
+# the quota resets.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ONE-TIME SETUP — four GitHub secrets
+#
+# Get the keystore and its passwords out of EAS (it already generated one, and
+# you want this backed up regardless):
+#
+#     eas credentials
+#       → Android → production → Keystore → Download
+#
+# That gives you a .jks file plus three values it prints: keystore password,
+# key alias, key password. Then, from the repo root:
+#
+#     # Windows PowerShell
+#     [Convert]::ToBase64String([IO.File]::ReadAllBytes("path\to\keystore.jks")) > keystore.b64
+#
+#     # macOS / Linux / Git Bash
+#     base64 -w0 path/to/keystore.jks > keystore.b64
+#
+# GitHub → repo → Settings → Secrets and variables → Actions → New secret:
+#
+#   ANDROID_KEYSTORE_BASE64   the contents of keystore.b64 (one long line)
+#   ANDROID_KEYSTORE_PASSWORD the keystore password from eas credentials
+#   ANDROID_KEY_ALIAS         the key alias from eas credentials
+#   ANDROID_KEY_PASSWORD      the key password from eas credentials
+#
+# ⚠️ USE THE KEYSTORE EAS ALREADY MADE, not a fresh one. Play ties your listing
+# to the first key you upload with, permanently. Reusing the EAS key means you
+# can go back to `eas build` when the quota resets and Play will still accept
+# it. Two different keys means one of the two paths stops working forever.
+#
+# ⚠️ AND KEEP A COPY OF THE .jks SOMEWHERE THAT IS NOT THIS REPO OR THIS LAPTOP.
+# Losing it ends your ability to update the app. Not "makes it awkward" — ends
+# it. You would need a new package name and a new listing starting at zero
+# installs. GitHub secrets are write-only; you cannot read the key back out.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# EVERY RUN — bump versionCode
+#
+# Play rejects a bundle whose versionCode it has already seen, and unlike
+# `eas build` (which tracks it remotely via appVersionSource) a Gradle build
+# has no memory. So the number is an input below and YOU increment it. EAS has
+# already used 1 and 2, so start at 3.
+#
+# HOW TO RUN IT
+# GitHub → Actions → "Android AAB (Play)" → Run workflow. ~25-40 minutes cold.
+# The bundle lands in the run's Artifacts as `localo-aab`.
+
+name: Android AAB (Play)
+
+on:
+  workflow_dispatch:
+    inputs:
+      versionCode:
+        description: 'versionCode — must be higher than every build already uploaded to Play (EAS used 1 and 2)'
+        required: true
+        default: '3'
+        type: string
+      architectures:
+        description: 'CPU architectures to compile'
+        default: armeabi-v7a,arm64-v8a
+        type: choice
+        options:
+          # Both ARM variants: every real Android phone, 32- and 64-bit. Play
+          # splits the bundle per device, so including both costs build time
+          # here but nothing in download size for the user.
+          - armeabi-v7a,arm64-v8a
+          # Adds x86 for Chromebooks and emulators. Slowest by a wide margin.
+          - armeabi-v7a,arm64-v8a,x86,x86_64
+          # 64-bit ARM only. Faster, but excludes older budget handsets — which
+          # in this app's market is the wrong tradeoff for a production upload.
+          - arm64-v8a
+
+concurrency:
+  group: android-aab
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Longer than the APK workflow's 90: bundleRelease builds more ABIs and
+    # does the extra bundling pass, and being killed at minute 89 wastes the
+    # whole run.
+    timeout-minutes: 120
+
+    env:
+      # Inlined into the JS bundle by Metro at BUILD time — a bundle built
+      # without them falls back to the in-memory mock and talks to nothing.
+      # Same values as eas.json's production profile, and deliberately the same
+      # as android-apk.yml. Not secrets: the key is the *publishable* one and
+      # every row it reaches is guarded by RLS.
+      EXPO_PUBLIC_BACKEND: supabase
+      EXPO_PUBLIC_SUPABASE_URL: https://mzxslzouzmiswnrolcaq.supabase.co
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_x0-0776uRm-OP89yFWzWfA_4qZn7IFF
+      # EXPO_PUBLIC_DEV_TOOLS and EXPO_PUBLIC_SEED_PASSWORD stay ABSENT. A
+      # release build is `__DEV__ === false`, which folds the dev-tools branch
+      # away entirely, and a seed password compiled into a shipped bundle is a
+      # shared login for every test account.
+      GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # 17, not newer — the Gradle/AGP versions Expo SDK 57 generates reject
+          # 21+, and the failure is an opaque stacktrace that never names the JDK.
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        # --legacy-peer-deps is REQUIRED here: a peer conflict makes a plain
+        # install fail outright.
+        run: npm install --legacy-peer-deps
+
+      - name: Generate the native Android project
+        # `android/` is gitignored, so it is generated from app.json and the
+        # config plugins (LiveKit, WebRTC, call notifications, camera, location).
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Make the Gradle wrapper executable
+        run: chmod +x android/gradlew
+
+      - name: Give Gradle enough memory
+        # ⚠️ WITHOUT THIS THE BUILD DIES IN KSP with an OutOfMemoryError on
+        # Metaspace, several tasks after Gradle first warns about it. Expo's
+        # generated gradle.properties asks for 512 MiB of metaspace, which is
+        # not enough to hold the classes KSP loads across two dozen native
+        # modules. Appended, not edited, because prebuild regenerates the file
+        # every run and java.util.Properties honours the LAST definition.
+        run: |
+          {
+            echo ""
+            echo "# Appended by .github/workflows/android-aab.yml"
+            echo "org.gradle.jvmargs=-Xmx6g -XX:MaxMetaspaceSize=2g -Dfile.encoding=UTF-8"
+            echo "org.gradle.daemon.performance.disable-logging=true"
+          } >> android/gradle.properties
+
+      - name: Restore the upload keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 is not set. See the setup notes at the top of this file."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          # Fail loudly here rather than 40 minutes later in a signing task.
+          keytool -list -keystore android/app/upload-keystore.jks \
+                  -storepass "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" > /dev/null
+          echo "Keystore restored and readable."
+
+      - name: Point the release build at the upload keystore
+        # Expo's prebuild template signs the RELEASE build with the DEBUG
+        # keystore ("Caution! In production, you need to generate your own
+        # keystore file" is right there in the generated file). Play rejects a
+        # debug-signed bundle, so the generated build.gradle is patched here.
+        #
+        # Done in Node rather than sed because `signingConfig signingConfigs.debug`
+        # appears in BOTH buildTypes, and only the one inside `release` may
+        # change — a global replace would leave debug builds pointing at a
+        # keystore that is absent locally.
+        #
+        # Passwords are read via System.getenv at Gradle time, so they are never
+        # written into a file on the runner.
+        run: |
+          node <<'PATCH'
+          const fs = require('fs');
+          const path = 'android/app/build.gradle';
+          let src = fs.readFileSync(path, 'utf8');
+
+          // 1. Add a `release` signing config beside the existing `debug` one.
+          const anchor = 'signingConfigs {';
+          if (!src.includes(anchor)) throw new Error('signingConfigs block not found in ' + path);
+          // Built with \n escapes on ONE line, not a multi-line template
+          // literal: everything here lives inside a YAML block scalar, and a
+          // continuation line indented less than the block would silently end
+          // it and break the workflow file.
+          const releaseCfg = [
+            anchor,
+            '        release {',
+            "            storeFile file('upload-keystore.jks')",
+            '            storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")',
+            '            keyAlias System.getenv("ANDROID_KEY_ALIAS")',
+            '            keyPassword System.getenv("ANDROID_KEY_PASSWORD")',
+            '        }',
+          ].join('\n');
+          src = src.replace(anchor, releaseCfg);
+
+          // 2. Inside buildTypes { release { … } } only, swap debug -> release.
+          const relIdx = src.indexOf('release {', src.indexOf('buildTypes {'));
+          if (relIdx === -1) throw new Error('buildTypes.release block not found');
+          const head = src.slice(0, relIdx);
+          let tail = src.slice(relIdx);
+          if (!tail.includes('signingConfig signingConfigs.debug')) {
+            throw new Error('release buildType does not reference signingConfigs.debug — template changed, re-check this patch');
+          }
+          tail = tail.replace('signingConfig signingConfigs.debug', 'signingConfig signingConfigs.release');
+          src = head + tail;
+
+          // 3. versionCode. `eas build` tracks this remotely; Gradle has no
+          //    memory, and Play refuses a versionCode it has already seen.
+          const vc = process.env.VERSION_CODE;
+          if (!/^\d+$/.test(vc || '')) throw new Error('versionCode must be a positive integer, got: ' + vc);
+          src = src.replace(/versionCode\s+\d+/, `versionCode ${vc}`);
+
+          fs.writeFileSync(path, src);
+          console.log('Patched. Signing + version lines now:');
+          for (const line of src.split('\n')) {
+            if (/signingConfig|versionCode|versionName/.test(line)) console.log('  ' + line.trim());
+          }
+          PATCH
+        env:
+          VERSION_CODE: ${{ inputs.versionCode }}
+
+      - name: Build the app bundle
+        working-directory: android
+        env:
+          # Silences "NODE_ENV is required" from generateReactNativeEntryPoint,
+          # and is correct for a release bundle. Set on THIS STEP ONLY — job-wide
+          # it would reach `npm install`, which would then skip devDependencies.
+          NODE_ENV: production
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: >-
+          ./gradlew bundleRelease
+          -PreactNativeArchitectures=${{ inputs.architectures || 'armeabi-v7a,arm64-v8a' }}
+          --no-daemon --stacktrace
+
+      - name: Confirm the bundle is signed with the upload key
+        # A bundle signed with the debug key uploads to Play and is rejected
+        # there, several minutes later, with a message about the certificate.
+        # Catching it here costs two seconds.
+        run: |
+          BUNDLE=android/app/build/outputs/bundle/release/app-release.aab
+          ls -lh "$BUNDLE"
+          keytool -printcert -jarfile "$BUNDLE" | grep -E 'Owner|Valid' || true
+          if keytool -printcert -jarfile "$BUNDLE" | grep -qi 'CN=Android Debug'; then
+            echo "::error::Bundle is DEBUG-signed. The build.gradle patch did not take effect."
+            exit 1
+          fi
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: localo-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Keep the build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-reports
+          path: |
+            android/build/reports/
+            android/app/build/reports/
+          if-no-files-found: ignore
+          retention-days: 7

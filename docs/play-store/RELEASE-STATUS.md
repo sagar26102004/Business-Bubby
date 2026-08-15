@@ -63,18 +63,14 @@ Play-only run:
 network connection this repo cannot reach. They are ordered by how long they take to clear, not by
 severity — 1 and 2 have waiting built into them, so start them first.
 
-1. ⬜ **The corrected legal pages are still not live. This is now the oldest open item.**
-   `docs/legal/privacy-policy.html` and `support.html` were rewritten on 14 Aug so they no longer
-   describe background location the app does not ship, and extended again on 15 Aug (see below).
-   They were **committed** on 15 Aug as `d1274c7` — but that commit **has not reached GitHub**:
-   `git log origin/main..main` still lists it, and fetching `github.com` times out from this
-   machine. Verified the same day by loading the live URL: it still serves the **13 August** text,
-   which says the app collects background location. That directly contradicts the Data safety form
-   you are about to submit, and a contradiction there is a rejection.
-   **Do:** `git push origin main`, wait ~1 min for Pages, then open
-   `https://sagar26102004.github.io/Business-Bubby/privacy-policy.html` **in a private window** and
-   confirm it reads "Last updated 15 August 2026". If the push fails, it is the network, not the
-   repo — the commit is sound.
+1. ✅ **RESOLVED 15 Aug 2026 — the corrected legal pages are live.** Verified by loading the
+   published URLs, not just by checking git: `privacy-policy.html` reads "Last updated 15 August
+   2026", carries the new §5 "Promoted listings", and lists OpenStreetMap in the Service providers
+   table; `support.html` carries the rewritten location FAQ. The live pages and the Data safety
+   answers now agree, which was the standing rejection risk.
+   **If you ever edit a page under `docs/legal/`, this is the check:** push, wait ~1 min for Pages,
+   then load the URL in a private window and confirm the date changed. GitHub Pages deploys from
+   `main`, so an unpushed commit means the app links to text you no longer stand behind.
 2. ❓ **Play Console account status is still unknown** (phase 3). Approval takes days and gates
    every step after it. Check it today even if nothing else moves.
 3. 🟡 **Screenshots still show obviously-fake names** — `Vehicles Stall #633`, `Abc's Stall`, `Fth`.
