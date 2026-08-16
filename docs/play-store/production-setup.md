@@ -47,15 +47,16 @@ source**. Nothing needs changing for a switch of project later beyond those file
 
 ## 2. Before the first production build — do these in order
 
-### 2.1 Rotate the super-admin password ⚠️ HIGHEST VALUE ITEM
+### 2.1 Rotate the super-admin password ✅ DONE 16 Aug 2026
 
 That account can read every user's private contact details, register listings for anyone, reassign
-ownership, and approve ad campaigns. Its password (`Sagar@2004`) is short, guessable, and written
-down in project notes.
+ownership, and approve ad campaigns. Its original password was short, guessable and written down in
+project notes — it has been **rotated and is no longer valid**, and it is deliberately not recorded
+here or anywhere else in the repo.
 
-Supabase Dashboard → **Authentication → Users** → find the account (phone `8827548423`) →
-**Reset password**, or from the SQL editor with the service role. Use a long random password from
-a password manager, and do not record it in the repo.
+Kept for the next time it needs doing: Supabase Dashboard → **Authentication → Users** → find the
+account (phone `8827548423`) → **Reset password**, or from the SQL editor with the service role.
+Use a long random password from a password manager, and do not record it in the repo.
 
 ### 2.2 Find out what is actually in the database
 

@@ -4,8 +4,9 @@
 submission: what is done, what is decided, and what is next. The other files in this folder are
 *reference* (what to paste, what to record); this one is *status*.
 
-Last updated **15 August 2026** (third pass: everything authorable is now written; what remains
-needs the Play Console, the Supabase dashboard, or a push that reaches GitHub).
+Last updated **16 August 2026** (fourth pass: the signed bundle now EXISTS and the super-admin
+password is rotated. What remains is almost entirely Play Console form-filling, gated on Google
+finishing identity verification).
 
 ---
 
@@ -34,12 +35,12 @@ Play-only run:
 |---|---|---|---|
 | 1 | End-to-end testing | Phase 1 | ✅ **Full feature sweep done 16 Aug 2026** — every screen driven in the web preview, four real bugs found and fixed. See "Pre-publish QA sweep" below. Final on-device ring/vibration pass still deferred. |
 | 2 | Config + assets | Phase 2 | ✅ **Complete** — see "Phase 2 record" below. |
-| 3 | Play Console account ($25, ID verification) | A.1 | 🟡 **Account created, ID documents submitted — awaiting Google's verification** (15 Aug 2026). Nothing uploaded yet, no track live. Testing to date has been EAS **preview** APKs on Sagar's own device — real testing, but not a Play artefact. Verification takes days; steps 4 and §2.1 below do not wait on it. |
-| 4 | Production build + keystore backup | A.2 / Phase 3 | ⬜ Not started |
-| 5 | Create app in Play Console | A.3 | ⬜ Not started |
-| 6 | Setup checklist: listing, content rating, target audience, data safety | A.4 / 6.2 | 🟡 **All assets and copy now exist** — nothing left to author, only to paste. See "Ready to upload" below. |
-| 7 | Play service account key | A.5 | 🟡 **Optional for v1.0 — see below** |
-| 8 | `eas submit` + create release | A.6 / A.7 | ⬜ Not started. **Testing track, not production** — decision 4. Use the `internal` submit profile in `eas.json`, never `production`. |
+| 3 | Play Console account ($25, ID verification) | A.1 | 🟡 **Paid for, ID documents submitted — awaiting Google's verification** (as of 16 Aug 2026). Nothing uploaded yet, no track live. **This is now the critical path**: every remaining step needs a verified Console, and nothing in the repo can make it go faster. |
+| 4 | Production build + keystore backup | A.2 / Phase 3 | ✅ **Done 16 Aug 2026 — a signed release `.aab` exists.** Built by GitHub Actions, not EAS (decision 5). Keystore backed up off-machine to Google Drive; local copies at `credentials/android/keystore.jks` + `credentials.json`, both gitignored and never committed. ⚠️ The artefact is **still sitting in the workflow run** — download it, retention is 14 days. |
+| 5 | Create app in Play Console | A.3 | ⬜ Not started — blocked on 3 |
+| 6 | Setup checklist: listing, content rating, target audience, data safety | A.4 / 6.2 | 🟡 **All assets and copy now exist** — nothing left to author, only to paste. Blocked on 3. See "Ready to upload" below. |
+| 7 | Play service account key | A.5 | ⬜ **Not needed for v1.0 and now doubly so** — the build no longer comes from EAS, so `eas submit` is not the upload path. Upload the `.aab` by hand. |
+| 8 | Upload the `.aab` + create release | A.6 / A.7 | ⬜ Not started. **Testing track, not production** — decision 4. Manual upload in the Console, **not** `eas submit` — see decision 5. |
 | 9 | Review (1–3 days; up to 7 for a new account) | A.8 | ⬜ |
 | 10 | Closed test → apply for production access | — | ⬜ **Check whether this applies to you** — a personal account registered after 13 Nov 2023 needs 12 testers for 14 continuous days on a *closed* track first. Decision 4. |
 
@@ -71,31 +72,43 @@ severity — 1 and 2 have waiting built into them, so start them first.
    **If you ever edit a page under `docs/legal/`, this is the check:** push, wait ~1 min for Pages,
    then load the URL in a private window and confirm the date changed. GitHub Pages deploys from
    `main`, so an unpushed commit means the app links to text you no longer stand behind.
-2. ❓ **Play Console account status is still unknown** (phase 3). Approval takes days and gates
-   every step after it. Check it today even if nothing else moves.
+2. 🟡 **Play Console verification is pending, and it is now the only hard blocker** (phase 3). The
+   $25 is paid and the ID documents are in; Google takes days. Every remaining step — create the
+   app, paste the listing, upload the bundle, open a track — is downstream of it, and none of the
+   work left in this repo can shorten it. Check it daily; there is nothing else to wait on.
 3. 🟡 **Screenshots still show obviously-fake names** — `Vehicles Stall #633`, `Abc's Stall`, `Fth`.
    Downgraded by decision 4: for a testing track these are seen by testers, not the public, and
    renaming those three listings is enough (one `update … jsonb_set` on `businesses.data`).
    **Recapturing against real listings is a production-promotion blocker, not a v1.0 one.** The two
    shots still missing (an order, a chat — both came out as empty states) are in
    `screenshots/README.md`.
-4. 🟡 **`production-setup.md` §2 is half done.** §2.4 is **complete** — the shared-password test
-   accounts are gone from `auth.users`, verified 15 Aug. Still open and still real exposure: **§2.1,
-   rotating the super-admin password**, which is short, guessable and written down in project notes,
-   on an account that can read every user's private contact details and reassign listing ownership.
-   Then §2.5 (auth settings), §2.6 (migrations + edge functions) and §2.7 (advisors). Paste
-   `supabase/scripts/check_security_state.sql` — one run covers §2.6, §2.7's main case and the
-   launch-readiness rows.
+4. 🟢 **`production-setup.md` §2 is all but finished.** §2.1 (**super-admin password rotated**,
+   16 Aug), §2.4 (test accounts deleted, 15 Aug) and §2.6 (migrations + functions — the 28-row
+   `check_security_state.sql` run came back green, 16 Aug) are **done**. The old plaintext password
+   in §2.1 is dead and the section has been rewritten to say so.
+   **Left: §2.5 and §2.7, both dashboard-only and both about five minutes.**
+   - **§2.5 auth settings** — the one with a real failure mode. Four toggles under Authentication →
+     Sign In / Providers: Anonymous sign-ins **ON** (off = guest voice calling breaks), Confirm
+     email **OFF** (synthetic `<username>@localo.app` addresses have no inbox, so sign-in dies),
+     leaked-password protection ON, Google provider configured. Plus `localo://auth-callback` in
+     URL Configuration or Google sign-in returns nowhere on a device.
+   - **§2.7 advisors** — Dashboard → Advisors → Security. The one check that catches a table added
+     without a policy, which the SQL script cannot know to look for.
 5. ✅ **Migration `0020_ad_view_bands.sql` is applied** (confirmed 15 Aug). It is idempotent — two
    `drop function if exists`, a `create`, a `comment` and a `grant`, with no data backfill — so
    re-running it is safe if ever in doubt. The one thing that can still go wrong is PostgREST
    caching the old signature, which fails **silently**: `recordEvent` in `src/data/supabase/ads.ts`
    falls back to the 2-arg call, so every view lands unbanded and the distance report stays empty
    while everything looks fine. Fix with `notify pgrst, 'reload schema';`.
-6. 🟡 **`play-service-account.json` still does not exist**, so `eas submit` cannot upload. This is
-   **not a blocker for v1.0**: uploading the `.aab` by hand in the Play Console works and skips the
-   Google Cloud service-account setup entirely. Create it later, when automating uploads is worth
-   it. Walkthrough if you want it now: guide §A.5.
+6. ✅ **`play-service-account.json` is no longer wanted for v1.0.** It only ever existed to let
+   `eas submit` upload, and the build has moved off EAS entirely (decision 5) — so the upload is a
+   manual one in the Console either way. Revisit only if automated uploads become worth the Google
+   Cloud setup. Walkthrough if you ever want it: guide §A.5.
+
+7. 🟡 **The signed `.aab` is still inside its GitHub Actions run.** The workflow went green but the
+   `localo-aab` artifact was never downloaded, and `retention-days: 14` means it is deleted around
+   **30 Aug 2026**. Rebuilding is only ~30 minutes, but it also means a fresh `versionCode`, so
+   just download it: Actions → "Android AAB (Play)" → the green run → Artifacts → `localo-aab`.
 
 ## Pre-publish QA sweep — 16 Aug 2026
 
@@ -277,6 +290,51 @@ lock-screen call UI, which has never run outside a dev build), then closed testi
 then apply for production access.
 
 Confirm the current numbers in the Console; this is a policy Google has revised more than once.
+
+---
+
+### 5. Release bundles are built by GitHub Actions, not EAS
+
+Decided 15–16 Aug 2026, forced by circumstance: **EAS Build's free Android quota ran out** mid-
+release, and waiting for a monthly reset was not an acceptable way to stall a submission.
+`.github/workflows/android-aab.yml` builds the same thing on a free Ubuntu runner — `expo prebuild`
+then `bundleRelease`, signed with a real upload key — and produced the bundle now in hand.
+
+**Three things this changes, all of which bite silently:**
+
+1. **`versionCode` is now yours to increment.** `eas build` tracked it remotely via
+   `appVersionSource: "remote"`; Gradle has no memory, so the number is a workflow input. EAS
+   already burned 1 and 2, so the first Actions build is **3** and every upload after it must be
+   higher — Play refuses a versionCode it has seen before. Still **do not** put a `versionCode` in
+   `app.json`; the workflow patches `build.gradle` directly.
+2. **`eas submit` is not the upload path.** Upload the `.aab` by hand in the Console. This is also
+   why the service-account key stopped mattering (blocker 6).
+3. **The keystore must stay the one EAS generated.** Play permanently binds the listing to the
+   first key it sees. Reusing the EAS key is what keeps `eas build` a viable fallback when the
+   quota resets; generating a second key would kill one of the two paths forever.
+
+⚠️ **Keystore backup is the one unrecoverable item in this whole submission.** Losing it does not
+make updates awkward — it ends them, and the app would need a new package name and a new listing at
+zero installs. Current state: backed up to Google Drive (off-machine), plus `credentials/android/`
+and `credentials.json` locally, both gitignored and confirmed absent from git history. GitHub
+secrets are write-only, so the Actions copy is **not** a backup — you cannot read it back out.
+
+`android-apk.yml` next door is unaffected: it still builds an installable APK for putting the app
+on a phone by hand, and Play will not accept an APK for a new app anyway.
+
+---
+
+## Fourth pass record — 16 Aug 2026
+
+- **Super-admin password rotated** (`production-setup.md` §2.1), closing the last item that was
+  real exposure rather than paperwork. §2.1 rewritten so it no longer prints the dead password.
+- **Signed release `.aab` built** via the new GitHub Actions workflow — see decision 5. Keystore
+  backed up off-machine.
+- **Play Console paid for and submitted for ID verification.** Now the sole hard blocker.
+- **Verified in the repo, not assumed:** `credentials.json` (repo root) and `credentials/` are both
+  matched by `.gitignore`, neither is tracked, and neither appears anywhere in git history; no
+  stray `keystore.b64` was left behind after the secret was saved. `npx tsc --noEmit` exits 0 and
+  `main` is level with `origin/main`.
 
 ---
 
