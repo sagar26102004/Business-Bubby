@@ -25,9 +25,13 @@ export function locationSummary(location: BusinessLocation): string {
     return location.label ?? (area ? `Serves ${area}` : 'Service area');
   }
 
+  // Last resort: a listing whose owner dropped a map pin and skipped the
+  // optional address text. "Location" was the old fallback and it read as a
+  // placeholder that had failed to fill in — say what we actually know instead,
+  // which is that the pin is the address.
   return location.addressLine
     ? [location.addressLine, area].filter(Boolean).join(', ')
-    : area || location.label || 'Location';
+    : area || location.label || (location.point ? 'Pinned on the map' : 'Address not added');
 }
 
 /** Whether we have coordinates we're allowed to plot on a map. */

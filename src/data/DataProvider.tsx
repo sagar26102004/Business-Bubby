@@ -14,8 +14,7 @@ import type { DeleteAccountResult, Repositories, SignUpInput } from '@/data/repo
 import { createMockRepositories, resetMockData } from '@/data/mock/mockRepositories';
 import { createSupabaseRepositories } from '@/data/supabase';
 import { createApiRepositories } from '@/data/api';
-import { isApiConfigured } from '@/data/api/client';
-import { isSupabaseConfigured } from '@/lib/supabase';
+import { selectedBackend } from '@/data/backend';
 
 /**
  * Pick the concrete backend, exactly once. `EXPO_PUBLIC_BACKEND` chooses:
@@ -27,16 +26,14 @@ import { isSupabaseConfigured } from '@/lib/supabase';
  * Unset keeps the old behaviour: Supabase when configured, otherwise mock.
  */
 function selectRepositories(): Repositories {
-  const backend = (process.env.EXPO_PUBLIC_BACKEND ?? '').toLowerCase();
-  const supabaseOrMock = () =>
-    isSupabaseConfigured ? createSupabaseRepositories() : createMockRepositories();
-
-  if (backend === 'mock') return createMockRepositories();
-  if (backend === 'api') {
-    return isApiConfigured && isSupabaseConfigured ? createApiRepositories() : supabaseOrMock();
+  switch (selectedBackend()) {
+    case 'api':
+      return createApiRepositories();
+    case 'supabase':
+      return createSupabaseRepositories();
+    default:
+      return createMockRepositories();
   }
-  if (backend === 'supabase') return supabaseOrMock();
-  return supabaseOrMock();
 }
 
 interface DataContextValue {

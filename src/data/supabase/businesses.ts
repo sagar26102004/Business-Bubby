@@ -171,7 +171,11 @@ export function createSupabaseBusinesses(): BusinessRepository {
         callHandlerIds: employeeIds,
         ownerHandlesCalls: true,
         chatRecipientIds: employeeIds,
-        openNow: true,
+        // `openNow` is deliberately NOT set. It is the legacy fallback badge for
+        // listings with no structured hours (domain/hours.ts), so stamping it
+        // `true` at creation made every listing that skipped the optional hours
+        // step claim "Open now" round the clock, for good. Left undefined, the
+        // page shows no open/closed chip until the owner sets real hours.
         rentalBasis: input.rentalBasis,
         rentals: input.rentals,
         rentalStatus: input.rentalBasis ? 'available' : undefined,

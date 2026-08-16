@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth, useRepositories } from '@/data/DataProvider';
+import { useDismiss } from '@/lib/navigation';
 import { useAsync } from '@/lib/useAsync';
 import {
   Button,
@@ -28,6 +29,8 @@ export default function ReviewScreen() {
   const repos = useRepositories();
   const colors = useColors();
   const router = useRouter();
+  // Rating can be the FIRST screen (deep link), where back() is a no-op.
+  const dismiss = useDismiss(`/business/${businessId}`);
   const { currentUser, isGuest } = useAuth();
 
   const [rating, setRating] = useState(0);
@@ -85,7 +88,7 @@ export default function ReviewScreen() {
           title="Only customers can rate"
           body={gate.reason ?? 'Do business with this listing first, then rate your experience.'}
         />
-        <Button title="Back to the business" variant="secondary" onPress={() => router.back()} />
+        <Button title="Back to the business" variant="secondary" onPress={dismiss} />
       </Screen>
     );
   }
@@ -105,7 +108,7 @@ export default function ReviewScreen() {
         rating,
         comment,
       });
-      router.back();
+      dismiss();
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : 'Couldn’t save your rating.');
     } finally {

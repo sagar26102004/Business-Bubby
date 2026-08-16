@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import type { Vehicle } from '@/domain/types';
 import { getVehicleKind } from '@/domain/catalog';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -33,6 +34,7 @@ export default function TrackedItemScreen() {
   const { businessId, itemId } = useLocalSearchParams<{ businessId: string; itemId: string }>();
   const repos = useRepositories();
   const router = useRouter();
+  const dismiss = useDismiss(`/fleet/${businessId}/items`);
   const { currentUser } = useAuth();
 
   const { data, loading, error, reload } = useAsync(async () => {
@@ -114,7 +116,7 @@ export default function TrackedItemScreen() {
 
   const remove = async () => {
     await repos.tracking.removeItem(item.id);
-    router.back();
+    dismiss();
   };
 
   return (

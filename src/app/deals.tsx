@@ -44,6 +44,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import type { AdPlacement } from '@/data/repositories';
 import type { Business, SavedPlace } from '@/domain/types';
 import { INTENT_CATEGORIES, intentMatches } from '@/domain/intents';
@@ -65,6 +66,7 @@ const RANGES_KM = [...FEED_RANGES_KM, ANY_RANGE_KM];
 export default function DealsScreen() {
   const repos = useRepositories();
   const router = useRouter();
+  const dismiss = useDismiss('/');
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   // Home hands over the place being browsed and (optionally) the category that
@@ -166,7 +168,7 @@ export default function DealsScreen() {
       <View onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
       {/* ── Top bar: back, range, reels ── */}
       <View style={[styles.bar, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={() => router.back()} hitSlop={8} style={styles.backBtn}>
+        <Pressable onPress={dismiss} hitSlop={8} style={styles.backBtn}>
           <Icon name="arrowLeft" size={20} color="#fff" />
         </Pressable>
 

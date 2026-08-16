@@ -2,13 +2,17 @@
  * Inbox conversation — the business side of a customer chat. The logged-in
  * member replies; their reply is attributed to them (so teammates and the owner
  * can see who answered). To the customer it's still one business conversation.
+ *
+ * Gated like the inbox list it's opened from: chat recipients plus
+ * owner/managers. The URL is guessable, so the check has to live here too.
  */
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import type { ChatMessage } from '@/domain/types';
+import { isManagerOrOwner } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
-import { Avatar, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
+import { Avatar, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { ChatThread } from '@/features/chat/ChatThread';
 import { spacing, useColors } from '@/theme/theme';
 
@@ -34,12 +38,31 @@ export default function InboxConversationScreen() {
       const user = await repos.users.getById(participantId);
       participantName = user?.name?.trim() || 'Guest';
     }
-    return { business, participantName };
+    const employees = await repos.employees.listByBusiness(business.id);
+    return { business, participantName, employees };
   }, [businessId, participantId]);
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return null;
+
+  const meEmployee = data.employees.find((e) => e.userId && e.userId === currentUser?.id);
+  const chatAccessIds = new Set(data.business.chatRecipientIds ?? []);
+  const canReply =
+    isManagerOrOwner(data.business, meEmployee, currentUser) ||
+    (meEmployee ? chatAccessIds.has(meEmployee.id) : false);
+
+  if (!canReply) {
+    return (
+      <Screen>
+        <Stack.Screen options={{ title: 'Chat' }} />
+        <EmptyView
+          title="Members only"
+          subtitle={`Only ${data.business.name}'s team can read its customer chats.`}
+        />
+      </Screen>
+    );
+  }
 
   // Business replies show which member answered; customer messages need no label.
   const labelFor = (message: ChatMessage, mine: boolean) =>

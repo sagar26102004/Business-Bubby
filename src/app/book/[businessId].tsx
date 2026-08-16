@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import type { ServiceItem } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -18,6 +19,7 @@ export default function BookScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
+  const dismiss = useDismiss(`/business/${businessId}`);
   const { currentUser } = useAuth();
 
   const [serviceName, setServiceName] = useState<string>();
@@ -55,7 +57,7 @@ export default function BookScreen() {
         note: note.trim() || undefined,
       });
       Alert.alert('Request sent', `Your booking with ${business.name} was requested. You'll be notified when they respond.`);
-      router.back();
+      dismiss();
     } catch (err) {
       Alert.alert('Could not book', err instanceof Error ? err.message : 'Try again.');
     } finally {

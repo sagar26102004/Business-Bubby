@@ -647,5 +647,28 @@ re-derivation from the Supabase diff is required:
 
 ---
 
+## [SYNC-035] Stop stamping `openNow: true` on newly created listings
+
+- **Area:** BusinessRepository / businesses — `create()`
+- **Supabase change:** `src/data/supabase/businesses.ts` no longer writes `openNow: true` into
+  the new business's `data`. The same line was removed from the mock
+  (`src/data/mock/mockRepositories.ts`).
+- **Why:** `Business.openNow` is the LEGACY fallback the open/closed badge falls back to when a
+  listing has no structured `openingHours` (`openState()` in `src/domain/hours.ts`). Hours are an
+  OPTIONAL step in the register wizard, so every listing that skipped it was stamped
+  "Open now" — permanently, at 3 a.m. included, with Manage showing "Opening hours: Not set"
+  right beside it. Left undefined, `openState()` returns `{ open: undefined }` and the page
+  simply shows no open/closed chip until the owner sets real hours.
+- **Domain/interface:** none — `openNow?: boolean` stays on the type for the seeded/legacy rows
+  that still carry it.
+- **Path B — backend/:** `backend/src/services/businesses.ts` line ~139 — delete the
+  `openNow: true,` line from the object written on create. Nothing else reads the field.
+- **Path B — src/data/api/:** no change.
+- **DB/migration:** none. Existing rows keep whatever they have; this only affects new ones.
+- **Verify:** `npm run typecheck` in `backend/`; register a listing without hours and confirm its
+  page shows no "Open now" chip.
+
+---
+
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
 

@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import type { Call, CallParticipant } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useCallAudio, type CallAudioState } from '@/features/calls/useCallAudio';
@@ -41,6 +42,8 @@ export default function CallSessionScreen() {
   const { callId, answer } = useLocalSearchParams<{ callId: string; answer?: string }>();
   const repos = useRepositories();
   const router = useRouter();
+  // A push notification can make the live call the app's FIRST screen.
+  const dismiss = useDismiss('/');
   const colors = useColors();
   const { currentUser } = useAuth();
   const myId = currentUser?.id ?? 'guest';
@@ -190,7 +193,7 @@ export default function CallSessionScreen() {
         </View>
       ) : null}
 
-      {isOver ? <Button title="Close" onPress={() => router.back()} style={styles.actionBtn} /> : null}
+      {isOver ? <Button title="Close" onPress={dismiss} style={styles.actionBtn} /> : null}
 
       {!isOver && iAmOn ? <AudioStatusNote audio={audio} /> : null}
     </Screen>

@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/ui';
+import { IS_EPHEMERAL_BACKEND } from '@/data/backend';
 import { DataProvider, useAuth } from '@/data/DataProvider';
 import { IncomingCallGate } from '@/features/calls/IncomingCallGate';
 import { PushRegistrar } from '@/features/notifications/PushRegistrar';
@@ -76,15 +77,21 @@ function SplashGate() {
 /**
  * Explicit header back control — a rounded chevron button with margin from the
  * edge. Shown on any pushed screen (guaranteed on web and native).
+ *
+ * With NOTHING to go back to it becomes a HOME button instead of disappearing.
+ * That case is real now that deep links survive a cold start (see
+ * `ColdStartRedirect`): a printed QR code or a push notification opens a stack
+ * screen as the very first route, where there is no back stack AND no tab bar —
+ * so without this the person who scanned the code would have no way out of it.
  */
 function HeaderBack() {
   const router = useRouter();
   const navigation = useNavigation();
   const colors = useColors();
-  if (!navigation.canGoBack?.()) return null;
+  const canGoBack = navigation.canGoBack?.() ?? false;
   return (
     <Pressable
-      onPress={() => router.back()}
+      onPress={() => (canGoBack ? router.back() : router.replace('/'))}
       hitSlop={12}
       style={({ pressed }) => ({
         marginLeft: spacing.md,
@@ -97,9 +104,9 @@ function HeaderBack() {
         opacity: pressed ? 0.6 : 1,
       })}
       accessibilityRole="button"
-      accessibilityLabel="Go back"
+      accessibilityLabel={canGoBack ? 'Go back' : 'Go to home'}
     >
-      <Icon name="arrowLeft" size={20} color={colors.text} />
+      <Icon name={canGoBack ? 'arrowLeft' : 'home'} size={20} color={colors.text} />
     </Pressable>
   );
 }
@@ -160,14 +167,21 @@ function AppHeader({ title, headerRight }: { title: string; headerRight?: Header
 }
 
 /**
- * A full page reload / app restart re-runs the whole bundle, so the in-memory
- * mock backend and the signed-in identity reset to defaults — but the URL stays
- * put. Landing back on a deep route (e.g. a workspace) then breaks: the auth
- * guard turns you away, or a session-created business no longer exists. So on
- * the very first mount after a cold start, if we're not already on Home, bounce
- * there. The module-level flag + empty-dep effect make this fire exactly once
- * per app load; in-app navigation never remounts the root layout, so ordinary
- * browsing to these routes is untouched.
+ * MOCK BACKEND ONLY — bounce a cold start off a deep route back to Home.
+ *
+ * On the mock, a full reload re-runs the bundle, so the in-memory data and the
+ * signed-in identity reset to defaults while the URL stays put. Landing back on
+ * a deep route (e.g. a workspace) then breaks: the auth guard turns you away, or
+ * a session-created business no longer exists.
+ *
+ * ⚠️ It must NOT run on a real backend. There the session and the data both
+ * survive, and bouncing to Home would break every deep link the app itself
+ * hands out — the printed business QR code (`/business/[id]`), a push
+ * notification opening an order, an Android App Link. Those all arrive as a
+ * COLD start, which is exactly the case this would have swallowed.
+ *
+ * The module-level flag + empty-dep effect make it fire once per app load;
+ * in-app navigation never remounts the root layout.
  */
 let handledColdStart = false;
 
@@ -175,7 +189,7 @@ function ColdStartRedirect() {
   const router = useRouter();
   const pathname = usePathname();
   useEffect(() => {
-    if (handledColdStart) return;
+    if (!IS_EPHEMERAL_BACKEND || handledColdStart) return;
     handledColdStart = true;
     if (pathname && pathname !== '/') router.replace('/');
     // eslint-disable-next-line react-hooks/exhaustive-deps

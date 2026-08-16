@@ -11,6 +11,7 @@
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { MIN_PASSWORD_LENGTH, assertPassword } from '@/data/repositories';
 import { Button, Card, Input, LoadingView, Screen, Text } from '@/components/ui';
@@ -18,6 +19,7 @@ import { spacing } from '@/theme/theme';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
+  const dismiss = useDismiss('/settings');
   const { currentUser, authLoading } = useAuth();
   const repos = useRepositories();
 
@@ -74,7 +76,7 @@ export default function ChangePasswordScreen() {
             Use your new password the next time you sign in. You’re still signed in here.
           </Text>
         </Card>
-        <Button title="Done" onPress={() => router.back()} style={styles.gap} />
+        <Button title="Done" onPress={dismiss} style={styles.gap} />
       </Screen>
     );
   }
@@ -120,7 +122,7 @@ export default function ChangePasswordScreen() {
       ) : null}
 
       <Button title="Change password" onPress={submit} loading={busy} style={styles.gap} />
-      <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
+      <Button title="Cancel" variant="ghost" onPress={dismiss} />
     </Screen>
   );
 }

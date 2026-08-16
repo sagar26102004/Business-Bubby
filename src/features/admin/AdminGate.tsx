@@ -6,6 +6,7 @@
 import { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { useAuth } from '@/data/DataProvider';
 import { Button, LoadingView, Text } from '@/components/ui';
@@ -14,6 +15,7 @@ import { spacing } from '@/theme/theme';
 export function AdminGate({ children }: { children: ReactNode }) {
   const { currentUser, authLoading } = useAuth();
   const router = useRouter();
+  const dismiss = useDismiss('/');
 
   if (authLoading) return <LoadingView />;
 
@@ -27,7 +29,7 @@ export function AdminGate({ children }: { children: ReactNode }) {
         <Text tone="muted" style={styles.sub}>
           This is the platform console. Sign in with a super-admin account to open it.
         </Text>
-        <Button title="Back" variant="secondary" onPress={() => router.back()} style={styles.btn} />
+        <Button title="Back" variant="secondary" onPress={dismiss} style={styles.btn} />
       </View>
     );
   }

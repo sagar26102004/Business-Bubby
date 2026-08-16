@@ -14,6 +14,7 @@
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import { commerceVocab } from '@/domain/catalog';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -39,6 +40,7 @@ export default function EnrollScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
+  const dismiss = useDismiss(`/business/${businessId}`);
   const colors = useColors();
   const { currentUser } = useAuth();
 
@@ -127,7 +129,7 @@ export default function EnrollScreen() {
                     tone="accent"
                     weight="semibold"
                     style={styles.headerDone}
-                    onPress={() => router.back()}
+                    onPress={dismiss}
                   >
                     Done
                   </Text>

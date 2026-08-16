@@ -18,6 +18,7 @@
 import { useMemo, useState } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import type { AdCampaign, Business } from '@/domain/types';
 import {
   campaignGoal,
@@ -58,6 +59,7 @@ export default function AdReviewScreen() {
   const repos = useRepositories();
   const colors = useColors();
   const router = useRouter();
+  const dismiss = useDismiss('/admin');
 
   const isAdmin = isSuperAdminUser(currentUser);
   const [filter, setFilter] = useState<Filter>('pending');
@@ -114,7 +116,7 @@ export default function AdReviewScreen() {
           <Text tone="muted" style={styles.deniedSub}>
             Ad requests are reviewed by platform super-admins.
           </Text>
-          <Button title="Back" variant="secondary" onPress={() => router.back()} />
+          <Button title="Back" variant="secondary" onPress={dismiss} />
         </View>
       </Screen>
     );

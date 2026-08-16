@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { uploadMedia } from '@/lib/upload';
 import { Avatar, Button, Icon, Input, LoadingView, Screen, Text } from '@/components/ui';
@@ -25,6 +26,7 @@ const BIO_MAX = 160;
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const dismiss = useDismiss('/account');
   const colors = useColors();
   const { currentUser, authLoading, setCurrentUser } = useAuth();
   const repos = useRepositories();
@@ -100,7 +102,7 @@ export default function EditProfileScreen() {
         avatarUrl,
       });
       setCurrentUser(updated);
-      router.back();
+      dismiss();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save your profile.');
     } finally {
@@ -181,7 +183,7 @@ export default function EditProfileScreen() {
         disabled={uploading}
         style={styles.gap}
       />
-      <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
+      <Button title="Cancel" variant="ghost" onPress={dismiss} />
     </Screen>
   );
 }

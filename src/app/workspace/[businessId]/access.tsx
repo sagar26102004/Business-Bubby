@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import type { Employee } from '@/domain/types';
 import { isManagerOrOwner, offeredServices } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -30,6 +31,7 @@ export default function WorkspaceAccessScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
+  const dismiss = useDismiss(`/workspace/${businessId}`);
   const colors = useColors();
   const { currentUser } = useAuth();
 
@@ -117,7 +119,7 @@ export default function WorkspaceAccessScreen() {
         }),
       );
       Alert.alert('Saved', 'Team access updated.');
-      router.back();
+      dismiss();
     } catch (err) {
       Alert.alert('Could not save', err instanceof Error ? err.message : 'Try again.');
     } finally {

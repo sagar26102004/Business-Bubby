@@ -19,6 +19,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import type { AccountDeletionBlocker } from '@/data/repositories';
 import { useAuth } from '@/data/DataProvider';
 import { ACCOUNT_DELETION_URL, openLegalPage } from '@/lib/legal';
@@ -44,6 +45,7 @@ const KEPT = [
 export default function DeleteAccountScreen() {
   const { currentUser, authLoading, deleteAccount } = useAuth();
   const router = useRouter();
+  const dismiss = useDismiss('/account');
   const colors = useColors();
 
   const [typed, setTyped] = useState('');
@@ -184,7 +186,7 @@ export default function DeleteAccountScreen() {
       <Button
         title="Keep my account"
         variant="ghost"
-        onPress={() => router.back()}
+        onPress={dismiss}
         style={styles.cancel}
       />
 

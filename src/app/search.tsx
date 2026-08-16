@@ -10,6 +10,7 @@
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSubcategory } from '@/domain/catalog';
 import { useRepositories } from '@/data/DataProvider';
@@ -26,6 +27,7 @@ export default function SearchScreen() {
   const repos = useRepositories();
   const colors = useColors();
   const router = useRouter();
+  const dismiss = useDismiss('/');
   const insets = useSafeAreaInsets();
   const { cardColumns, gridMaxWidth, readableMaxWidth, centered } = useResponsive();
 
@@ -102,7 +104,7 @@ export default function SearchScreen() {
         ]}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={dismiss}
           hitSlop={10}
           style={({ pressed }) => [
             styles.backBtn,

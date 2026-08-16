@@ -32,7 +32,7 @@ Play-only run:
 
 | # | Phase | Guide ref | Status |
 |---|---|---|---|
-| 1 | End-to-end testing | Phase 1 | ✅ Done informally — tested over a long period. Final ring/vibration pass deferred until everything else is submission-ready. |
+| 1 | End-to-end testing | Phase 1 | ✅ **Full feature sweep done 16 Aug 2026** — every screen driven in the web preview, four real bugs found and fixed. See "Pre-publish QA sweep" below. Final on-device ring/vibration pass still deferred. |
 | 2 | Config + assets | Phase 2 | ✅ **Complete** — see "Phase 2 record" below. |
 | 3 | Play Console account ($25, ID verification) | A.1 | 🟡 **Account created, ID documents submitted — awaiting Google's verification** (15 Aug 2026). Nothing uploaded yet, no track live. Testing to date has been EAS **preview** APKs on Sagar's own device — real testing, but not a Play artefact. Verification takes days; steps 4 and §2.1 below do not wait on it. |
 | 4 | Production build + keystore backup | A.2 / Phase 3 | ⬜ Not started |
@@ -96,6 +96,68 @@ severity — 1 and 2 have waiting built into them, so start them first.
    **not a blocker for v1.0**: uploading the `.aab` by hand in the Play Console works and skips the
    Google Cloud service-account setup entirely. Create it later, when automating uploads is worth
    it. Walkthrough if you want it now: guide §A.5.
+
+## Pre-publish QA sweep — 16 Aug 2026
+
+Every feature area driven end to end in the web preview (mock backend with the demo seed on, for
+coverage; then the deep-link fix re-verified against the live Supabase backend). Guest browse,
+category/intent pages, search, stalls & product threads, map, business page, the full order
+lifecycle (place → accept → auto-bill → both sides notified → review unlocked → rating posted →
+average updated), dine-in tabs, bookings, memberships & payment history, manual billing, customers,
+chats, B2B chat, voice calls (ring → incoming overlay → call log), fleet & live tracking, the
+register wizard on both branches, offers → promote → ad review → sponsored placement → "who saw
+it", the platform console, and every members-only gate.
+
+**Four real defects found and fixed:**
+
+1. **Deep links were dead on arrival (release blocker).** `ColdStartRedirect` in `app/_layout.tsx`
+   bounced *any* non-`/` route to Home on the first mount after an app load — unconditionally. It
+   was written for the in-memory mock, which resets on reload, but the app ships on Supabase where
+   the session and the data both persist. Everything the app hands out as a link arrives as a cold
+   start: **the printed business QR code** (`localo://business/<id>` — the storefront-sign feature),
+   a push notification opening a call or an order, any Android App Link. All of them landed on Home.
+   Fixed with `src/data/backend.ts` (`selectedBackend()` / `IS_EPHEMERAL_BACKEND`), which resolves
+   the effective backend once; the bounce now runs on the mock only. `DataProvider` was rewritten to
+   use the same resolver so the two can't disagree. Verified: `/settings`, `/map`, `/browse/food`,
+   `/deals`, `/scan` all now open directly on the Supabase build.
+2. **…which would have trapped people, so the header back button became a home button.** A stack
+   screen opened cold has no back stack *and* no tab bar, and `HeaderBack` used to render nothing in
+   that case. It now falls back to a home icon (`router.replace('/')`). The same problem in content
+   buttons — a bare `router.back()` after a completed action silently does nothing — is fixed by
+   `useDismiss(fallback)` in `src/lib/navigation.ts`, applied to the 16 screens where back *is* the
+   completion action. It was reproducible before the fix: submitting a rating saved it but left the
+   form on screen ("The action 'GO_BACK' was not handled by any navigator").
+3. **The business inbox had no members-only gate.** Every sibling screen (customers, bills, manage,
+   fleet, promote, workspace) turns a non-member away; `/inbox/[businessId]` and its thread screen
+   did not — the file even called itself a dev surface. No data actually leaked on Supabase (the
+   `chat_read` policy is participant-or-member), but it showed a stranger an inbox instead of a
+   closed door, and any backend that trusts the client would have served the rows. Both screens now
+   gate on chat recipients + owner/managers, the same rule the workspace tile uses.
+4. **Every new listing claimed "Open now", forever.** `create()` stamped `openNow: true`, which is
+   the legacy fallback badge for listings with no structured hours — and hours are an *optional*
+   wizard step. A shop that skipped it said "Open now" at 3 a.m. with "Opening hours: Not set" in
+   Manage beside it. Removed from the Supabase and mock create paths; queued for Path B as
+   `[SYNC-035]`. Existing rows keep whatever they have.
+
+Also fixed: `locationSummary()` fell back to the bare string `"Location"` when a listing had a map
+pin but no typed address — which is **every listing in the live directory today**, so the real
+production data reads "📍 Location" on both the card and the page. Now "Pinned on the map".
+
+Not fixed, judged not worth it before launch: the deals reel logs an `AbortError` from
+`play()` when a video page scrolls out of view (web-only, inside expo-video, harmless); the seeded
+demo listings have a legacy `hours` string but no structured `openingHours`, so Manage shows
+"Not set" for them (seed data only — the register wizard always writes both).
+
+`npx tsc --noEmit` and `npx expo export --platform web` both exit 0 after the changes.
+
+**Live database checked the same day.** `check_security_state.sql` came back green on all 27 rows.
+It had a blind spot, though: nothing in it looked at the **notifications INSERT policy** — the one
+piece of drift `0003` exists to undo, and the one that fails *silently* (a business is simply never
+told about an order). Checked by hand, it is correct — `with_check = (auth.uid() IS NOT NULL)` — and
+a 28th check now guards it, so a future green report actually means what it looks like it means.
+`CLAUDE.md`'s standing ⚠️ about that policy was stale and has been rewritten.
+
+---
 
 ## Third pass record — 15 Aug 2026
 

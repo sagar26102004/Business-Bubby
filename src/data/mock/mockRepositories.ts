@@ -450,7 +450,9 @@ class MockBusinessRepository implements BusinessRepository {
       callHandlerIds: employeeIds,
       ownerHandlesCalls: true,
       chatRecipientIds: employeeIds,
-      openNow: true,
+      // No `openNow`: it's the legacy fallback badge for listings without
+      // structured hours, so setting it here made a listing that skipped the
+      // optional hours step say "Open now" forever. See supabase/businesses.ts.
       // Rentals start available; the owner flips the status in Manage when a
       // tenant moves in, instead of deleting and re-listing. Not gated on the
       // listing type — a shop can rent things out on the side.

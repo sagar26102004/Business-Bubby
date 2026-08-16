@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Avatar, Button, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
@@ -17,6 +18,7 @@ export default function CallScreen() {
   const repos = useRepositories();
   const colors = useColors();
   const router = useRouter();
+  const dismiss = useDismiss(`/business/${businessId}`);
   const { currentUser, signInGuest } = useAuth();
   const [starting, setStarting] = useState(false);
   // Shown inline rather than through Alert.alert — Alert is a no-op on web, so
@@ -110,7 +112,7 @@ export default function CallScreen() {
           {startError}
         </Text>
       ) : null}
-      <Button title="Cancel" variant="ghost" onPress={() => router.back()} />
+      <Button title="Cancel" variant="ghost" onPress={dismiss} />
     </Screen>
   );
 }

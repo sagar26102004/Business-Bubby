@@ -20,6 +20,7 @@
 import { useState } from 'react';
 import { Alert, StyleSheet } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import type { Business, Employee } from '@/domain/types';
 import { canAccessService } from '@/domain/access';
 import { isSuperAdminUser } from '@/domain/superAdmin';
@@ -66,6 +67,7 @@ export function ManageGate({ title: rawTitle, intro: rawIntro, need, what, Form 
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
+  const dismiss = useDismiss(`/manage/${businessId}`);
   const { currentUser } = useAuth();
   const [saving, setSaving] = useState(false);
 
@@ -117,7 +119,7 @@ export function ManageGate({ title: rawTitle, intro: rawIntro, need, what, Form 
       // counts the owner just changed are right when they land back on it.
       invalidate(keyOf(manageKey(businessId)));
       Alert.alert('Saved', 'Your business page has been updated.');
-      router.back();
+      dismiss();
     } catch (err) {
       Alert.alert('Could not save', err instanceof Error ? err.message : 'Try again.');
     } finally {

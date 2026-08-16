@@ -102,6 +102,25 @@ begin
          else '❌ missing — run migrations/0004_super_admin.sql (the admin console needs it)'
          end::text;
 
+  -- Notifications are written as SIDE EFFECTS for OTHER people: a new order
+  -- pings the owner, a reply pings the customer. Path A writes them from the
+  -- ACTING user's session, so the INSERT policy has to allow any signed-in user
+  -- to insert for any recipient. Hardened to recipient-only, every cross-user
+  -- alert silently vanishes — no error, the write just affects nothing, and the
+  -- business simply never hears about the order. That is why 0003 exists at all
+  -- (the policy was once tightened by hand in the dashboard), and it is exactly
+  -- the kind of drift the rest of this file was written to catch — yet nothing
+  -- here looked at it until now. READ stays recipient-only either way.
+  return query select 'policy · notifications_insert is cross-user (0003)'::text,
+    case when not exists (select 1 from pg_policies
+                           where tablename = 'notifications' and policyname = 'notifications_insert')
+         then '❌ no INSERT policy — nobody gets alerts; run 0003'
+         when exists (select 1 from pg_policies
+                       where tablename = 'notifications' and policyname = 'notifications_insert'
+                         and with_check like '%recipient_id%')
+         then '❌ recipient-only — cross-user alerts are silently dropped; run migrations/0003_notifications_insert_permissive.sql'
+         else '✅ permissive (any signed-in user may notify)' end::text;
+
   -- ── Row-level security ───────────────────────────────────────────────────
   select string_agg(tablename, ', ') into missing
     from pg_tables where schemaname = 'public' and rowsecurity = false;

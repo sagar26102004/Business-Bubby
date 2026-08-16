@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import type { CustomerSummary } from '@/data/repositories';
 import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -44,6 +45,7 @@ export default function CustomersScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
+  const dismiss = useDismiss(`/workspace/${businessId}`);
   const { currentUser } = useAuth();
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -229,7 +231,7 @@ export default function CustomersScreen() {
       <Button
         title="← Back to workspace"
         variant="ghost"
-        onPress={() => router.back()}
+        onPress={dismiss}
         style={styles.backBtn}
       />
     </Screen>

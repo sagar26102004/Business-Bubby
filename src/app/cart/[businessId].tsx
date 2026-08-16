@@ -10,6 +10,7 @@
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useDismiss } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { OrderFulfillment } from '@/domain/types';
 import type { NewOrderLineInput } from '@/data/repositories';
@@ -26,6 +27,7 @@ export default function CartScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
+  const dismiss = useDismiss(`/menu/${businessId}`);
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { currentUser } = useAuth();
@@ -105,7 +107,7 @@ export default function CartScreen() {
         ]}
       >
         <Pressable
-          onPress={() => router.back()}
+          onPress={dismiss}
           hitSlop={12}
           accessibilityRole="button"
           accessibilityLabel="Go back"
