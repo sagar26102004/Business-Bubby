@@ -60,7 +60,7 @@ disclosure is unreadable.
 ### Shot 1 — Identify the app (0:00–0:10)
 Home screen of the phone, tap the One Place icon, app opens.
 
-> **Caption:** "One Place — a local business directory. Package name com.localo.app."
+> **Caption:** "One Place — a local business directory. Package name com.oneplace.app."
 
 *Why: ties the recording to the exact app under review.*
 

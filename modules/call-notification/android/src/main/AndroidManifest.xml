@@ -59,7 +59,7 @@
 
       FULLY QUALIFIED on purpose. A relative ".CallActionReceiver" is resolved
       against a package name at manifest-merge time, and this library manifest
-      is merged into an app whose namespace is com.localo.app — if it ever
+      is merged into an app whose namespace is com.oneplace.app — if it ever
       resolved against that, Decline would throw ClassNotFoundException at the
       moment someone pressed it, with nothing failing at build time to warn us.
     -->

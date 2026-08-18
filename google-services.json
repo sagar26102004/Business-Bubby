@@ -12,7 +12,12 @@
           "package_name": "com.localo.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "873239914538-n5i1ovrp1kbeussk3s2slbmtj5e7fe19.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBQl-u4QpMfSOZ-mDgqtROXMyxmkOfwKBE"
@@ -20,7 +25,41 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "873239914538-n5i1ovrp1kbeussk3s2slbmtj5e7fe19.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:873239914538:android:1a304b553b3e49cf9d7b53",
+        "android_client_info": {
+          "package_name": "com.oneplace.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "873239914538-n5i1ovrp1kbeussk3s2slbmtj5e7fe19.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQl-u4QpMfSOZ-mDgqtROXMyxmkOfwKBE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "873239914538-n5i1ovrp1kbeussk3s2slbmtj5e7fe19.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
