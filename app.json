@@ -74,7 +74,7 @@
       "typedRoutes": true
     },
     "ios": {
-      "bundleIdentifier": "com.oneplace.app",
+      "bundleIdentifier": "in.oneplace.app",
       "supportsTablet": true,
       "infoPlist": {
         "UIBackgroundModes": [
@@ -83,7 +83,7 @@
       }
     },
     "android": {
-      "package": "com.oneplace.app",
+      "package": "in.oneplace.app",
       "permissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.MODIFY_AUDIO_SETTINGS",
