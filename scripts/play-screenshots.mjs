@@ -14,7 +14,7 @@
  *
  * Usage:
  *   node scripts/play-screenshots.mjs
- *   OP_USER=aarav_mehta OP_PASS=localo123 node scripts/play-screenshots.mjs
+ *   OP_USER=<username> OP_PASS=<password> node scripts/play-screenshots.mjs   # optional
  *
  * Output: docs/play-store/screenshots/0X-*.png
  *
@@ -38,8 +38,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = join(ROOT, 'docs', 'play-store', 'screenshots');
 
 const BASE = process.env.OP_BASE_URL ?? 'http://localhost:8081';
-const USER = process.env.OP_USER ?? 'aarav_mehta';
-const PASS = process.env.OP_PASS ?? 'localo123';
+const USER = process.env.OP_USER ?? '';   // guest by default — see the sign-in note below
+const PASS = process.env.OP_PASS ?? '';
 const EDGE =
   process.env.EDGE_PATH ??
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
@@ -99,19 +99,25 @@ async function main() {
   await page.goto(`${BASE}/`, { waitUntil: 'load', timeout: 120000 });
   await wait(8000);
 
-  // --- sign in ---------------------------------------------------------
-  // Orders, subscriptions and chat are all behind an account.
-  console.log(`signing in as ${USER}`);
-  await tap('Account');
-  await tap('Sign in');
-  await page.getByPlaceholder('Your username').fill(USER).catch(() => console.log('  · username field missing'));
-  await page.getByPlaceholder('••••••••').first().fill(PASS).catch(() => console.log('  · password field missing'));
-  await tap('Sign in', { which: 'last' });
-  await wait(5000);
+  // --- sign in (OPTIONAL) ------------------------------------------
+  // The ten seeded test accounts were deleted in the production cleanup
+  // (production-setup.md §2.4), so there is no default login any more. Every
+  // shot below is reachable as a GUEST, which is also the more honest capture:
+  // it is exactly what a reviewer sees on first launch. Set OP_USER/OP_PASS
+  // only if you have an account whose Orders/Chat tabs are worth shooting.
+  if (USER) {
+    console.log(`signing in as ${USER}`);
+    await tap('Account');
+    await tap('Sign in');
+    await page.getByPlaceholder('Your username').fill(USER).catch(() => console.log('  · username field missing'));
+    await page.getByPlaceholder('••••••••').first().fill(PASS).catch(() => console.log('  · password field missing'));
+    await tap('Sign in', { which: 'last' });
+    await wait(5000);
+    await tap('Home');
+    await wait(3000);
+  }
 
   // --- 1. home ---------------------------------------------------------
-  await tap('Home');
-  await wait(3000);
   await shoot('01-home');
 
   // --- 2. a business page ----------------------------------------------
@@ -125,19 +131,36 @@ async function main() {
   await tap('Full menu ›');
   await shoot('03-menu');
 
-  // --- 4. stalls --------------------------------------------------------
-  // Exactly two screens were pushed (business, then menu). Going back a third
-  // time leaves the app and screenshots a blank page, which is easy to miss
-  // because the file is still written.
-  await back();
-  await back();
-  // The Explore/Stalls/My Business segmented control resists getByText — the
-  // pill intercepts the pointer — so it is driven by coordinate.
-  await page.mouse.click(270, 36); // Stalls
-  await wait(4000);
-  await shoot('04-stalls');
+  // --- 4. a real order ---------------------------------------------------
+  // The gap README.md documented: proof that transactions happen. Built by
+  // tapping ADD on real dishes, which is PURELY LOCAL — CartContext is a
+  // useState map with no repository call in it, and we stop at the review
+  // screen. Nothing is written and no business is notified, so this does NOT
+  // violate the README's "don't place test orders for a screenshot" rule.
+  //
+  // ⚠️ The button reads "ADD ＋" with a FULLWIDTH PLUS (U+FF0B). An exact
+  // match on "ADD +" finds nothing and the whole step silently no-ops.
+  const adds = page.getByText(/^ADD/).filter({ visible: true });
+  const addCount = await adds.count();
+  console.log(`  · ${addCount} dishes addable`);
+  for (const i of [0, 2, 4]) {
+    if (i < addCount) {
+      await adds.nth(i).click({ timeout: 6000 }).catch((e) => console.log(`  · add ${i}: ${e.message.split(String.fromCharCode(10))[0]}`));
+      await wait(1200);
+    }
+  }
+  await wait(1500);
+  await tap('Place order ›');
+  // Pick a fulfilment mode so the shot shows a complete order rather than the
+  // "Choose dine-in or takeaway" validation hint.
+  await tap('Dine-in');
+  await shoot('04-order');
 
   // --- 5. the map -------------------------------------------------------
+  // Three screens are now stacked (business, menu, order review).
+  await back();
+  await back();
+  await back();
   await page.mouse.click(103, 36); // Explore
   await wait(4000);
   // The map button is the icon right of the location row. It has no text, and
@@ -147,9 +170,18 @@ async function main() {
   await wait(9000); // Leaflet tiles come over the network
   await shoot('05-map');
 
-  // Five shots, which clears Play's minimum of two. Three more are worth adding
-  // once the data supports them — see the "not captured yet" note in
-  // docs/play-store/screenshots/README.md before extending this script.
+  // --- 6. stalls ---------------------------------------------------------
+  // ⚠️ CAPTURED BUT NOT UPLOAD-READY. See README.md — the live stalls are two
+  // test rows ("Bottel", "iPhone 90" at ₹5 marked SOLD, 643 km away) against a
+  // mostly empty grid. Shot anyway so the set is complete the moment the data
+  // is real; check it by eye before putting it in the Console.
+  await back();
+  await wait(2000);
+  // The Explore/Stalls/My Business segmented control resists getByText — the
+  // pill intercepts the pointer — so it is driven by coordinate.
+  await page.mouse.click(270, 36); // Stalls
+  await wait(4000);
+  await shoot('06-stalls');
 
   await browser.close();
   console.log(`\ndone → ${OUT}`);

@@ -11,44 +11,66 @@ npx expo start --web          # in one terminal
 node scripts/play-screenshots.mjs
 ```
 
-| # | File | Screen |
-|---|---|---|
-| 1 | `01-home.png` | Home — category strip, live deal, nearby listings with real distances |
-| 2 | `02-business.png` | A business page — hours, distance, offer, menu with prices |
-| 3 | `03-menu.png` | The full menu — priced dishes with veg/non-veg marks |
-| 4 | `04-stalls.png` | Stalls — the picture-first grid of what people are selling |
-| 5 | `05-map.png` | The real street map with businesses plotted around you |
+Captured as a **guest**, which is what a Play reviewer sees on first launch. The
+ten seeded test accounts were deleted in the production cleanup, so there is no
+default login any more; `OP_USER`/`OP_PASS` still work if you have an account
+whose Orders/Chat tabs are worth shooting.
 
-Five clears Play's minimum of two. Upload them in this order — the first two are
-what appear in search results.
+| # | File | Screen | Upload? |
+|---|---|---|---|
+| 1 | `01-home.png` | Home — category strip, live deal, nearby listings with real distances | ⚠️ see below |
+| 2 | `02-business.png` | Cafe Corner — tagline, hours, distance, ₹99 combo offer, 53-dish menu | ✅ |
+| 3 | `03-menu.png` | The full menu — priced dishes with veg/non-veg marks | ✅ |
+| 4 | `04-order.png` | An itemised order — quantities, dine-in/takeaway, ₹1,060 total | ✅ |
+| 5 | `05-map.png` | Real Indore streets with businesses plotted and distance rings | ✅ |
+| 6 | `06-stalls.png` | Stalls — the picture-first grid of what people are selling | ❌ **do not upload yet** |
 
----
+**Upload 02, 03, 04, 05 in that order.** That is four, comfortably past Play's
+minimum of two, and every one of them is clean. The first two appear in search
+results, so `02-business` leading is deliberate — it is the single best frame in
+the app.
 
-## ⚠️ Recapture these before you upload
+## How `04-order` is captured without writing anything
+
+It is the "proof that transactions happen" shot the previous version of this
+file said was missing. It is built by tapping ADD on real dishes and stopping at
+the review screen. `CartContext` is a plain `useState` map with **no repository
+call in it**, so nothing reaches the database, no order row is created and no
+business is notified. The README rule against placing test orders for a
+screenshot still stands — this simply never places one.
+
+⚠️ The ADD button reads `ADD ＋` with a **fullwidth plus** (U+FF0B). An exact
+match on `"ADD +"` finds nothing and the step silently no-ops, leaving you with
+a screenshot of an empty order.
+
+## ⚠️ What is still blocked on data, not on tooling
 
 The screenshots show **whatever is in the live database at capture time**, and
-right now that includes generated test rows (`Vehicles Stall #633`, `Abc's
-Stall`, an item called `Bottel`). A reviewer reads that as an unfinished app.
+four of the eight live listings are unpresentable. This is the only thing
+standing between the current set and a full six:
 
-So: do the data cleanup in `../production-setup.md` §2.3–2.4 first, then re-run
-the script. Nothing else about the listing has to change.
+| Listing | Problem |
+|---|---|
+| `Vehicles Stall #633` | Generated name, and its address is **"Riverton, CA"** — a US city in an Indore directory |
+| `Fth` | Junk name, appears on Home and in the Food category |
+| `Abc's Stall` | Junk name, sits **643 km** away so it breaks the "near you" premise |
+| `Ananya Iyer's Stall` | Its one product is `Bottel` (typo), ₹100, no photo |
 
-## Not captured yet — three worth adding later
+`06-stalls` is unusable for exactly this reason: it is two test products
+(`Bottel`, and `iPhone 90` at ₹5 marked SOLD) against a mostly empty grid.
 
-`../store-listing.md` asks for 6–8, and names two screens this set is missing.
-Both were attempted and both came out as **empty states**, which is worse than
-having fewer screenshots:
+`01-home` is borderline — it is fine down to the fold, but `Vehicles Stall #633`
+enters the frame at the bottom edge, and the hero deal card has **no photo**, so
+it renders as a grey block.
 
-- **An order or a bill** — proof that transactions really happen in the app.
-  The account used for capture had no orders, so the screen read "No orders
-  yet".
-- **A chat thread** — same problem: "No chats yet".
+Fix the names and add a cover photo or two, then re-run the script; nothing
+about the listing copy has to change. Per decision 4 in `../RELEASE-STATUS.md`
+this is tolerable for a **testing track** but is a **production-promotion
+blocker**.
 
-Neither is a scripting gap. They need an account that has actually transacted.
-Once one exists, set `OP_USER` / `OP_PASS` to it and add two steps to the script
-(tap the Orders tab, tap the Chat tab). A third candidate is the in-app voice
-call, which nothing else in this category has — but it cannot be screenshotted
-without placing a real call to a real business.
+## Not captured — needs an account that has transacted
 
-Do **not** solve this by placing test orders against live listings just for the
-screenshot; that writes rows and fires notifications at real businesses.
+- **A chat thread** — came out as "No chats yet" on a guest and on the accounts
+  that existed at capture time.
+- **The in-app voice call**, which nothing else in this category has. It cannot
+  be screenshotted without placing a real call to a real business.
