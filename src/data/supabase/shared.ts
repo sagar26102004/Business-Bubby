@@ -382,6 +382,15 @@ export function niceAuthError(message: string): string {
   // name is unavailable, or nobody can pick one.
   if (m.includes('already registered') || m.includes('already been registered'))
     return 'That username is taken. Try another one.';
+  // Google. Both of these come back as raw GoTrue strings that read like a
+  // dead end but are really one dashboard switch away — say which switch.
+  // The provider toggle: "Unsupported provider: provider is not enabled".
+  if (m.includes('provider is not enabled') || m.includes('unsupported provider'))
+    return 'Google sign-in is not switched on for this project. Enable Supabase → Authentication → Sign In / Providers → Google and paste a Google Cloud OAuth client id and secret.';
+  // The allow-list: GoTrue refuses a redirect it was never told about, which
+  // is the single most common reason a working OAuth client still bounces.
+  if (m.includes('requested path is invalid') || m.includes('invalid redirect'))
+    return 'This app’s sign-in address is not allow-listed. Add it under Supabase → Authentication → URL Configuration → Redirect URLs.';
   if (m.includes('password')) return message;
   if (m.includes('email not confirmed'))
     return 'Email confirmation is on for this project — turn it off in Supabase (Auth → Providers → Email) for phone sign-up to work.';

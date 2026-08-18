@@ -299,6 +299,7 @@ export default function RootLayout() {
           <Stack.Screen name="admin/catalog" options={{ title: 'Tags & offerings' }} />
           <Stack.Screen name="ad-review" options={{ title: 'Ad review' }} />
           <Stack.Screen name="sign-in" options={{ presentation: 'modal', title: 'Sign in' }} />
+          <Stack.Screen name="auth-callback" options={{ title: 'Signing in' }} />
         </Stack>
         {/* Keeps the splash up until the session is restored. */}
         <SplashGate />

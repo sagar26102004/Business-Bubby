@@ -9,16 +9,31 @@
 import { Router } from 'express';
 import { route } from '@/http/handler';
 import { requireAuth, userId } from '@/http/context';
+import { badRequest } from '@/http/errors';
 import { pushService } from '@/services/push';
 
 export const pushRouter = Router();
 
 pushRouter.post('/tokens', requireAuth, route(async (req) => {
   const { token, platform } = (req.body ?? {}) as { token?: string; platform?: string };
-  if (!token) return { ok: false };
+  // A REAL error, not a quiet `{ ok: false }` 200. The registrar reports what
+  // the server says; answering 200 to a registration that did not happen is how
+  // a phone ends up permanently unreachable while the call-alerts check shows a
+  // cheerful tick.
+  if (!token) throw badRequest('A push token is required.');
   await pushService.register(userId(req), token, platform);
   return { ok: true };
 }));
+
+/**
+ * Will this account be rung on this handset? A bare boolean.
+ *
+ * Answers for the CALLING user's own token only — a bare token lookup would be
+ * an oracle for whether someone else's device is registered.
+ */
+pushRouter.get('/tokens/:token/registered', requireAuth, route(async (req) =>
+  pushService.isRegistered(userId(req), req.params.token),
+));
 
 pushRouter.delete('/tokens/:token', requireAuth, route(async (req) => {
   await pushService.unregister(userId(req), req.params.token);

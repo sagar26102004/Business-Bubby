@@ -91,7 +91,10 @@ severity — 1 and 2 have waiting built into them, so start them first.
      Sign In / Providers: Anonymous sign-ins **ON** (off = guest voice calling breaks), Confirm
      email **OFF** (synthetic `<username>@localo.app` addresses have no inbox, so sign-in dies),
      leaked-password protection ON, Google provider configured. Plus `localo://auth-callback` in
-     URL Configuration or Google sign-in returns nowhere on a device.
+     URL Configuration or Google sign-in returns nowhere on a device. The Google half of this —
+     the Cloud OAuth client, the provider toggle and the redirect list — is now written out step
+     by step in `docs/google-sign-in.md`; it is the only part that also needs a *second* console
+     (Google Cloud), so do it from there rather than from memory.
    - **§2.7 advisors** — Dashboard → Advisors → Security. The one check that catches a table added
      without a policy, which the SQL script cannot know to look for.
 5. ✅ **Migration `0020_ad_view_bands.sql` is applied** (confirmed 15 Aug). It is idempotent — two

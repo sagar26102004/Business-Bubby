@@ -18,6 +18,7 @@ import { membershipsRouter } from './memberships';
 import { productThreadsRouter } from './productThreads';
 import { logbookRouter } from './logbook';
 import { pushRouter } from './push';
+import { adsRouter } from './ads';
 
 export const api = Router();
 
@@ -39,3 +40,4 @@ api.use('/memberships', membershipsRouter);
 api.use('/product-threads', productThreadsRouter);
 api.use('/logbook', logbookRouter);
 api.use('/push', pushRouter);
+api.use('/ads', adsRouter);

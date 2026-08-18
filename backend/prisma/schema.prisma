@@ -19,8 +19,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// profiles — one row per auth user (data = domain User). id FKs auth.users in
-// the DB; Prisma doesn't model the auth schema, so the relation is omitted here.
+// profiles — one row per auth user (data = domain User).
+//
+// ⚠️ `id` NO LONGER references auth.users. Migration 0019 DROPPED that foreign
+// key, and dropping it is load-bearing: it was `on delete cascade`, and
+// `businesses.owner_id → profiles` is too, so deleting an auth user used to
+// detonate into every business that person owned and every order, bill, review
+// and employment record hanging off it. With the FK gone the profile row
+// survives account deletion as a TOMBSTONE (name "Deleted user", `deletedAt`
+// set), no cascade fires, and every foreign key still resolves. Prisma never
+// modelled the auth schema, so nothing here changed with it — but do not
+// "restore" the relation.
 model Profile {
   id        String   @id @db.Uuid
   data      Json
@@ -289,4 +298,24 @@ model PushToken {
 
   @@index([userId])
   @@map("push_tokens")
+}
+
+// ad_campaigns — the paid ad slot (migration 0014). `data` is the whole
+// AdCampaign; `business_id` and `status` are columns because Path A's RLS keys
+// on them (everyone may read RUNNING ads; only the business behind one sees its
+// pending and rejected requests).
+//
+// ⚠️ There is no 'expired' status. A run ending is a fact about the clock, not a
+// decision — `isCampaignRunning` derives it from data.endsAt/viewsNear on read,
+// so nothing has to be awake to sweep it.
+model AdCampaign {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  businessId String   @map("business_id") @db.Uuid
+  status     String   @default("pending")
+  data       Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([businessId])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("ad_campaigns")
 }

@@ -18,6 +18,26 @@ callsRouter.post('/start', requireAuth, route(async (req) => {
   return callService.start(req.body.businessId, req.body.customer);
 }));
 
+/**
+ * Decline from a phone whose app is CLOSED — the notification's Decline pill.
+ *
+ * ⚠️ DELIBERATELY UNAUTHENTICATED (no `requireAuth`). A killed app has nothing
+ * to sign with: there is no session, and whatever access token it cached may
+ * have expired hours ago. The device's Expo push token IS the credential — it
+ * is the address the call was rung on — and the service resolves it to a user
+ * before checking that user is a still-ringing participant on this call. It
+ * must NOT fall through to the `/:id/decline` guard above, which expects an
+ * authenticated caller.
+ *
+ * The call id travels in the BODY rather than the path because the native side
+ * stores exactly one endpoint URL (`setDeclineEndpoint`) and posts
+ * `{ callId, pushToken }` to it, mirroring the `call-decline` edge function.
+ */
+callsRouter.post('/decline-by-device', route(async (req) => {
+  const { callId, pushToken } = (req.body ?? {}) as { callId?: string; pushToken?: string };
+  return callService.declineByDevice(callId ?? '', pushToken ?? '');
+}));
+
 // Workspace call log. Business-scoped, so members only — this mirrors the
 // member branch of the `calls_read` RLS policy (the customer branch is
 // irrelevant for a whole-business listing).

@@ -6,7 +6,7 @@ import { newUuid } from '@/lib/ids';
 import { asData, rowsData, toJson, uuidOrNull } from '@/lib/data';
 import { normalizeRole } from '@/lib/roles';
 import { haversineKm } from '@/lib/geo';
-import { notFound } from '@/http/errors';
+import { forbidden, notFound } from '@/http/errors';
 import { captureBusinessOfferings } from './catalog';
 
 /** Stamp stable ids onto products that don't have one yet. */
@@ -136,7 +136,13 @@ export const businessService = {
       callHandlerIds: employeeIds,
       ownerHandlesCalls: true,
       chatRecipientIds: employeeIds,
-      openNow: true,
+      // ⚠️ `openNow` is deliberately NOT stamped. It is the LEGACY fallback the
+      // open/closed badge uses when a listing has no structured `openingHours`
+      // (`openState()` in src/domain/hours.ts) — and hours are an OPTIONAL step
+      // in the register wizard, so writing `true` here marked every listing that
+      // skipped it permanently "Open now", 3 a.m. included, with Manage showing
+      // "Opening hours: Not set" right beside it. Left undefined, the page shows
+      // no open/closed chip until the owner sets real hours.
       rentalBasis: input.rentalBasis,
       rentals: input.rentals,
       rentalStatus: input.rentalBasis ? 'available' : undefined,
@@ -218,6 +224,31 @@ export const businessService = {
       await captureBusinessOfferings(saved);
     }
     return saved;
+  },
+
+  /**
+   * The OWNER takes a listing down for good.
+   *
+   * ⚠️ THE OWNER CHECK IS THE WHOLE GUARD. Prisma connects privileged and
+   * bypasses RLS, so unlike Path A — where `businesses_delete` (migration 0002)
+   * would refuse a stranger's delete on its own — nothing else stands between a
+   * staff member and someone else's shop. Do NOT weaken this to
+   * `isBusinessMember`, and do NOT add a super-admin bypass: an admin who needs
+   * a stranger's listing gone uses `reassignOwner` first, deliberately, so the
+   * deletion is always someone deleting their own thing.
+   *
+   * Everything scoped to the business (team, orders, bills, chats, calls,
+   * memberships, reviews, product threads, vehicles, ad campaigns) goes with it
+   * through the schema's `on delete cascade` — the mock's hand-written
+   * `dropByBusiness` mirrors those same foreign keys.
+   */
+  async remove(id: string, actorId: string): Promise<void> {
+    const business = await findBusiness(id);
+    if (!business) throw notFound(`Business ${id} not found`);
+    if (business.ownerId !== actorId) {
+      throw forbidden('Only the owner can take a listing down.');
+    }
+    await prisma.business.delete({ where: { id } });
   },
 
   async reassignOwner(id: string, newOwnerId: string): Promise<Business> {

@@ -78,3 +78,14 @@ businessesRouter.delete('/:id/products/:productId', requireAuth, route(async (re
   await businessService.removeProduct(req.params.id, req.params.productId, userId(req));
   return { ok: true };
 }));
+
+/**
+ * Take a listing down for good. OWNER ONLY — the actor is the JWT's user, never
+ * a body field, and the service refuses anyone else (403). Postgres cascades
+ * the team, orders, bills, chats, calls, memberships, reviews, threads,
+ * vehicles and ad campaigns behind it.
+ */
+businessesRouter.delete('/:id', requireAuth, route(async (req, res) => {
+  await businessService.remove(req.params.id, userId(req));
+  res.status(204).end();
+}));

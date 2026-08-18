@@ -26,6 +26,8 @@ import {
   setDeclineEndpoint,
 } from '../../../modules/call-notification';
 import { SUPABASE_URL } from '@/lib/supabase';
+import { API_ROOT } from '@/data/api/client';
+import { selectedBackend } from '@/data/backend';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import type { Repositories } from '@/data/repositories';
 import {
@@ -40,6 +42,22 @@ configureNotificationHandler();
 
 /** Remembers that we've already offered this, so it's an ask and not a nag. */
 const CALL_POPUP_PROMPT_KEY = 'localo.callPopupPrompted';
+
+/**
+ * The absolute URL the notification's Decline pill posts `{ callId, pushToken }`
+ * to when the app is closed — one per backend, because that button runs in
+ * Kotlin with no session and can only be handed a plain address.
+ *
+ * Null on the mock (nothing to tell), which leaves Decline doing what it always
+ * did: silence this phone and let the call ring out.
+ */
+function declineEndpointUrl(): string | null {
+  if (selectedBackend() === 'api') return `${API_ROOT}/calls/decline-by-device`;
+  if (selectedBackend() === 'supabase' && SUPABASE_URL) {
+    return `${SUPABASE_URL}/functions/v1/call-decline`;
+  }
+  return null;
+}
 
 /**
  * Offer to enable the full-screen call screen — ONCE per install.
@@ -146,9 +164,12 @@ export function PushRegistrar() {
         // decline endpoint is handed over AFTER registration succeeds — storing
         // it first would leave a phone that failed to register able to post
         // declines the function can only reject.
-        if (SUPABASE_URL) {
-          await setDeclineEndpoint(`${SUPABASE_URL}/functions/v1/call-decline`, token);
-        }
+        // …and it must point at the backend actually in use: Path B fires the
+        // decline inside Express, Path A at the `call-decline` edge function.
+        // The native side stores ONE url, so getting this wrong means Decline
+        // silently goes back to ringing out.
+        const declineUrl = declineEndpointUrl();
+        if (declineUrl) await setDeclineEndpoint(declineUrl, token);
         recordRegistration(null);
       } catch (err) {
         // Table missing, offline, RLS refusing the write, Path B routes not

@@ -51,8 +51,11 @@
 #
 # Play rejects a bundle whose versionCode it has already seen, and unlike
 # `eas build` (which tracks it remotely via appVersionSource) a Gradle build
-# has no memory. So the number is an input below and YOU increment it. EAS has
-# already used 1 and 2, so start at 3.
+# has no memory. So the number is an input below and YOU increment it.
+#
+# Used so far: 1 and 2 by `eas build`, 3 by the 16 Aug 2026 Actions run.
+# The default below is the next free number — BUMP IT after every run you
+# actually upload, so a later click cannot silently reuse one.
 #
 # HOW TO RUN IT
 # GitHub → Actions → "Android AAB (Play)" → Run workflow. ~25-40 minutes cold.
@@ -64,9 +67,9 @@ on:
   workflow_dispatch:
     inputs:
       versionCode:
-        description: 'versionCode — must be higher than every build already uploaded to Play (EAS used 1 and 2)'
+        description: 'versionCode — must be higher than every build already uploaded to Play (EAS used 1 and 2; Actions build of 16 Aug 2026 used 3)'
         required: true
-        default: '3'
+        default: '4'
         type: string
       architectures:
         description: 'CPU architectures to compile'

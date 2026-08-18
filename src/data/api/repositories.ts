@@ -4,6 +4,7 @@
  * interfaces specify, so these pass results straight through.
  */
 import type {
+  AdCampaign,
   AppNotification,
   Bill,
   Booking,
@@ -26,6 +27,8 @@ import type {
 } from '@/domain/types';
 import type {
   AcceptEnrollInput,
+  AdPlacement,
+  AdRepository,
   BillRepository,
   BizChatRepository,
   BizThreadSummary,
@@ -57,10 +60,12 @@ import type {
   NewProductMessageInput,
   NewReviewInput,
   NewTrackedItemInput,
+  NewAdCampaignInput,
   NewUserInput,
   NewVehicleInput,
   NotificationRepository,
   OrderRepository,
+  PlacementOptions,
   ProductThreadRepository,
   ReportPaymentInput,
   ReviewEligibility,
@@ -381,10 +386,9 @@ export function createApiProductThreads(): ProductThreadRepository {
 }
 
 /**
- * Device push tokens (Path B). The Express routes are queued in
- * backend/SYNC_QUEUE.md — until they land these calls 404, which is why the
- * CALLER swallows registration failures: a device that can't register should
- * still be able to use the app, it just won't ring while closed.
+ * Device push tokens (Path B). The CALLER swallows registration failures: a
+ * device that can't register should still be able to use the app, it just won't
+ * ring while closed.
  */
 export function createApiPush(): PushRepository {
   return {
@@ -400,5 +404,44 @@ export function createApiLogbook(): LogbookRepository {
   return {
     listForBusiness: (businessId) => http.get<LogEntry[]>(`/logbook/business/${seg(businessId)}`),
     addManual: (input: NewLogEntryInput) => http.post<LogEntry>('/logbook', input),
+  };
+}
+
+/**
+ * Ad campaigns (Path B). The server owns the reach rule — it runs the same
+ * `buildPlacements` the mock and Path A do — so these are pass-throughs.
+ */
+export function createApiAds(): AdRepository {
+  return {
+    listPlacements: (near, options?: PlacementOptions) =>
+      http.get<AdPlacement[]>('/ads/placements', {
+        lat: near?.latitude,
+        lng: near?.longitude,
+        radiusKm: options?.radiusKm,
+      }),
+    listForBusiness: (businessId) => http.get<AdCampaign[]>(`/ads/business/${seg(businessId)}`),
+    listAll: () => http.get<AdCampaign[]>('/ads'),
+    request: (input: NewAdCampaignInput) => http.post<AdCampaign>('/ads', input),
+    approve: (id, note) => http.post<AdCampaign>(`/ads/${seg(id)}/approve`, { note }),
+    reject: (id, note) => http.post<AdCampaign>(`/ads/${seg(id)}/reject`, { note }),
+    stop: (id) => http.post<AdCampaign>(`/ads/${seg(id)}/stop`),
+    setPaid: (id, paid) => http.post<AdCampaign>(`/ads/${seg(id)}/paid`, { paid }),
+    // Counters are fired from a carousel the customer is scrolling past, so they
+    // swallow EVERYTHING — an unreachable server must never surface as an error
+    // on a screen about something else.
+    recordImpression: async (id, distanceKm) => {
+      try {
+        await http.post<void>(`/ads/${seg(id)}/events`, { kind: 'impression', distanceKm });
+      } catch {
+        /* engagement, not billing */
+      }
+    },
+    recordTap: async (id) => {
+      try {
+        await http.post<void>(`/ads/${seg(id)}/events`, { kind: 'tap' });
+      } catch {
+        /* engagement, not billing */
+      }
+    },
   };
 }

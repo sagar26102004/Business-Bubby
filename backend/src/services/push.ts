@@ -34,6 +34,28 @@ export const pushService = {
   },
 
   /**
+   * Will the SERVER ring this phone for this account?
+   *
+   * ⚠️ Scoped to the caller's own rows on purpose. Holding a push token must
+   * never answer whether SOMEONE ELSE's device is registered, or this becomes an
+   * oracle for exactly the enumeration the table's RLS exists to prevent.
+   *
+   * It exists because the call-alerts check used to report "registered" purely
+   * because `getPushToken()` returned a token — a DEVICE-side fact. Registration
+   * is a separate server-side write that the registrar swallows on failure and
+   * skips for guests, so a phone could look healthy while the ring reported "no
+   * registered devices", with both sides telling the truth.
+   */
+  async isRegistered(userId: string, token: string): Promise<boolean> {
+    if (!token) return false;
+    const row = await prisma.pushToken.findFirst({
+      where: { token, userId },
+      select: { token: true },
+    });
+    return Boolean(row);
+  },
+
+  /**
    * Detach a token — on sign-out. Scoped to the caller's own rows, so a stale
    * token that now belongs to someone else is left alone rather than silently
    * unsubscribing them.
@@ -41,6 +63,33 @@ export const pushService = {
   async unregister(userId: string, token: string): Promise<void> {
     if (!token) return;
     await prisma.pushToken.deleteMany({ where: { token, userId } });
+  },
+
+  /**
+   * Forget tokens the push service told us are dead (`DeviceNotRegistered` —
+   * the install behind them is gone). Internal use only, and deliberately NOT
+   * called for any other push failure: `InvalidCredentials` is a project
+   * misconfiguration, and pruning on it would delete perfectly good tokens.
+   */
+  async dropTokens(tokens: string[]): Promise<void> {
+    if (tokens.length === 0) return;
+    await prisma.pushToken.deleteMany({ where: { token: { in: tokens } } });
+  },
+
+  /**
+   * Who a push token belongs to, or null if it is not registered.
+   *
+   * ⚠️ Internal use only, and the ONE place a raw token is allowed to identify
+   * somebody. It exists for the decline-from-a-closed-app path, where there is
+   * no JWT to verify — see `callService.declineByDevice`.
+   */
+  async userForToken(token: string): Promise<string | null> {
+    if (!token) return null;
+    const row = await prisma.pushToken.findUnique({
+      where: { token },
+      select: { userId: true },
+    });
+    return row?.userId ?? null;
   },
 
   /** The Expo push tokens registered by these users. Internal use only. */

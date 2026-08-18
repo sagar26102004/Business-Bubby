@@ -22,6 +22,18 @@ import { notFound } from '@/http/errors';
 /** Fields that live in `profiles_private` and must never ride the public card. */
 const PRIVATE_KEYS = ['phone', 'email', 'mutedNotifications'] as const;
 
+/**
+ * Is this a LOGIN alias rather than a real address? Mirror of
+ * `isSyntheticEmail` in src/data/supabase/shared.ts.
+ *
+ * Both identity schemes derive their credential address on the shared
+ * `@localo.app` domain (`<handle>@…` for usernames, `<digits>@…` for
+ * phone-first accounts). Nothing can be sent to one, so it must never be filed
+ * as somebody's contact email.
+ */
+const isSyntheticEmail = (email: string | undefined): boolean =>
+  !!email && email.trim().toLowerCase().endsWith('@localo.app');
+
 /** Strip the private half from a profile document. */
 function publicCard(user: User): User {
   const card = { ...user };
@@ -110,7 +122,13 @@ export const userService = {
     const currentPrivate = await privateHalf(id);
     const privatePatch: Partial<User> = {};
     if (patch.phone !== undefined) privatePatch.phone = patch.phone;
-    if (patch.email !== undefined) privatePatch.email = patch.email;
+    // A `<handle>@localo.app` / `<digits>@localo.app` address is the account's
+    // LOGIN alias, not a way to reach anybody — storing one as a contact email
+    // would put an inbox-less address in front of a human. Mirrors what
+    // `handle_new_user` (migration 0016/0018) does on the way in.
+    if (patch.email !== undefined) {
+      privatePatch.email = isSyntheticEmail(patch.email) ? undefined : patch.email;
+    }
     if (patch.mutedNotifications !== undefined) {
       privatePatch.mutedNotifications = patch.mutedNotifications;
     }

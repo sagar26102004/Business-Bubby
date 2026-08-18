@@ -24,7 +24,8 @@ export type NotificationCategory =
   | 'billing'
   | 'members'
   | 'reviews'
-  | 'stall';
+  | 'stall'
+  | 'ads';
 
 /** Which family an alert belongs to. Keep in lockstep with the app's copy. */
 export function categoryOfKind(kind: AppNotification['kind']): NotificationCategory {
@@ -51,6 +52,8 @@ export function categoryOfKind(kind: AppNotification['kind']): NotificationCateg
     case 'enroll_requested':
     case 'enroll_update':
       return 'members';
+    case 'ad_update':
+      return 'ads';
     default:
       return 'chats';
   }

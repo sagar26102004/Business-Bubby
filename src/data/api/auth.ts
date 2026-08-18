@@ -21,6 +21,7 @@ import {
   TEST_PASSWORD,
   assertDevTool,
   fallbackUser,
+  looksLikeEmail,
   niceAuthError,
   phoneToEmail,
   usernameToEmail,
@@ -70,23 +71,73 @@ export function createApiAuth(): AuthRepository {
       return fetchProfileViaApi(session.user.id, session.user.user_metadata?.name);
     },
 
-    async signIn(phoneOrEmail: string, password?: string): Promise<User> {
-      const { data, error } = await sb.auth.signInWithPassword({
-        email: phoneToEmail(phoneOrEmail),
-        password: password ?? '',
-      });
+    /**
+     * Sign in with a USERNAME — or, for accounts that predate them, an email
+     * address or a phone number. Identical resolution to Path A, because it is
+     * the same GoTrue on the other side:
+     *
+     *  - `sagar`        → `sagar@localo.app`      (the normal case)
+     *  - `9812340001`   → `9812340001@localo.app` (the seeded ten, any
+     *                     phone-first account)
+     *  - `me@gmail.com` → itself                  (real-email and Google accounts)
+     *
+     * `assertUsername` forbids a leading digit, so the first two can never
+     * collide on the shared `@localo.app` domain. Only one case needs the
+     * database: a phone number belonging to an account whose credential address
+     * is a real email, which falls to the `resolve_login_email` RPC (migration
+     * 0016) as a SECOND attempt — and a missing or broken RPC must degrade to
+     * the first attempt's error, never to a hard failure.
+     */
+    async signIn(usernameEmailOrPhone: string, password?: string): Promise<User> {
+      const typed = usernameEmailOrPhone.trim();
+      const pw = password ?? '';
+      const attempt = (email: string) => sb.auth.signInWithPassword({ email, password: pw });
+
+      // `phoneToEmail` passes an `@` straight through and otherwise strips to
+      // digits, so a username needs its own derivation.
+      const isDigits = !looksLikeEmail(typed) && /^\d[\d\s+()-]*$/.test(typed);
+      const firstAddress = looksLikeEmail(typed)
+        ? typed.toLowerCase()
+        : isDigits
+          ? phoneToEmail(typed)
+          : usernameToEmail(typed);
+
+      let { data, error } = await attempt(firstAddress);
+
+      if (error && isDigits) {
+        // Returns a bare text scalar, so no `.single()`.
+        const resolved = await sb
+          .rpc('resolve_login_email', { p_phone: typed, p_password: pw })
+          .then(
+            (r) => (typeof r.data === 'string' && r.data ? r.data : null),
+            // A project that has not run 0016 has no such function: a missing
+            // second chance, not a failed sign-in. Keep the first error.
+            () => null,
+          );
+        if (resolved) ({ data, error } = await attempt(resolved));
+      }
+
       if (error) throw new Error(niceAuthError(error.message));
-      return fetchProfileViaApi(data.user.id, data.user.user_metadata?.name);
+      // Narrowing, not paranoia: `data.user` is nullable on the failure branch
+      // of the union, and the reassignment above widens it.
+      const signedIn = data.user;
+      if (!signedIn) throw new Error('Sign-in did not return an account. Please try again.');
+      return fetchProfileViaApi(signedIn.id, signedIn.user_metadata?.name);
     },
 
     /**
-     * ⚠️ MINIMALLY UPDATED FOR THE NEW IDENTITY MODEL — see [SYNC-025].
+     * Create an account from a username and a password.
      *
-     * Path B is synced in its own pass (CLAUDE.md → STANDING RULE), so this
-     * only does what it must to keep compiling and behaving correctly against
-     * the shared `SignUpInput`: honour a real email when one is given, fall
-     * back to the synthetic alias otherwise. The phone-number RESOLUTION on
-     * sign-in (migration 0016's RPC) is deliberately NOT implemented here yet.
+     * The credential address is derived from the handle, which is what makes
+     * the handle unique: `auth.users.email` carries a unique constraint, so a
+     * taken username is refused by Postgres rather than by a check-then-insert
+     * that could lose a race. `niceAuthError` turns that rejection into "That
+     * username is taken."
+     *
+     * Email and phone are CONTACT DETAILS: nothing is sent to either, neither
+     * is verified, and neither can be used to take the account over. The
+     * `handle_new_user` trigger (migration 0018) files them into
+     * `profiles_private`.
      */
     async signUp(input: SignUpInput): Promise<User> {
       const username = assertUsername(input.username);

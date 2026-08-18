@@ -130,6 +130,9 @@ Dashboard → **Authentication → Sign In / Providers**:
 **Authentication → URL Configuration** must list the app's redirect (`localo://auth-callback`)
 or Google sign-in returns to nowhere on a device.
 
+Both of those — the provider and the redirect list — plus the Google Cloud OAuth client they
+depend on, are set up step by step in **`docs/google-sign-in.md`**.
+
 ### 2.6 Verify migrations and functions are all applied
 
 All 18 migrations must be present. `0017` does not exist — the numbering skips it, that is

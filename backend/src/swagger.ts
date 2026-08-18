@@ -21,6 +21,13 @@ const ROUTES: Record<string, RouteDef[]> = {
     ['patch', '/businesses/{id}', 'Update a business (member; team/module keys manager+; ownerId not patchable)'],
     ['post', '/businesses/{id}/products/{productId}/sold', 'Mark a stall item sold/unsold (owner)'],
     ['delete', '/businesses/{id}/products/{productId}', 'Remove a stall item (owner)'],
+    [
+      'delete',
+      '/businesses/{id}',
+      'Take a listing down (OWNER only — not members, not super-admins; 204). Cascades every ' +
+        'child record: team, orders, bills, chats, calls, memberships, reviews, threads, ' +
+        'vehicles, ad campaigns',
+    ],
   ],
   Catalog: [
     ['get', '/catalog', 'Growing collection (?kind=&scope=approved|all) — approved is public suggestions, all is super-admin'],
@@ -100,6 +107,13 @@ const ROUTES: Record<string, RouteDef[]> = {
     ['get', '/calls/{id}', 'Get call state'],
     ['post', '/calls/{id}/join', 'Join/answer'],
     ['post', '/calls/{id}/decline', 'Decline'],
+    [
+      'post',
+      '/calls/decline-by-device',
+      'Decline from a closed app — body {callId, pushToken}. NO JWT: a killed app has none, ' +
+        "so the device's registered Expo push token is the credential (it is the address the " +
+        'call was rung on); it must resolve to a still-ringing business participant on that call',
+    ],
     ['post', '/calls/{id}/leave', 'Hang up'],
     ['post', '/calls/{id}/token', 'Mint a LiveKit token for the call audio room'],
   ],
@@ -125,6 +139,12 @@ const ROUTES: Record<string, RouteDef[]> = {
   Push: [
     ['post', '/push/tokens', "Register this device's Expo push token (self only)"],
     ['delete', '/push/tokens/{token}', 'Unregister a device token (self only)'],
+    [
+      'get',
+      '/push/tokens/{token}/registered',
+      'Will the server ring YOUR account on this token? Bare boolean, self-scoped ' +
+        '(a bare token lookup would be an oracle for other people\'s devices)',
+    ],
   ],
   Memberships: [
     ['get', '/memberships/customer/{customerId}', 'Your active plans'],
@@ -154,6 +174,34 @@ const ROUTES: Record<string, RouteDef[]> = {
     ['get', '/product-threads/business/{businessId}', "All of a stall's threads"],
     ['post', '/product-threads', 'Post a question/offer/reply'],
     ['post', '/product-threads/business/{businessId}/product/{productId}/message/{messageId}/pin', 'Pin/unpin (owner)'],
+  ],
+  Ads: [
+    [
+      'get',
+      '/ads/placements',
+      'The Home ad slot / deals feed (public). ?lat=&lng= and an optional ?radiusKm= — the ' +
+        "customer's chosen range, up to ANY_RANGE_KM (20000, \"Anywhere\"), NOT clamped to the " +
+        'Home reach',
+    ],
+    ['get', '/ads', 'Every campaign, newest first (super-admin)'],
+    ['get', '/ads/business/{businessId}', "A business's campaign history (member)"],
+    [
+      'post',
+      '/ads',
+      'Request a campaign (member). Body {businessId, offerId, planId, requestedByName} only — ' +
+        'days/amount/views/band are frozen from the plan and the status is pinned to pending',
+    ],
+    ['post', '/ads/{id}/approve', 'Approve — the run starts NOW (super-admin)'],
+    ['post', '/ads/{id}/reject', 'Reject with an optional note (super-admin)'],
+    ['post', '/ads/{id}/stop', 'Stop a running ad early (business member or super-admin)'],
+    ['post', '/ads/{id}/paid', 'Mark payment received/not (super-admin)'],
+    [
+      'post',
+      '/ads/{id}/events',
+      'Count a view or tap: {kind: impression|tap, distanceKm?}. ANY caller, and ALWAYS 204 — ' +
+        'it fires from a carousel a customer is scrolling past. distanceKm is the billing ' +
+        "model: a view counts toward the promise only from inside the plan's band",
+    ],
   ],
   Logbook: [
     ['get', '/logbook/business/{businessId}', 'The record book (member)'],

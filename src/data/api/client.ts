@@ -11,7 +11,15 @@ const RAW_URL = process.env.EXPO_PUBLIC_API_URL ?? '';
 /** True once an API url is configured — DataProvider needs both this and Supabase. */
 export const isApiConfigured = Boolean(RAW_URL);
 
-const API_ROOT = `${RAW_URL.replace(/\/$/, '')}/api`;
+/**
+ * Where the API lives, including the `/api` mount.
+ *
+ * Exported because one caller lives OUTSIDE the repository layer: the native
+ * call-notification module is handed an absolute decline URL to post to while
+ * the app is closed (see PushRegistrar), and that URL has to point at whichever
+ * backend is actually selected.
+ */
+export const API_ROOT = `${RAW_URL.replace(/\/$/, '')}/api`;
 
 /** The current Supabase access token, or null when signed out. */
 async function accessToken(): Promise<string | null> {

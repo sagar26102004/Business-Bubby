@@ -39,6 +39,20 @@ export interface BusinessLocation {
 export interface User {
   id: string;
   name: string;
+  /**
+   * The handle the account signs in with. PUBLIC — it lives on `profiles`, not
+   * `profiles_private`, because it is how people are addressed.
+   *
+   * ⚠️ NOT REWRITABLE by its owner, and deliberately absent from the update
+   * whitelist in services/users.ts: the credential address in `auth.users` is
+   * derived from it (`<handle>@localo.app`) and would not move with a rename.
+   * Migration 0018's `protect_profile_fields` trigger pins it on Path A; on
+   * Path B (which bypasses RLS) the whitelist is the only guard.
+   */
+  username?: string;
+  /** CONTACT DETAILS, never credentials — unverified, and nothing is sent to
+   *  them. A `<…>@localo.app` alias must never be stored here: it is a login
+   *  address, not a way to reach anybody. */
   email?: string;
   phone?: string;
   avatarUrl?: string;
@@ -50,6 +64,15 @@ export interface User {
    * world-readable directory card.
    */
   mutedNotifications?: string[];
+  /**
+   * Set when the account was closed (`AuthRepository.deleteAccount`).
+   *
+   * The row survives as a TOMBSTONE — name "Deleted user", nothing else — so
+   * the orders, bills and reviews still referencing this id resolve to
+   * something instead of dangling. Nobody can sign in as it; there is no auth
+   * user behind it any more. See supabase/migrations/0019_account_deletion.sql.
+   */
+  deletedAt?: string;
   /**
    * Platform super-admin. DERIVED per request from `platform_admins`
    * (see lib/superAdmin) — never stored on the profile, because the profile is
@@ -88,7 +111,8 @@ export interface AppNotification {
     | 'enroll_requested'
     | 'enroll_update'
     | 'payment_reported'
-    | 'payment_update';
+    | 'payment_update'
+    | 'ad_update';
   title: string;
   body: string;
   businessId?: string;
@@ -164,6 +188,13 @@ export interface Offer {
   /** Shout label on the card, e.g. "COMBO", "40% OFF". */
   tag?: string;
   emoji?: string;
+  /** Photo behind the ad card (public URL in the `media` bucket). Without one
+   *  the card falls back to the emoji on a colored gradient. */
+  imageUrl?: string;
+  /** THE REEL — a short vertical video ad, played full-screen in /deals. Pure
+   *  passthrough: no server logic keys on it, and `imageUrl` is still what the
+   *  Home carousel and the business page draw. */
+  videoUrl?: string;
   /** What's included — picked from the business's own offerings. */
   lines: OfferLine[];
   /** What the customer pays for the bundle, e.g. "₹99". */
@@ -579,4 +610,63 @@ export interface SavedPlace {
   kind: PlaceKind;
   point: GeoPoint;
   address?: string;
+}
+
+export type AdCampaignStatus = 'pending' | 'active' | 'rejected' | 'stopped';
+
+/**
+ * An AD CAMPAIGN — a business paying to put one of its offers in front of the
+ * neighborhood. The platform's revenue line.
+ *
+ * It carries no creative of its own: it points at an `Offer` the business
+ * already built, so editing the offer updates the running ad and there is no
+ * second copy to drift. What money buys is VIEWS and PRIORITY — see
+ * `src/domain/ads.ts` for the model.
+ *
+ * Nothing here charges a card: a request lands as `pending`, a platform admin
+ * approves it once payment is settled off-app, and `paid` records that by hand.
+ */
+export interface AdCampaign {
+  id: string;
+  businessId: string;
+  /** Copied at request time so the admin queue reads without joining. */
+  businessName: string;
+  /** The `Offer.id` being promoted — the creative lives there. */
+  offerId: string;
+  /** Which `AD_PLANS` entry was bought (domain/ads.ts). */
+  planId: string;
+  /**
+   * LEGACY — how far the ad reached, in km, back when a plan sold a radius.
+   * Present only on campaigns bought before the switch to view-priced plans;
+   * those keep being capped at exactly the reach they paid for. Never written
+   * on a new campaign.
+   */
+  radiusKm?: number;
+  /** Views promised, and the band they must come from. Frozen from the plan. */
+  targetViews?: number;
+  withinKm?: number;
+  /** How long the run lasts once approved. Frozen from the plan. */
+  days: number;
+  /** Rupees owed for the run. Frozen from the plan. */
+  amount: number;
+  status: AdCampaignStatus;
+  /** Set by hand once money has actually arrived, off-app. */
+  paid: boolean;
+  requestedAt: string;
+  requestedById: string;
+  requestedByName: string;
+  /** Set on approval — the clock starts when the admin says yes. */
+  startsAt?: string;
+  endsAt?: string;
+  reviewedAt?: string;
+  /** Why it was rejected, or a note on an approval. Shown to the business. */
+  reviewNote?: string;
+  /** Times the card has been shown, and tapped — at ANY distance. */
+  impressions: number;
+  taps: number;
+  /** Of those views, the ones inside `withinKm` — what the promise is kept in. */
+  viewsNear?: number;
+  /** Views bucketed by how far the viewer was (`VIEW_BANDS_KM`, `'far'` past
+   *  the last band) — "who actually saw my ad?". */
+  viewsByBand?: Record<string, number>;
 }
