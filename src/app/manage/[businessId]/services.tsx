@@ -15,7 +15,6 @@ export default function ManageServicesScreen() {
   return (
     <ManageGate
       title="Services"
-      intro="Every job you take on, with what it costs. File each under a section so customers can browse instead of scroll."
       need="offerings"
       what="services"
       Form={ServicesForm}

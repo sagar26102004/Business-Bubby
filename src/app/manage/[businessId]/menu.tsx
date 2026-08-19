@@ -14,7 +14,6 @@ export default function ManageMenuScreen() {
   return (
     <ManageGate
       title="Menu"
-      intro="Everything you serve, by section. Customers order straight off this."
       need="offerings"
       what="the menu"
       Form={MenuForm}

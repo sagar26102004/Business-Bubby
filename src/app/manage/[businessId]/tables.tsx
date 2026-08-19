@@ -12,7 +12,6 @@ export default function ManageTablesScreen() {
   return (
     <ManageGate
       title="Tables"
-      intro="Dine-in orders are seated at a numbered table automatically — the lowest free one, or a customer’s existing table if they’re already sitting down. Leave blank if you don’t run tables."
       need="owner"
       Form={TablesForm}
     />

@@ -8,18 +8,18 @@
  * a failure there stops before the listing is touched.
  */
 import { useState } from 'react';
-import { Alert, StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 import type { Employee, EmployeeLevel } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { ManageGate, type ManageFormProps } from '@/features/businesses/ManageGate';
 import { Button, Card, Tag, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function ManageCallsScreen() {
   return (
     <ManageGate
       title="Calls & chat"
-      intro="Choose who rings on voice calls and who can reply to customer chats — spread the load across your team. Chats always reach you; calls are up to you."
       need="owner"
       Form={CallsForm}
     />
@@ -64,7 +64,7 @@ function CallsForm({ business, employees, save, saving }: ManageFormProps) {
         }),
       );
     } catch (err) {
-      Alert.alert('Could not save', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not save', err instanceof Error ? err.message : 'Try again.');
       setBusy(false);
       return;
     }
@@ -79,11 +79,6 @@ function CallsForm({ business, employees, save, saving }: ManageFormProps) {
 
   return (
     <>
-      <Text variant="caption" tone="muted" style={styles.help}>
-        Customers only see you and your managers on the page — feature a staff member with “Show on
-        business page”.
-      </Text>
-
       {/* Owner row — chats always on, calls opt-in/out */}
       <Card style={styles.card}>
         <Text weight="semibold">{currentUser?.name ?? 'You'} · Owner</Text>
@@ -191,7 +186,6 @@ function CallsForm({ business, employees, save, saving }: ManageFormProps) {
 }
 
 const styles = StyleSheet.create({
-  help: { marginBottom: spacing.lg },
   card: { marginBottom: spacing.md },
   role: { marginTop: 2 },
   empty: { marginBottom: spacing.md },

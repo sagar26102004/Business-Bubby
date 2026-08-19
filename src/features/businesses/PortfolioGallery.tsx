@@ -5,10 +5,17 @@
  * itself a pager: swipe left/right there to walk through the rest of the
  * showcase without going back.
  *
- * Videos can't play inline yet (media is URL-linked until uploads land), so a
- * video frame shows its thumbnail with a play badge and opens the watch link.
+ * NO CAPTIONS. A showcase is pictures of work — the haircut, the mandap, the
+ * FSSAI certificate on the wall — and a picture of work explains itself. The
+ * editor stopped asking for titles and descriptions, and this stopped drawing
+ * the space they used to sit in.
+ *
+ * Videos UPLOADED to us are files, so they play right here, muted in the strip
+ * and with controls in the viewer. LEGACY items (the seeded ones) point at a
+ * YouTube page instead of a video file — `isPlayableVideo` spots those and they
+ * keep the old behaviour: a thumbnail that opens the watch link.
  */
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Image,
   Linking,
@@ -21,14 +28,15 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
 import type { PortfolioItem } from '@/domain/types';
+import { isPlayableVideo } from '@/domain/showcase';
 import { AutoCarousel, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 const SLIDE_H = 210;
 
 export function PortfolioGallery({ items }: { items: PortfolioItem[] }) {
-  const colors = useColors();
   const [openAt, setOpenAt] = useState<number | null>(null);
 
   return (
@@ -41,25 +49,9 @@ export function PortfolioGallery({ items }: { items: PortfolioItem[] }) {
             onPress={() => setOpenAt(index)}
             style={({ pressed }) => [styles.slide, pressed && styles.pressed]}
             accessibilityRole="button"
-            accessibilityLabel={item.title ?? (item.kind === 'video' ? 'Watch video' : 'View photo')}
+            accessibilityLabel={item.kind === 'video' ? 'Watch video' : 'View photo'}
           >
-            <Image
-              source={{ uri: item.thumbnailUrl ?? item.url }}
-              style={[styles.slideImage, { backgroundColor: colors.surfaceAlt }]}
-              resizeMode="cover"
-            />
-            {item.kind === 'video' ? (
-              <View style={styles.playBadge}>
-                <Text style={styles.playIcon}>▶</Text>
-              </View>
-            ) : null}
-            {item.title ? (
-              <View style={styles.caption}>
-                <Text variant="label" weight="semibold" tone="inverse" numberOfLines={1}>
-                  {item.title}
-                </Text>
-              </View>
-            ) : null}
+            <SlideMedia item={item} />
           </Pressable>
         )}
       />
@@ -68,6 +60,35 @@ export function PortfolioGallery({ items }: { items: PortfolioItem[] }) {
         <ShowcaseViewer items={items} startIndex={openAt} onClose={() => setOpenAt(null)} />
       ) : null}
     </View>
+  );
+}
+
+/** One frame of the strip: the photo, or a video sitting on its first frame. */
+function SlideMedia({ item }: { item: PortfolioItem }) {
+  const colors = useColors();
+  const playable = item.kind === 'video' && isPlayableVideo(item.url);
+  const player = useVideoPlayer(playable ? item.url : null, (p) => {
+    p.loop = true;
+    p.muted = true;
+  });
+
+  return (
+    <>
+      {playable ? (
+        <VideoView player={player} style={styles.slideImage} nativeControls={false} contentFit="cover" />
+      ) : (
+        <Image
+          source={{ uri: item.thumbnailUrl ?? item.url }}
+          style={[styles.slideImage, { backgroundColor: colors.surfaceAlt }]}
+          resizeMode="cover"
+        />
+      )}
+      {item.kind === 'video' ? (
+        <View style={styles.playBadge}>
+          <Text style={styles.playIcon}>▶</Text>
+        </View>
+      ) : null}
+    </>
   );
 }
 
@@ -94,6 +115,7 @@ function ShowcaseViewer({
   };
 
   const current = items[index];
+  const currentIsLink = current?.kind === 'video' && !isPlayableVideo(current.url);
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -112,15 +134,15 @@ function ShowcaseViewer({
             ref.current?.scrollTo({ x: startIndex * width, animated: false });
           }}
         >
-          {items.map((item) => (
+          {items.map((item, i) => (
             <View key={item.id} style={{ width, height }}>
-              <Pressable style={styles.page} onPress={onClose}>
-                <Image
-                  source={{ uri: item.thumbnailUrl ?? item.url }}
-                  style={{ width, height: height * 0.62 }}
-                  resizeMode="contain"
-                />
-              </Pressable>
+              <ViewerPage
+                item={item}
+                active={i === index}
+                width={width}
+                height={height}
+                onClose={onClose}
+              />
             </View>
           ))}
         </ScrollView>
@@ -138,17 +160,7 @@ function ShowcaseViewer({
               {index + 1} / {items.length}
             </Text>
           ) : null}
-          {current?.title ? (
-            <Text weight="semibold" tone="inverse" style={styles.viewerText}>
-              {current.title}
-            </Text>
-          ) : null}
-          {current?.description ? (
-            <Text variant="label" tone="inverse" style={[styles.viewerText, styles.viewerDesc]}>
-              {current.description}
-            </Text>
-          ) : null}
-          {current?.kind === 'video' ? (
+          {currentIsLink ? (
             <Pressable
               onPress={() => Linking.openURL(current.url).catch(() => {})}
               style={styles.watchBtn}
@@ -159,11 +171,66 @@ function ShowcaseViewer({
             </Pressable>
           ) : null}
           <Text variant="caption" tone="inverse" style={styles.hint}>
-            {items.length > 1 ? 'Swipe for more · tap the photo to close' : 'Tap the photo to close'}
+            {items.length > 1 ? 'Swipe for more · tap to close' : 'Tap to close'}
           </Text>
         </View>
       </View>
     </Modal>
+  );
+}
+
+/**
+ * One full-screen page. An uploaded video plays with controls, and ONLY while
+ * it's the page on screen — two videos playing at once is a bug you hear before
+ * you see it. Leaving a page rewinds it, so swiping back starts it from the top.
+ */
+function ViewerPage({
+  item,
+  active,
+  width,
+  height,
+  onClose,
+}: {
+  item: PortfolioItem;
+  active: boolean;
+  width: number;
+  height: number;
+  onClose: () => void;
+}) {
+  const playable = item.kind === 'video' && isPlayableVideo(item.url);
+  const player = useVideoPlayer(playable ? item.url : null, (p) => {
+    p.loop = true;
+  });
+
+  useEffect(() => {
+    if (!playable) return;
+    if (active) player.play();
+    else {
+      player.pause();
+      player.currentTime = 0;
+    }
+  }, [active, playable, player]);
+
+  if (playable) {
+    return (
+      <View style={styles.page}>
+        <VideoView
+          player={player}
+          style={{ width, height: height * 0.62 }}
+          contentFit="contain"
+        />
+      </View>
+    );
+  }
+
+  return (
+    <Pressable style={styles.page} onPress={onClose}>
+      <Image
+        source={{ uri: item.thumbnailUrl ?? item.url }}
+        style={{ width, height: height * 0.62 }}
+        resizeMode="contain"
+      />
+    </Pressable>
   );
 }
 
@@ -183,15 +250,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   playIcon: { color: '#FFFFFF', fontSize: 18, marginLeft: 3 },
-  caption: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
   viewer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.94)' },
   page: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   close: {
@@ -213,8 +271,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   counter: { opacity: 0.75, marginBottom: spacing.sm },
-  viewerText: { textAlign: 'center' },
-  viewerDesc: { opacity: 0.85, marginTop: spacing.xs },
   watchBtn: {
     marginTop: spacing.md,
     paddingHorizontal: spacing.xl,

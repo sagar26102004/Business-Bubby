@@ -18,7 +18,6 @@
  * member can't open so they never meet a refusal.
  */
 import { useState } from 'react';
-import { Alert, StyleSheet } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import type { Business, Employee } from '@/domain/types';
@@ -28,8 +27,8 @@ import { SuperAdminBanner } from './SuperAdminBanner';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { invalidate, keyOf } from '@/lib/queryCache';
-import { EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
-import { spacing } from '@/theme/theme';
+import { EmptyView, ErrorView, LoadingView, Screen } from '@/components/ui';
+import { showAlert } from '@/lib/alert';
 
 /** Cache key the hub and every sub-screen share, so a save refreshes the hub. */
 export const manageKey = (businessId: string) => ['manage', businessId] as const;
@@ -50,8 +49,6 @@ export interface ManageGateProps {
    * static title in `_layout.tsx` is what shows while the business loads.
    */
   title: string | ((business: Business) => string);
-  /** One line under the title saying what this screen changes. */
-  intro?: string | ((business: Business) => string);
   /**
    * Who may open it: `owner` for the listing's own settings (identity, team,
    * modules), `offerings` for the catalog — which a member granted
@@ -63,7 +60,7 @@ export interface ManageGateProps {
   Form: React.ComponentType<ManageFormProps>;
 }
 
-export function ManageGate({ title: rawTitle, intro: rawIntro, need, what, Form }: ManageGateProps) {
+export function ManageGate({ title: rawTitle, need, what, Form }: ManageGateProps) {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
@@ -87,7 +84,6 @@ export function ManageGate({ title: rawTitle, intro: rawIntro, need, what, Form 
   if (!data) return <EmptyView title="Not found" />;
 
   const title = typeof rawTitle === 'function' ? rawTitle(data.business) : rawTitle;
-  const intro = typeof rawIntro === 'function' ? rawIntro(data.business) : rawIntro;
   const meEmployee = data.employees.find((e) => e.userId && e.userId === currentUser?.id);
   const isOwner = !!currentUser && currentUser.id === data.business.ownerId;
   const allowed =
@@ -118,10 +114,10 @@ export function ManageGate({ title: rawTitle, intro: rawIntro, need, what, Form 
       // The hub reads its tile summaries off the same key — drop it so the
       // counts the owner just changed are right when they land back on it.
       invalidate(keyOf(manageKey(businessId)));
-      Alert.alert('Saved', 'Your business page has been updated.');
+      showAlert('Saved', 'Your business page has been updated.');
       dismiss();
     } catch (err) {
-      Alert.alert('Could not save', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not save', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSaving(false);
     }
@@ -132,11 +128,6 @@ export function ManageGate({ title: rawTitle, intro: rawIntro, need, what, Form 
       <Stack.Screen options={{ title }} />
       {!isOwner && isSuperAdminUser(currentUser) ? (
         <SuperAdminBanner businessName={data.business.name} what={what ?? title.toLowerCase()} />
-      ) : null}
-      {intro ? (
-        <Text tone="muted" style={styles.intro}>
-          {intro}
-        </Text>
       ) : null}
       <Form
         business={data.business}
@@ -149,6 +140,3 @@ export function ManageGate({ title: rawTitle, intro: rawIntro, need, what, Form 
   );
 }
 
-const styles = StyleSheet.create({
-  intro: { marginBottom: spacing.lg },
-});

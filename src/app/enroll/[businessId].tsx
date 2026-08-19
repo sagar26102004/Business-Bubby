@@ -12,7 +12,7 @@
  * It is NOT the order flow.
  */
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import { commerceVocab } from '@/domain/catalog';
@@ -21,6 +21,7 @@ import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice } from '@/lib/money';
 import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 /** One person being signed up: which plan, and who it's for. */
 interface Enrollee {
@@ -111,7 +112,7 @@ export default function EnrollScreen() {
       setSentCount((c) => c + n);
       setEntries([]);
     } catch (err) {
-      Alert.alert('Could not send', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not send', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }

@@ -14,7 +14,6 @@ export default function ManageAvailabilityScreen() {
   return (
     <ManageGate
       title="Availability"
-      intro="When a tenant moves in, mark it Rented — the listing stays up and you flip it back to Available when it frees up. No need to list it again."
       need="owner"
       Form={AvailabilityForm}
     />

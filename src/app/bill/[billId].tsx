@@ -6,7 +6,7 @@
  * customer's chat.
  */
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -15,6 +15,7 @@ import { billRef, billToText } from '@/features/billing/billText';
 import { formatMoney } from '@/lib/money';
 import { shareText } from '@/lib/share';
 import { spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function BillDetailScreen() {
   const { billId } = useLocalSearchParams<{ billId: string }>();
@@ -60,7 +61,7 @@ export default function BillDetailScreen() {
       setFeedback(paid ? 'Marked as unpaid' : '✓ Marked as paid');
       reload();
     } catch (err) {
-      Alert.alert('Could not update', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not update', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setMarking(false);
     }
@@ -86,7 +87,7 @@ export default function BillDetailScreen() {
       await repos.bills.sendToChat(bill.id, currentUser?.name ?? 'Owner');
       setFeedback('✓ Sent in the customer’s chat');
     } catch (err) {
-      Alert.alert('Could not send', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not send', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSending(false);
     }

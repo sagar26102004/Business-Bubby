@@ -15,7 +15,6 @@ export default function ManagePartiesScreen() {
   return (
     <ManageGate
       title="Party packages"
-      intro="Birthday, kitty party, family function… customers pick one when they plan a party with you. Put guest limits and inclusions in the name, e.g. “Birthday Buffet (min 15)”."
       need="offerings"
       what="party packages"
       Form={PartiesForm}

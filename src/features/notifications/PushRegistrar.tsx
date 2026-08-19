@@ -13,9 +13,11 @@
  * polls) then shows the accept/decline UI and rings.
  */
 import { useEffect, useRef } from 'react';
-import * as Notifications from 'expo-notifications';
+// Type-only — the runtime module comes from ./notificationsModule, which
+// refuses to load it in Expo Go on Android (where the import itself throws).
+import type * as Notifications from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Alert, AppState, Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { router } from 'expo-router';
 import {
   canDrawOverlays,
@@ -30,6 +32,8 @@ import { API_ROOT } from '@/data/api/client';
 import { selectedBackend } from '@/data/backend';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import type { Repositories } from '@/data/repositories';
+import { showAlert } from '@/lib/alert';
+import { getNotifications } from './notificationsModule';
 import {
   answerUrlFor,
   configureNotificationHandler,
@@ -79,7 +83,7 @@ async function offerCallPopupOnce(): Promise<void> {
   // Written before the alert, not after: a dismissed prompt must not come back
   // on the next launch just because nothing was tapped.
   await AsyncStorage.setItem(CALL_POPUP_PROMPT_KEY, '1');
-  Alert.alert(
+  showAlert(
     'Show calls full screen?',
     "Android needs your permission before an incoming call can take over the screen like a phone call. Either switch below is enough. Without one, calls still ring with Answer and Decline — they just look like an ordinary notification.",
     [
@@ -227,11 +231,14 @@ export function PushRegistrar() {
     // effect, which takes the whole page down with it. Nothing below this line
     // has a web equivalent.
     if (Platform.OS === 'web') return;
+    // Nor in Expo Go on Android, which has no notifications module to ask.
+    const N = getNotifications();
+    if (!N) return;
 
     // Cold start: the tap that launched the app isn't delivered to the listener
     // below, so ask for it explicitly.
-    void Notifications.getLastNotificationResponseAsync().then(handle).catch(() => {});
-    const sub = Notifications.addNotificationResponseReceivedListener((r) => void handle(r));
+    void N.getLastNotificationResponseAsync().then(handle).catch(() => {});
+    const sub = N.addNotificationResponseReceivedListener((r) => void handle(r));
     return () => sub.remove();
   }, []);
 

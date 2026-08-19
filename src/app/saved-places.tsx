@@ -102,9 +102,9 @@ export default function SavedPlacesScreen() {
   };
 
   /**
-   * Removal is two taps, not one. `Alert.alert` is a no-op on web (our preview),
-   * so the confirmation is the row itself: the first tap arms it, the second
-   * removes. Nothing is destroyed by a thumb brushing a list.
+   * Removal is two taps, not one, and the confirmation is the row itself: the
+   * first tap arms it, the second removes. Nothing is destroyed by a thumb
+   * brushing a list.
    */
   const remove = async (place: SavedPlace) => {
     if (armed !== place.id) {

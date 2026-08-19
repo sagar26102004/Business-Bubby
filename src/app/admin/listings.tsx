@@ -64,19 +64,11 @@ function ListingDesk() {
         <Text weight="semibold" style={styles.cardTitle}>
           Register a business for someone
         </Text>
-        <Text variant="caption" tone="muted" style={styles.cardSub}>
-          The wizard asks you who owns it, so the listing lands under the real owner’s account
-          from the start — not yours.
-        </Text>
         <Button title="＋ Register a business" onPress={() => router.push('/register')} />
       </Card>
 
       <Text weight="semibold" style={styles.sectionTitle}>
         Every listing
-      </Text>
-      <Text variant="caption" tone="muted" style={styles.cardSub}>
-        Browse the whole platform, or search by name — then jump straight into the screen you
-        need.
       </Text>
       <Input placeholder="Search by name…" value={query} onChangeText={setQuery} autoCorrect={false} />
 
@@ -128,7 +120,6 @@ function ListingDesk() {
 const styles = StyleSheet.create({
   card: { marginBottom: spacing.xl },
   cardTitle: { marginBottom: spacing.xs },
-  cardSub: { marginBottom: spacing.md },
   sectionTitle: { marginBottom: spacing.xs },
   count: { marginTop: spacing.sm, marginBottom: spacing.sm },
   result: { marginBottom: spacing.md },

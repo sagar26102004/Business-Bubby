@@ -260,10 +260,6 @@ export default function VehicleJourneyScreen() {
       <Text variant="title" weight="bold">
         {kind.icon} {vehicle.name}
       </Text>
-      <Text variant="caption" tone="muted" style={styles.sub}>
-        Set the routes this vehicle runs. Type a place or drop a pin — then add the stops along the
-        way.
-      </Text>
 
       {/* ── Saved journeys ─────────────────────────────────────────────── */}
       {journeys.length === 0 && !showForm ? (

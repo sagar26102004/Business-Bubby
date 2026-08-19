@@ -73,7 +73,7 @@ export default function WorkspaceNotificationsScreen() {
       <Text variant="caption" tone="muted" style={styles.subtitle}>
         Your own settings — they don’t change what your teammates get.
       </Text>
-      <MuteSettings businessId={business.id} scopeLabel={business.name} categories={categories} />
+      <MuteSettings businessId={business.id} categories={categories} />
     </Screen>
   );
 }

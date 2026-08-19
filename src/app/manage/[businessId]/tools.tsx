@@ -19,7 +19,6 @@ export default function ManageToolsScreen() {
   return (
     <ManageGate
       title="Workspace tools"
-      intro="Turn the tools you run the business with on or off — your workspace shows only what’s on. Chat and calls are always included. Turning a tool off hides it; nothing is deleted."
       need="owner"
       Form={ToolsForm}
     />

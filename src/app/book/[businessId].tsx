@@ -4,7 +4,7 @@
  * the provider then accepts/declines from their workspace.
  */
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import type { ServiceItem } from '@/domain/types';
@@ -12,6 +12,7 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Button, EmptyView, ErrorView, Input, LoadingView, Screen, Tag, Text } from '@/components/ui';
 import { spacing } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 const GENERAL: ServiceItem = { name: 'General appointment' };
 
@@ -20,7 +21,7 @@ export default function BookScreen() {
   const repos = useRepositories();
   const router = useRouter();
   const dismiss = useDismiss(`/business/${businessId}`);
-  const { currentUser } = useAuth();
+  const { currentUser, signInGuest } = useAuth();
 
   const [serviceName, setServiceName] = useState<string>();
   const [when, setWhen] = useState('');
@@ -42,24 +43,28 @@ export default function BookScreen() {
 
   const submit = async () => {
     if (!canSubmit) {
-      Alert.alert('Add a time', 'Please enter your preferred date & time.');
+      showAlert('Add a time', 'Please enter your preferred date & time.');
       return;
     }
     setSubmitting(true);
     try {
+      // A logged-out customer acts as a real (anonymous) identity, the same way
+      // guest chat and guest calls do — see `signInGuest`. Without it the row
+      // carries no customer_id and RLS (`customer_id = auth.uid()`) refuses it.
+      const me = currentUser ?? (await signInGuest());
       await repos.bookings.create({
         businessId: business.id,
-        customerId: currentUser?.id ?? 'guest',
-        customerName: currentUser?.name ?? 'Guest',
+        customerId: me.id,
+        customerName: me.name || 'Guest',
         serviceName: selected.name,
         price: selected.price,
         when: when.trim(),
         note: note.trim() || undefined,
       });
-      Alert.alert('Request sent', `Your booking with ${business.name} was requested. You'll be notified when they respond.`);
+      showAlert('Request sent', `Your booking with ${business.name} was requested. You'll be notified when they respond.`);
       dismiss();
     } catch (err) {
-      Alert.alert('Could not book', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not book', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -71,9 +76,6 @@ export default function BookScreen() {
 
       <Text variant="title" weight="bold">
         Book with {business.name}
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        Request an appointment — the provider confirms the time.
       </Text>
 
       <Text variant="label" weight="semibold" style={styles.label}>
@@ -111,7 +113,6 @@ export default function BookScreen() {
 }
 
 const styles = StyleSheet.create({
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   label: { marginBottom: spacing.sm },
   services: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
   note: { minHeight: 80, textAlignVertical: 'top' },

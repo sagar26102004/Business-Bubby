@@ -7,7 +7,7 @@
  * off-catalog lines. The bill can then be shared in chat or through any app.
  */
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { User } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -28,6 +28,7 @@ import { formatMoney, parsePrice } from '@/lib/money';
 import { totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { OfferingGroup, StepBtn, keyOf, type Offering } from '@/features/orders/OfferingPicker';
 import { spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 /** A line the member typed by hand (not on the catalog). */
 interface CustomLine {
@@ -182,7 +183,7 @@ export default function NewBillScreen() {
       });
       router.replace(`/bill/${bill.id}`);
     } catch (err) {
-      Alert.alert('Could not create bill', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not create bill', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }

@@ -8,7 +8,7 @@
  * appends to that tab instead of starting a second order.
  */
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +22,7 @@ import { VegDot } from '@/features/businesses/FoodMenuEditor';
 import { useCart } from '@/features/orders/CartContext';
 import { FULFILLMENT_META, totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function CartScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -30,7 +31,7 @@ export default function CartScreen() {
   const dismiss = useDismiss(`/menu/${businessId}`);
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { currentUser } = useAuth();
+  const { currentUser, signInGuest } = useAuth();
   const cart = useCart(businessId);
 
   const [note, setNote] = useState('');
@@ -72,12 +73,17 @@ export default function CartScreen() {
         price: l.item.price,
         quantity: l.quantity,
       }));
+      // A logged-out customer orders as a real (anonymous) identity, the same
+      // way guest chat and guest calls do — see `signInGuest`. Without it the
+      // order carries no customer_id and the `orders_insert` RLS policy
+      // (`customer_id = auth.uid()`) refuses the row outright.
+      const me = currentUser ?? (await signInGuest());
       const order = openOrder
         ? await repos.orders.appendLines(openOrder.id, lines)
         : await repos.orders.create({
             businessId: business.id,
-            customerId: currentUser?.id ?? 'guest',
-            customerName: currentUser?.name ?? 'Guest',
+            customerId: me.id,
+            customerName: me.name || 'Guest',
             lines,
             fulfillment: asksFulfillment ? (fulfillment ?? undefined) : undefined,
             note: note.trim() || undefined,
@@ -85,7 +91,7 @@ export default function CartScreen() {
       cart.clear();
       router.replace(`/order/${order.id}`);
     } catch (err) {
-      Alert.alert('Could not order', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not order', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }

@@ -14,7 +14,6 @@ export default function ManageTagsScreen() {
   return (
     <ManageGate
       title="Tags"
-      intro="How customers find you — add a tag for everything you do. You’ll show up under each one."
       need="owner"
       Form={TagsForm}
     />

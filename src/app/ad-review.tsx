@@ -16,7 +16,7 @@
  * nothing — the run it paid for begins the moment it goes live.
  */
 import { useMemo, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import type { AdCampaign, Business } from '@/domain/types';
@@ -45,6 +45,7 @@ import {
   Text,
 } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 type Filter = 'pending' | 'live' | 'all';
 
@@ -131,7 +132,7 @@ export default function AdReviewScreen() {
       await run();
       reload();
     } catch (err) {
-      Alert.alert('Could not do that', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not do that', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setBusyId(null);
     }
@@ -140,7 +141,7 @@ export default function AdReviewScreen() {
   const reject = (campaign: AdCampaign) => {
     const note = notes[campaign.id]?.trim();
     if (!note) {
-      Alert.alert(
+      showAlert(
         'Say why',
         'A rejection goes to the business as a notification — give them a reason they can act on.',
       );
@@ -153,10 +154,6 @@ export default function AdReviewScreen() {
     <Screen scroll>
       <Text variant="heading" weight="bold" style={styles.h1}>
         📣 Ad review
-      </Text>
-      <Text tone="muted" style={styles.sub}>
-        Nothing runs on the Home screen until it's approved here. Approving starts the clock, so
-        a request waiting on you costs the business nothing.
       </Text>
 
       <Card style={styles.card}>
@@ -351,7 +348,6 @@ export default function AdReviewScreen() {
 
 const styles = StyleSheet.create({
   h1: { marginBottom: spacing.xs },
-  sub: { marginBottom: spacing.lg },
   card: { marginBottom: spacing.md },
   summary: { flexDirection: 'row' },
   stat: { flex: 1, alignItems: 'center' },

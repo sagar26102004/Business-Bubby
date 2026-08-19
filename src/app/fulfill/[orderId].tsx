@@ -9,7 +9,7 @@
  * takeaway today and any other pickup the moment `usesQrHandover` widens.
  */
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   HANDOVER_META,
@@ -31,6 +31,7 @@ import {
   Text,
 } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function FulfillOrderScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
@@ -97,7 +98,7 @@ export default function FulfillOrderScreen() {
       }
       await reload();
     } catch (err) {
-      Alert.alert('Could not update', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not update', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setBusy(false);
     }

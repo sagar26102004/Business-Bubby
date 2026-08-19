@@ -70,10 +70,6 @@ export function AdminOwnedListings({
   return (
     <Card style={[styles.card, { borderColor: colors.accent }]}>
       <Text weight="bold">🏢 Listings under your account</Text>
-      <Text variant="caption" tone="muted" style={styles.sub}>
-        The platform account shouldn’t run a shop. Hand a real business to its owner, or remove a
-        test listing for good.
-      </Text>
 
       {listings.map((b) => {
         const isOwner = b.ownerId === currentUser?.id;
@@ -157,7 +153,6 @@ export function AdminOwnedListings({
 
 const styles = StyleSheet.create({
   card: { borderWidth: 1.5, marginBottom: spacing.xl },
-  sub: { marginTop: spacing.xs },
   row: { borderTopWidth: StyleSheet.hairlineWidth, paddingTop: spacing.md, marginTop: spacing.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   name: { flex: 1 },

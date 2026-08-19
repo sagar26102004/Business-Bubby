@@ -14,7 +14,7 @@
  * and stops the drivers broadcasting, in one tap instead of one per bus.
  */
 import { useState } from 'react';
-import { Alert, LayoutAnimation, Modal, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { LayoutAnimation, Modal, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Vehicle, VehicleKind } from '@/domain/types';
 import { VEHICLE_KINDS, getVehicleKind } from '@/domain/catalog';
@@ -32,6 +32,7 @@ import {
   Text,
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 /** Number plates, normalised: only letters/digits, upper-cased (see the repo). */
 const canonicalReg = (reg?: string): string => (reg ?? '').replace(/[^a-z0-9]/gi, '').toUpperCase();
@@ -101,7 +102,7 @@ export default function FleetVehiclesScreen() {
   const toggleShare = async (v: Vehicle, on: boolean) => {
     const driver = driverOf(v);
     if (!driver?.userId) {
-      Alert.alert(
+      showAlert(
         'No driver account',
         'Assign a driver who has a One Place account first — the live location comes from their phone.',
       );

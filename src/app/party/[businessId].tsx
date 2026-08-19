@@ -6,12 +6,13 @@
  * price, proposes, or rejects — negotiation included, bill at the end.
  */
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 /** Index of the "describe your own party" choice in the package list. */
 const CUSTOM = -1;
@@ -21,7 +22,7 @@ export default function PartyScreen() {
   const repos = useRepositories();
   const router = useRouter();
   const colors = useColors();
-  const { currentUser } = useAuth();
+  const { currentUser, signInGuest } = useAuth();
 
   const [pkgIndex, setPkgIndex] = useState<number | null>(null);
   const [guests, setGuests] = useState('');
@@ -51,10 +52,14 @@ export default function PartyScreen() {
     setSubmitting(true);
     try {
       const pkg = chosen === CUSTOM ? null : packages[chosen!];
+      // A logged-out customer acts as a real (anonymous) identity, the same way
+      // guest chat and guest calls do — see `signInGuest`. Without it the row
+      // carries no customer_id and RLS (`customer_id = auth.uid()`) refuses it.
+      const me = currentUser ?? (await signInGuest());
       const order = await repos.orders.create({
         businessId: business.id,
-        customerId: currentUser?.id ?? 'guest',
-        customerName: currentUser?.name ?? 'Guest',
+        customerId: me.id,
+        customerName: me.name || 'Guest',
         lines: [
           {
             kind: 'service',
@@ -73,7 +78,7 @@ export default function PartyScreen() {
       });
       router.replace(`/order/${order.id}`);
     } catch (err) {
-      Alert.alert('Could not send', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not send', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -85,10 +90,6 @@ export default function PartyScreen() {
 
       <Text variant="title" weight="bold">
         🎉 Party at {business.name}
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        Tell them what you're celebrating, for how many, and when. They confirm
-        or come back with a price — nothing is final until you both agree.
       </Text>
 
       {packages.length > 0 ? (
@@ -209,7 +210,6 @@ export default function PartyScreen() {
 }
 
 const styles = StyleSheet.create({
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   groupTitle: { marginTop: spacing.md, marginBottom: spacing.md },
   pkgCard: { marginBottom: spacing.md, borderRadius: radius.lg },
   pkgTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

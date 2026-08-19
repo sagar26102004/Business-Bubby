@@ -123,9 +123,6 @@ function CatalogManager() {
         <Text weight="semibold" style={styles.cardTitle}>
           Add a business tag
         </Text>
-        <Text variant="caption" tone="muted" style={styles.cardSub}>
-          It joins the tag suggestions immediately, everywhere businesses pick tags.
-        </Text>
         <Input
           placeholder="e.g. Cloud Kitchen, EV Charging, Drone Service"
           value={tag}
@@ -146,10 +143,6 @@ function CatalogManager() {
       {/* The collection */}
       <Text weight="semibold" style={styles.sectionTitle}>
         Collection ({counts.all})
-      </Text>
-      <Text variant="caption" tone="muted" style={styles.sectionSub}>
-        Everything listings have contributed plus the tags you added. Hide typos and junk so they
-        stop being suggested, or delete them for good.
       </Text>
 
       <View style={styles.filters}>
@@ -208,10 +201,8 @@ function CatalogManager() {
 const styles = StyleSheet.create({
   card: { marginBottom: spacing.xl },
   cardTitle: { marginBottom: spacing.xs },
-  cardSub: { marginBottom: spacing.md },
   error: { marginBottom: spacing.sm },
   sectionTitle: { marginBottom: spacing.xs },
-  sectionSub: { marginBottom: spacing.md },
   filters: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   filterChip: { marginRight: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },

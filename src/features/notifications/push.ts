@@ -11,7 +11,12 @@
  * denied, no Firebase credentials, Expo Go, a simulator) must still be a fully
  * working app — it simply won't ring while closed.
  */
-import * as Notifications from 'expo-notifications';
+// TYPE-ONLY: a value import would run expo-notifications' module-level push
+// registration, which THROWS in Expo Go on Android and took the whole app down
+// with it. The runtime module comes from getNotifications() — see
+// ./notificationsModule.
+import type * as Notifications from 'expo-notifications';
+import { getNotifications } from './notificationsModule';
 import Constants from 'expo-constants';
 import * as Linking from 'expo-linking';
 import { Platform } from 'react-native';
@@ -117,7 +122,9 @@ function isCallNotification(notification: Notifications.Notification): boolean {
  * would put a banner over the top of the very thing it is telling you about.
  */
 export function configureNotificationHandler(): void {
-  Notifications.setNotificationHandler({
+  const N = getNotifications();
+  if (!N) return;
+  N.setNotificationHandler({
     handleNotification: async (notification) => {
       const isCall = isCallNotification(notification);
       return {
@@ -142,15 +149,17 @@ export async function dismissCallNotifications(callId: string): Promise<void> {
   // A browser tab never posted one, and asking is an error there rather than
   // an empty list.
   if (Platform.OS === 'web') return;
+  const N = getNotifications();
+  if (!N) return;
   try {
-    const presented = await Notifications.getPresentedNotificationsAsync();
+    const presented = await N.getPresentedNotificationsAsync();
     await Promise.all(
       presented
         .filter((n) => {
           const data = n.request.content.data as { callId?: string } | undefined;
           return data?.callId === callId;
         })
-        .map((n) => Notifications.dismissNotificationAsync(n.request.identifier)),
+        .map((n) => N.dismissNotificationAsync(n.request.identifier)),
     );
   } catch {
     /* nothing presented, or the platform can't enumerate — not worth surfacing */
@@ -166,10 +175,12 @@ export async function dismissCallNotifications(callId: string): Promise<void> {
  */
 async function ensureCallChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
-  await Notifications.setNotificationChannelAsync(CALL_CHANNEL_ID, {
+  const N = getNotifications();
+  if (!N) return;
+  await N.setNotificationChannelAsync(CALL_CHANNEL_ID, {
     name: 'Incoming calls',
     description: 'Rings when someone calls your business.',
-    importance: Notifications.AndroidImportance.MAX,
+    importance: N.AndroidImportance.MAX,
     // A 32-second ring cadence rather than 'default'. Android plays a channel's
     // sound ONCE per notification, so ringing for the whole 30s call window has
     // to come from the file's length — there is no loop setting. Bundled into
@@ -187,11 +198,11 @@ async function ensureCallChannel(): Promise<void> {
     // A phone call is the one thing that earns an interruption.
     bypassDnd: true,
     // Show it in full on the lock screen — with its Accept/Decline buttons.
-    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    lockscreenVisibility: N.AndroidNotificationVisibility.PUBLIC,
   });
   // Retire the v1 channel; otherwise the app's notification settings list two
   // "Incoming calls" entries and the user can't tell which one is live.
-  await Notifications.deleteNotificationChannelAsync(LEGACY_CALL_CHANNEL_ID).catch(() => {});
+  await N.deleteNotificationChannelAsync(LEGACY_CALL_CHANNEL_ID).catch(() => {});
 }
 
 /**
@@ -203,7 +214,9 @@ async function ensureCallChannel(): Promise<void> {
  * annoyance we're removing. See PushRegistrar for what each one does.
  */
 async function ensureCallCategory(): Promise<void> {
-  await Notifications.setNotificationCategoryAsync(CALL_CATEGORY_ID, [
+  const N = getNotifications();
+  if (!N) return;
+  await N.setNotificationCategoryAsync(CALL_CATEGORY_ID, [
     {
       identifier: 'accept',
       buttonTitle: '📞 Accept',
@@ -238,20 +251,24 @@ export async function getPushToken(): Promise<string | null> {
     // Web push needs a service worker + VAPID keys we haven't set up; and the
     // browser tab is the one place the app is reliably already open.
     if (Platform.OS === 'web') return null;
+    // Expo Go on Android has no remote push at all — the module isn't even
+    // loadable there. No token, no ring while closed, everything else works.
+    const N = getNotifications();
+    if (!N) return null;
 
     await ensureCallChannel();
     await ensureCallCategory();
 
-    const existing = await Notifications.getPermissionsAsync();
+    const existing = await N.getPermissionsAsync();
     let granted = existing.granted;
     if (!granted && existing.canAskAgain) {
-      const asked = await Notifications.requestPermissionsAsync();
+      const asked = await N.requestPermissionsAsync();
       granted = asked.granted;
     }
     if (!granted) return null;
 
     const id = projectId();
-    const token = await Notifications.getExpoPushTokenAsync(id ? { projectId: id } : {});
+    const token = await N.getExpoPushTokenAsync(id ? { projectId: id } : {});
     return token.data || null;
   } catch {
     // No FCM credentials in this build, Expo Go, an emulator without Play

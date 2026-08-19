@@ -14,7 +14,7 @@
  * Access-gated: the owner grants "Offers" per member on the Access screen.
  */
 import { useMemo, useState } from 'react';
-import { Alert, StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Offer, OfferLine } from '@/domain/types';
 import { canAccessService, isBusinessTeamMember } from '@/domain/access';
@@ -37,6 +37,7 @@ import {
   Text,
 } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 import {
   isOfferLive,
   linesTotalLabel,
@@ -193,7 +194,7 @@ export default function WorkspaceOffersScreen() {
       reload();
       done?.();
     } catch (err) {
-      Alert.alert('Could not save', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not save', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSaving(false);
     }
@@ -238,7 +239,7 @@ export default function WorkspaceOffersScreen() {
     persist(offers.map((o) => (o.id === offer.id ? { ...o, active: !o.active } : o)));
 
   const confirmDelete = (offer: Offer) =>
-    Alert.alert('Delete offer?', `“${offer.title}” will be removed from your page.`, [
+    showAlert('Delete offer?', `“${offer.title}” will be removed from your page.`, [
       { text: 'Keep', style: 'cancel' },
       {
         text: 'Delete',
@@ -260,10 +261,6 @@ export default function WorkspaceOffersScreen() {
 
       <Text variant="title" weight="bold">
         Offers
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        Bundle what you already sell at a special price. Live offers show on your business page,
-        right under your description.
       </Text>
 
       {catalog.length === 0 ? (
@@ -548,7 +545,6 @@ export default function WorkspaceOffersScreen() {
 }
 
 const styles = StyleSheet.create({
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   card: { marginBottom: spacing.md },
   formTitle: { marginBottom: spacing.md },
   field: { marginTop: spacing.sm },

@@ -537,9 +537,8 @@ export default function RegisterScreen() {
       return;
     }
     if (!canSubmit) {
-      // Jump straight to the incomplete step and say what's missing —
-      // Alert.alert is a no-op on web, so inline feedback is the only kind
-      // guaranteed to show everywhere.
+      // Jump straight to the incomplete step and say what's missing — inline
+      // feedback beats a popup here, because it points AT the empty field.
       const target: StepId = name.trim().length <= 1 ? 'basics' : 'category';
       jumpTo(target);
       setStepError(missingFor(target));

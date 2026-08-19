@@ -52,8 +52,8 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
-  // Inline validation message. Alert.alert is a no-op on web (our preview), so
-  // errors are shown on the screen instead of a native popup.
+  // Inline validation message — a sign-in error belongs next to the field that
+  // caused it, not in a popup.
   const [error, setError] = useState<string | null>(null);
 
   const done = () => {

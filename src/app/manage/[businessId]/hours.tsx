@@ -15,7 +15,6 @@ export default function ManageHoursScreen() {
   return (
     <ManageGate
       title="Opening hours"
-      intro="When you’re open. Customers see this on your page, and “Open now” filters run on it."
       need="owner"
       Form={HoursForm}
     />

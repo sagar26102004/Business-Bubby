@@ -5,7 +5,7 @@
  * hub in between that only repeated these links (and a duplicate map button);
  * its tiles now live here directly. Members only.
  */
-import { Alert, StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { getVehicleKind } from '@/domain/catalog';
 import { canAccessService, isBusinessTeamMember } from '@/domain/access';
@@ -18,6 +18,7 @@ import {
 } from '@/features/fleet/BackgroundLocationDisclosure';
 import { Button, Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function WorkspaceFleetScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -80,7 +81,7 @@ export default function WorkspaceFleetScreen() {
       // actually about to be asked for background location.
       const res = await startBackgroundShare(confirm);
       if (!res.ok) {
-        Alert.alert(
+        showAlert(
           'Location permission needed',
           'Allow location access to share your live position.',
         );
@@ -89,7 +90,7 @@ export default function WorkspaceFleetScreen() {
       // `declined` is the driver having just read the disclosure and said no —
       // pointing them at Settings would be arguing with an answer we asked for.
       if (res.background === false && res.reason !== 'web' && res.reason !== 'declined') {
-        Alert.alert(
+        showAlert(
           'Sharing while the app is open',
           'For your vehicle to keep moving when the app is closed, set location access to "Allow all the time" in Settings.',
         );

@@ -18,12 +18,11 @@
  * builds the offers is who decides to promote one.
  */
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { AdCampaign, Offer } from '@/domain/types';
 import {
   AD_PLANS,
-  FREE_REACH_KM,
   adCostPerView,
   campaignGoal,
   campaignNearViews,
@@ -50,6 +49,7 @@ import {
   Text,
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function PromoteScreen() {
   const { businessId, offer: offerParam } = useLocalSearchParams<{
@@ -140,7 +140,7 @@ export default function PromoteScreen() {
       });
       setOfferId(undefined);
       reload();
-      Alert.alert(
+      showAlert(
         'Request sent',
         `We'll review it shortly. Once it's approved, “${chosen.title}” runs for ${plan.days} days and keeps going until at least ${plan.views} people within ${plan.withinKm} km have seen it.`,
       );
@@ -152,7 +152,7 @@ export default function PromoteScreen() {
   };
 
   const confirmStop = (campaign: AdCampaign) =>
-    Alert.alert('Stop this ad?', 'It comes off the Home screen straight away.', [
+    showAlert('Stop this ad?', 'It comes off the Home screen straight away.', [
       { text: 'Keep running', style: 'cancel' },
       {
         text: 'Stop',
@@ -162,7 +162,7 @@ export default function PromoteScreen() {
             await repos.ads.stop(campaign.id);
             reload();
           } catch (err) {
-            Alert.alert('Could not stop it', err instanceof Error ? err.message : 'Try again.');
+            showAlert('Could not stop it', err instanceof Error ? err.message : 'Try again.');
           }
         },
       },
@@ -174,12 +174,6 @@ export default function PromoteScreen() {
 
       <Text variant="title" weight="bold">
         📣 Promote an offer
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        Your live offers already show on the Home screen to people within {FREE_REACH_KM} km.
-        Promoting one puts it in front of everyone else's, carries it as far as anyone is
-        looking, and promises you a set number of views from people close enough to actually
-        come in — we keep it running until they've landed.
       </Text>
 
       {/* ── 1. Which offer ── */}
@@ -250,11 +244,6 @@ export default function PromoteScreen() {
           {/* ── 2. How many people, how close ── */}
           <Text variant="label" weight="semibold" style={styles.sectionLabel}>
             2. How many people should see it?
-          </Text>
-          <Text variant="caption" tone="muted" style={styles.sectionHint}>
-            Every plan shows your card to anyone who looks, however far away. What you're buying
-            is views from people NEAR you — someone 1 km away might walk in this afternoon,
-            someone 100 km away won't — so the tighter the circle, the dearer the view.
           </Text>
           {AD_PLANS.map((p) => {
             const active = planId === p.id;
@@ -483,7 +472,6 @@ function CampaignAudience({ campaign }: { campaign: AdCampaign }) {
 }
 
 const styles = StyleSheet.create({
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   sectionLabel: { marginTop: spacing.lg, marginBottom: spacing.sm },
   card: { marginBottom: spacing.md },
   hint: { marginTop: spacing.xs },
@@ -501,7 +489,6 @@ const styles = StyleSheet.create({
   pickBody: { flex: 1 },
   planHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   planPrice: { alignItems: 'flex-end' },
-  sectionHint: { marginBottom: spacing.md },
   promise: {
     marginTop: spacing.md,
     paddingTop: spacing.md,

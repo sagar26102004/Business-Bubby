@@ -21,8 +21,10 @@ export default function CallScreen() {
   const dismiss = useDismiss(`/business/${businessId}`);
   const { currentUser, signInGuest } = useAuth();
   const [starting, setStarting] = useState(false);
-  // Shown inline rather than through Alert.alert — Alert is a no-op on web, so
-  // a failed start (e.g. guest access switched off) would look like a dead button.
+  // Shown inline rather than as a popup: a failed start (e.g. guest access
+  // switched off) belongs on the screen the user is already looking at.
+  // (`lib/alert.ts` would work too — RN's bare `Alert` would not, it is a
+  // no-op on web.)
   const [startError, setStartError] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useAsync(async () => {

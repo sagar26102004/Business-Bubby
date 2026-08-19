@@ -48,6 +48,7 @@ import { OffersSection } from '@/features/businesses/OffersSection';
 import { liveOffers } from '@/features/businesses/offerUtils';
 import { ProductTile } from '@/features/businesses/ProductTile';
 import { PortfolioGallery } from '@/features/businesses/PortfolioGallery';
+import { ShowcaseLinks } from '@/features/businesses/ShowcaseLinks';
 import { ReviewsSection } from '@/features/businesses/ReviewsSection';
 import { OwnerPicker } from '@/features/businesses/OwnerPicker';
 import { spacing, useColors } from '@/theme/theme';
@@ -242,6 +243,7 @@ export default function BusinessDetailScreen() {
 
   const hasOfferings = groups.length > 0 || (isStall && (business.products?.length ?? 0) > 0);
   const showcase = business.portfolio ?? [];
+  const showcaseLinks = business.showcaseLinks ?? [];
 
   return (
     <Screen scroll>
@@ -401,16 +403,18 @@ export default function BusinessDetailScreen() {
       </View>
 
       {/* ——— 3. Showcase ——— */}
-      {showcase.length > 0 || isMember ? (
+      {showcase.length > 0 || showcaseLinks.length > 0 || isMember ? (
         <>
           <SectionTitle>Work showcase</SectionTitle>
           {showcase.length > 0 ? (
             <PortfolioGallery items={showcase} />
-          ) : (
+          ) : showcaseLinks.length === 0 ? (
             <Text variant="label" tone="muted">
               Show customers your past work — photos and videos appear here.
             </Text>
-          )}
+          ) : null}
+          {/* Where the rest of the work lives — a Drive folder, an Instagram grid. */}
+          <ShowcaseLinks links={showcaseLinks} />
           {isMember ? (
             <Button
               title="🖼️ Manage showcase"

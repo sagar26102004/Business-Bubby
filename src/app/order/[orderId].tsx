@@ -11,7 +11,7 @@
  *    with the bill one tap away once issued.
  */
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import QRCode from 'react-native-qrcode-svg';
 import type { Order, OrderLine } from '@/domain/types';
@@ -45,6 +45,7 @@ import {
 } from '@/features/orders/orderUtils';
 import { formatMoney } from '@/lib/money';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function OrderDetailScreen() {
   const { orderId } = useLocalSearchParams<{ orderId: string }>();
@@ -128,7 +129,7 @@ export default function OrderDetailScreen() {
       setMessage('');
       reload();
     } catch (err) {
-      Alert.alert('Something went wrong', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Something went wrong', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setBusy(false);
     }

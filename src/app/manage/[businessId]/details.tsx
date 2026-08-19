@@ -17,7 +17,6 @@ export default function ManageDetailsScreen() {
   return (
     <ManageGate
       title="Name & details"
-      intro="Your name, your one-liner and the photo behind them. Changes show on your business page as soon as you save."
       need="owner"
       what="name & details"
       Form={DetailsForm}
@@ -87,10 +86,6 @@ function DetailsForm({ business, save, saving }: ManageFormProps) {
       <Text variant="label" weight="semibold" style={styles.label}>
         Display picture
       </Text>
-      <Text variant="caption" tone="muted" style={styles.help}>
-        Optional. Shown as the background behind your name — a photo of the
-        place itself works best.
-      </Text>
       <PhotosField label="" value={cover} onChange={setCover} max={1} />
 
       <Button title="Save" onPress={submit} loading={saving} style={styles.save} />
@@ -101,6 +96,5 @@ function DetailsForm({ business, save, saving }: ManageFormProps) {
 const styles = StyleSheet.create({
   multiline: { minHeight: 96, textAlignVertical: 'top' },
   label: { marginTop: spacing.md, marginBottom: spacing.xs },
-  help: { marginBottom: spacing.md },
   save: { marginTop: spacing.lg },
 });

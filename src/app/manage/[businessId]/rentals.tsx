@@ -15,7 +15,6 @@ export default function ManageRentalsScreen() {
   return (
     <ManageGate
       title="For rent"
-      intro="What you rent out, and what it goes for. Set the rate per day or per month in Availability."
       need="offerings"
       what="rentals"
       Form={RentalsForm}

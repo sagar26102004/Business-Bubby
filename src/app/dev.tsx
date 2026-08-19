@@ -8,7 +8,7 @@
  * render in production, so the URL is dead even though the route file ships.
  */
 import { useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import type { GeoPoint, ListingType } from '@/domain/types';
 import type { NewBusinessInput } from '@/data/repositories';
@@ -18,6 +18,7 @@ import { DEV_TOOLS_ENABLED } from '@/lib/devTools';
 import { useAsync } from '@/lib/useAsync';
 import { Button, Card, Input, Screen, Tag, Text } from '@/components/ui';
 import { spacing } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 const rand = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
 
@@ -91,7 +92,7 @@ function DevToolsScreen() {
       // On the mock this is a harmless re-select of the same user.
       await signInAs(user.id);
       reloadUsers();
-      Alert.alert('Account added', `Created "${user.name}" and switched to them.`);
+      showAlert('Account added', `Created "${user.name}" and switched to them.`);
     } finally {
       setWorking(false);
     }
@@ -99,7 +100,7 @@ function DevToolsScreen() {
 
   const requireUser = (): string | null => {
     if (!currentUser) {
-      Alert.alert('Sign in first', 'Pick an account under Identity above to own the business.');
+      showAlert('Sign in first', 'Pick an account under Identity above to own the business.');
       return null;
     }
     return currentUser.id;
@@ -113,7 +114,7 @@ function DevToolsScreen() {
       const center = await repos.places.getCurrentPlace();
       const created = await repos.businesses.create(randomBusiness(center.point), ownerId);
       reloadBiz();
-      Alert.alert('Business added', `"${created.name}" created near you, owned by ${currentUser?.name}.`);
+      showAlert('Business added', `"${created.name}" created near you, owned by ${currentUser?.name}.`);
     } finally {
       setWorking(false);
     }
@@ -129,7 +130,7 @@ function DevToolsScreen() {
         await repos.businesses.create(randomBusiness(center.point), ownerId);
       }
       reloadBiz();
-      Alert.alert('Added', '5 random businesses created near you.');
+      showAlert('Added', '5 random businesses created near you.');
     } finally {
       setWorking(false);
     }
@@ -139,7 +140,7 @@ function DevToolsScreen() {
     resetData();
     reloadUsers();
     reloadBiz();
-    Alert.alert('Reset', 'Demo data restored and signed out.');
+    showAlert('Reset', 'Demo data restored and signed out.');
     router.replace('/');
   };
 

@@ -11,7 +11,7 @@
  *  - Non-members are turned away.
  */
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { commerceVocab, getVehicleKind } from '@/domain/catalog';
@@ -36,6 +36,7 @@ import {
   Text,
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function WorkspaceScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -141,6 +142,23 @@ export default function WorkspaceScreen() {
   // How many offers a customer is actually seeing right now.
   const liveOfferCount = liveOffers(business).length;
 
+  // What the showcase tile leads with: the media on the page, or the links
+  // pointing at the rest of the work when there is no uploaded media yet.
+  const showcase = business.portfolio ?? [];
+  const showcasePhotos = showcase.filter((p) => p.kind === 'photo').length;
+  const showcaseVideos = showcase.length - showcasePhotos;
+  const showcaseLinkCount = business.showcaseLinks?.length ?? 0;
+  const showcaseSummary = showcase.length
+    ? [
+        showcasePhotos ? `${showcasePhotos} photo${showcasePhotos === 1 ? '' : 's'}` : '',
+        showcaseVideos ? `${showcaseVideos} video${showcaseVideos === 1 ? '' : 's'}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : showcaseLinkCount
+      ? `${showcaseLinkCount} link${showcaseLinkCount === 1 ? '' : 's'} to your work`
+      : 'Show customers your past work';
+
   // The Promote tile leads with whatever the owner most needs to know: an ad on
   // air, a request still waiting, or (nothing yet) the pitch itself.
   const runningAds = data.campaigns.filter((c) => isCampaignRunning(c));
@@ -172,7 +190,7 @@ export default function WorkspaceScreen() {
         const res = await startBackgroundShare(confirm);
         if (!res.ok) {
           setSharingOn(false);
-          Alert.alert(
+          showAlert(
             'Location permission needed',
             'Allow location access to share your live position with the owner and customers.',
           );
@@ -181,7 +199,7 @@ export default function WorkspaceScreen() {
         // `declined` is the driver having just read the disclosure and said no
         // — pointing them at Settings would argue with an answer we asked for.
         if (res.background === false && res.reason !== 'web' && res.reason !== 'declined') {
-          Alert.alert(
+          showAlert(
             'Sharing while the app is open',
             'For your vehicle to keep moving on the map when the app is closed, set location access to "Allow all the time" in Settings.',
           );
@@ -192,7 +210,7 @@ export default function WorkspaceScreen() {
       await repos.tracking.setSharing(business.id, currentUser.id, value);
     } catch {
       setSharingOn(!value);
-      Alert.alert('Could not update', 'Please try again.');
+      showAlert('Could not update', 'Please try again.');
     } finally {
       setSharingBusy(false);
     }
@@ -344,6 +362,15 @@ export default function WorkspaceScreen() {
           label: 'Fleet & live location',
           sub: vehicles.length ? `${vehicles.length} vehicle${vehicles.length === 1 ? '' : 's'}` : 'Live tracking',
           href: `${base}/fleet` as Href,
+        },
+        // The showcase is the business page's own gallery, so it has no
+        // service grant of its own — the screen lets any team member in, the
+        // same rule as the "Manage showcase" button on the page itself.
+        {
+          icon: '🖼️',
+          label: 'Work showcase',
+          sub: showcaseSummary,
+          href: `/showcase/${business.id}` as Href,
         },
       ],
     },

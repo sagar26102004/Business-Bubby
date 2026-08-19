@@ -9,7 +9,7 @@
  * channel. Audio itself is simulated until the WebRTC backend is wired in.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Alert, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import type { Call, CallParticipant } from '@/domain/types';
@@ -17,6 +17,7 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useCallAudio, type CallAudioState } from '@/features/calls/useCallAudio';
 import { Avatar, Button, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 const POLL_MS = 1500;
 
@@ -117,7 +118,7 @@ export default function CallSessionScreen() {
     try {
       setCall(await fn());
     } catch (err) {
-      Alert.alert('Call', err instanceof Error ? err.message : 'Something went wrong.');
+      showAlert('Call', err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
       setBusy(false);
     }

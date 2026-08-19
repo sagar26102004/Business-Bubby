@@ -12,7 +12,7 @@
  * the repositories.
  */
 import { useCallback } from 'react';
-import { Alert, Image, Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { ProductItem, ProductMessage } from '@/domain/types';
 import { getSubcategory } from '@/domain/catalog';
@@ -29,6 +29,7 @@ import {
   Text,
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function StallAdminScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -69,7 +70,7 @@ export default function StallAdminScreen() {
         }
         return;
       }
-      Alert.alert('Remove item?', `"${product.name}" will be taken off your stall for good.`, [
+      showAlert('Remove item?', `"${product.name}" will be taken off your stall for good.`, [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: () => void doRemove() },
       ]);
@@ -136,10 +137,6 @@ export default function StallAdminScreen() {
 
       <Text variant="title" weight="bold">
         {business.name}
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        Your selling desk — accept offers, pin the messages that matter, and mark
-        or remove items. Edit names, prices and photos in Manage.
       </Text>
 
       <View style={styles.topActions}>
@@ -375,7 +372,6 @@ function ProductAdminCard({
 }
 
 const styles = StyleSheet.create({
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   topActions: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.lg },
   topBtn: { flex: 1 },
   section: { marginTop: spacing.md, marginBottom: spacing.md },

@@ -10,6 +10,7 @@ import { Pressable, StyleSheet, Text as RNText, View } from 'react-native';
 import { Stack, useNavigation, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { isRunningInExpoGo } from 'expo';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '@/components/ui';
 import { IS_EPHEMERAL_BACKEND } from '@/data/backend';
@@ -36,8 +37,10 @@ import '@/lib/backgroundLocation';
  * is a no-op on web, so nothing needs a platform guard.
  */
 void SplashScreen.preventAutoHideAsync().catch(() => {});
-// iOS can cross-fade instead of cutting; Android ignores this.
-SplashScreen.setOptions({ duration: 300, fade: true });
+// iOS can cross-fade instead of cutting; Android ignores this. Expo Go owns its
+// own splash and cannot be customised, so asking there only logs a warning —
+// skipped rather than left to clutter the dev console on every reload.
+if (!isRunningInExpoGo()) SplashScreen.setOptions({ duration: 300, fade: true });
 
 /**
  * The longest we will EVER hold it.

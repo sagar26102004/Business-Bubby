@@ -8,7 +8,7 @@
  * without being able to open the Billing tool, and vice versa.
  */
 import { useEffect, useState } from 'react';
-import { Alert, StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, Switch, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import type { Employee } from '@/domain/types';
@@ -26,6 +26,7 @@ import {
   Text,
 } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function WorkspaceAccessScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -118,10 +119,10 @@ export default function WorkspaceAccessScreen() {
           return repos.employees.update(e.id, patch);
         }),
       );
-      Alert.alert('Saved', 'Team access updated.');
+      showAlert('Saved', 'Team access updated.');
       dismiss();
     } catch (err) {
-      Alert.alert('Could not save', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not save', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSaving(false);
     }

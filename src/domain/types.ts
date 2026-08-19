@@ -219,12 +219,48 @@ export interface ChatMessage {
 export interface PortfolioItem {
   id: string;
   kind: 'photo' | 'video';
-  /** Image URL for photos; the watch link (YouTube/Vimeo/…) for videos. */
+  /**
+   * The uploaded file's public URL. LEGACY items may instead hold a watch link
+   * (YouTube/Vimeo/…) from the days when showcase media was pasted by hand —
+   * `isPlayableVideo` (domain/showcase.ts) tells the two apart.
+   */
   url: string;
   /** Preview image for videos. Photos preview with `url` itself. */
   thumbnailUrl?: string;
+  /**
+   * LEGACY — the showcase used to ask for a title and a caption per piece. It
+   * doesn't any more (the photo speaks for itself), so nothing writes these;
+   * they stay readable for the seeded demo data.
+   */
   title?: string;
   description?: string;
+  createdAt: string;
+}
+
+/**
+ * Somewhere ELSE the business's work lives — a Google Drive folder of wedding
+ * albums, an Instagram grid of haircuts, a YouTube channel.
+ *
+ * We host only a handful of files per listing (MAX_SHOWCASE_PHOTOS /
+ * MAX_SHOWCASE_VIDEOS), which is plenty for a cafe's FSSAI certificate but
+ * nowhere near a wedding designer's portfolio. Those businesses point at the
+ * gallery they already keep, and the business page renders it as a chip that
+ * opens the link. `kind` is derived from the URL's host, so nobody types a
+ * label.
+ */
+export type ShowcaseLinkKind =
+  | 'drive'
+  | 'photos'
+  | 'instagram'
+  | 'youtube'
+  | 'facebook'
+  | 'pinterest'
+  | 'website';
+
+export interface ShowcaseLink {
+  id: string;
+  kind: ShowcaseLinkKind;
+  url: string;
   createdAt: string;
 }
 
@@ -880,6 +916,8 @@ export interface Business {
   offers?: Offer[];
   /** Work showcase — photos & videos of past work, shown on the listing. */
   portfolio?: PortfolioItem[];
+  /** Where the REST of the work lives — Drive folder, Instagram, YouTube. */
+  showcaseLinks?: ShowcaseLink[];
   /** Services offered with prices, for service providers. */
   services?: ServiceItem[];
   /**

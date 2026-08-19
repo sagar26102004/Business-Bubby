@@ -17,7 +17,9 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Linking, Platform, StyleSheet, View } from 'react-native';
-import * as Notifications from 'expo-notifications';
+// Type-only — see ./notificationsModule for why this is never a value import.
+import type * as Notifications from 'expo-notifications';
+import { getNotifications } from './notificationsModule';
 import * as ExpoLinking from 'expo-linking';
 import { Button, Card, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
@@ -98,12 +100,16 @@ export function CallAlertsCheck() {
 
   const run = useCallback(() => {
     if (Platform.OS === 'web') return;
+    // Expo Go on Android can't load the notifications module at all, so there
+    // is nothing here to report on.
+    const N = getNotifications();
+    if (!N) return;
     void (async () => {
       const [permission, channel, categories, fullScreen, overlay, battery, token, entries] =
         await Promise.all([
-          Notifications.getPermissionsAsync().catch(() => null),
-          Notifications.getNotificationChannelAsync(CALL_CHANNEL_ID).catch(() => null),
-          Notifications.getNotificationCategoriesAsync().catch(() => []),
+          N.getPermissionsAsync().catch(() => null),
+          N.getNotificationChannelAsync(CALL_CHANNEL_ID).catch(() => null),
+          N.getNotificationCategoriesAsync().catch(() => []),
           canUseFullScreenIntent(),
           canDrawOverlays(),
           isIgnoringBatteryOptimizations(),

@@ -15,11 +15,6 @@ export default function ManageProductsScreen() {
   return (
     <ManageGate
       title={(b) => (b.type === 'item' ? 'Items for sale' : 'Products')}
-      intro={(b) =>
-        b.type === 'item'
-          ? 'Everything in your stall — buyers browse these and send you a purchase request.'
-          : 'What you sell, with a price on each. Customers pick from these when they order, and your team quick-adds them onto bills.'
-      }
       need="offerings"
       what="products"
       Form={ProductsForm}

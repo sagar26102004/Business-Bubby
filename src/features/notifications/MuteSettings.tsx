@@ -23,12 +23,11 @@ interface MuteSettingsProps {
   /** Scope the toggles to one business; omit for "everywhere". */
   businessId?: string;
   /** Shown under the heading, e.g. the business name. */
-  scopeLabel?: string;
   /** Only offer these families (a stall owner has no appointments). */
   categories?: NotificationCategory[];
 }
 
-export function MuteSettings({ businessId, scopeLabel, categories }: MuteSettingsProps) {
+export function MuteSettings({ businessId, categories }: MuteSettingsProps) {
   const repos = useRepositories();
   const colors = useColors();
   const { currentUser, setCurrentUser, isGuest } = useAuth();
@@ -70,11 +69,6 @@ export function MuteSettings({ businessId, scopeLabel, categories }: MuteSetting
 
   return (
     <View>
-      <Text variant="caption" tone="muted" style={styles.intro}>
-        Turn a family off and it stops reaching your Alerts tab and the badge
-        {scopeLabel ? ` for ${scopeLabel}` : ''}. Nothing is lost — orders, calls and messages are
-        all still in the workspace whenever you want to look.
-      </Text>
 
       {list.map((cat) => {
         // A family silenced everywhere stays visibly off on a business screen,
@@ -106,7 +100,6 @@ export function MuteSettings({ businessId, scopeLabel, categories }: MuteSetting
 }
 
 const styles = StyleSheet.create({
-  intro: { marginBottom: spacing.lg },
   card: { marginBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   icon: { fontSize: 22 },

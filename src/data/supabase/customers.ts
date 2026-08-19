@@ -93,7 +93,10 @@ export function createSupabaseCustomers(): CustomerRepository {
       chatRows.forEach((r) => {
         const pid = r.participant_id as string;
         const m = r.data as ChatMessage;
-        const name = pid === 'guest' ? 'Guest' : names.get(pid) ?? pid;
+        // Anonymous identities (guest chat, guest orders) get a profile row with
+        // an EMPTY name, so `??` isn't enough — an empty string would render as
+        // a blank customer. Anything unnamed reads as "Guest".
+        const name = pid === 'guest' ? 'Guest' : names.get(pid) || 'Guest';
         touch(pid, name, m.createdAt).chatCount += 1;
       });
 

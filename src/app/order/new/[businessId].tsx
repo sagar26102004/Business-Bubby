@@ -5,7 +5,7 @@
  * it can provide — see /order/[orderId].
  */
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { OrderFulfillment } from '@/domain/types';
 import type { NewOrderLineInput } from '@/data/repositories';
@@ -16,13 +16,14 @@ import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Text } 
 import { FULFILLMENT_META, totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { OfferingGroup, keyOf, type Offering } from '@/features/orders/OfferingPicker';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { showAlert } from '@/lib/alert';
 
 export default function NewOrderScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
   const colors = useColors();
-  const { currentUser } = useAuth();
+  const { currentUser, signInGuest } = useAuth();
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [offers, setOffers] = useState<Record<string, string>>({});
@@ -136,14 +137,16 @@ export default function NewOrderScreen() {
         router.replace(`/order/${order.id}`);
         return;
       }
+      // A logged-out customer acts as a real (anonymous) identity, the same way
+      // guest chat and guest calls do — see `signInGuest`. Without it the row
+      // carries no customer_id and RLS (`customer_id = auth.uid()`) refuses it.
+      const me = currentUser ?? (await signInGuest());
       const order = await repos.orders.create({
         businessId: business.id,
         // On behalf of a walk-in: the member types who it's for; it's still a
         // guest-side order (no account), just placed from the counter.
-        customerId: onBehalf ? 'guest' : currentUser?.id ?? 'guest',
-        customerName: onBehalf
-          ? onBehalfName.trim() || 'Walk-in'
-          : currentUser?.name ?? 'Guest',
+        customerId: onBehalf ? 'guest' : me.id,
+        customerName: onBehalf ? onBehalfName.trim() || 'Walk-in' : me.name || 'Guest',
         lines,
         fulfillment: asksFulfillment ? (fulfillment ?? undefined) : undefined,
         tableNumber: showTables && tableChoice !== 'auto' ? tableChoice : undefined,
@@ -152,7 +155,7 @@ export default function NewOrderScreen() {
       });
       router.replace(`/order/${order.id}`);
     } catch (err) {
-      Alert.alert('Could not order', err instanceof Error ? err.message : 'Try again.');
+      showAlert('Could not order', err instanceof Error ? err.message : 'Try again.');
     } finally {
       setSubmitting(false);
     }
@@ -194,13 +197,6 @@ export default function NewOrderScreen() {
               : vocab.mode === 'rent'
                 ? `Rent from ${business.name}`
                 : `Order from ${business.name}`}
-      </Text>
-      <Text tone="muted" style={styles.subtitle}>
-        {openOrder
-          ? 'You have an open dine-in order here — anything you pick is added to it, with one bill at the end.'
-          : isStall
-            ? 'Pick what you want — you can offer your own price and the seller accepts or counters.'
-            : 'Pick what you want — the business confirms what it can provide and you get the bill.'}
       </Text>
 
       {onBehalf ? (
@@ -438,7 +434,6 @@ function TableChip({
 }
 
 const styles = StyleSheet.create({
-  subtitle: { marginTop: spacing.xs, marginBottom: spacing.lg },
   group: { marginBottom: spacing.lg },
   groupTitle: { marginBottom: spacing.md },
   fulfillmentRow: { flexDirection: 'row', gap: spacing.md },
