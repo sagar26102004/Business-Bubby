@@ -11,6 +11,16 @@
   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
   <!-- The vibration that comes with a ring. -->
   <uses-permission android:name="android.permission.VIBRATE" />
+  <!--
+    What lets a call OUTLIVE the call screen. Android suspends, then kills, an
+    app that goes to the background — locking the phone or swiping it out of
+    Recents used to take the WebRTC session down with it mid-conversation. A
+    foreground service is the only sanctioned way to keep running, and from
+    Android 14 the microphone one additionally needs its own permission (the
+    generic FOREGROUND_SERVICE is no longer enough on its own).
+  -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
   <application>
     <!--
@@ -66,5 +76,24 @@
     <receiver
       android:name="expo.modules.callnotification.CallActionReceiver"
       android:exported="false" />
+
+    <!--
+      Keeps a call running once the app leaves the screen.
+
+      android:stopWithTask="false" IS THE POINT. The default is true, which
+      means swiping the app out of Recents destroys the service along with the
+      task — the exact case this service exists to survive. With it false, the
+      Activity dies and the process (and with it the JS engine, the call poll
+      and the WebRTC session) keeps going until the call actually ends.
+
+      foregroundServiceType must ALSO be declared here, not only passed to
+      startForeground(): Android 14 cross-checks the two and throws
+      MissingForegroundServiceTypeException when the manifest doesn't say so.
+    -->
+    <service
+      android:name="expo.modules.callnotification.OngoingCallService"
+      android:exported="false"
+      android:stopWithTask="false"
+      android:foregroundServiceType="microphone" />
   </application>
 </manifest>

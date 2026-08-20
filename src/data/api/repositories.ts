@@ -280,6 +280,8 @@ export function createApiCalls(): CallRepository {
     leave: (callId, participantId) =>
       http.post<Call>(`/calls/${seg(callId)}/leave`, { participantId }),
     getIncomingForUser: (userId) => http.get<Call | null>(`/calls/incoming/${seg(userId)}`),
+    heartbeat: (callId, participantId) =>
+      http.post<Call | null>(`/calls/${seg(callId)}/heartbeat`, { participantId }),
     listForBusiness: (businessId, sinceIso) =>
       http.get<Call[]>(
         `/calls/business/${seg(businessId)}${sinceIso ? `?since=${encodeURIComponent(sinceIso)}` : ''}`,

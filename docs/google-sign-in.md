@@ -87,16 +87,26 @@ Project `mzxslzouzmiswnrolcaq`.
 
    ```
    localo://auth-callback
-   localo://*
+   localo://**
    http://localhost:8081/auth-callback
-   http://localhost:8081/*
+   http://localhost:8081/**
    ```
 
    The two device entries are the ones that matter for release; the localhost pair is only for the
    web preview and can be dropped later. If you preview on a LAN address rather than `localhost`
    (`http://192.168.x.x:8081`), add that too — `Linking.createURL` builds the redirect from
    whatever origin the dev server is serving.
-3. Leave **Site URL** as it is. This flow never uses it; it only matters for email links.
+
+   Use `**`, not `*`. Supabase's single `*` does not match across a `/`, and
+   `Linking.createURL('/auth-callback')` can emit a triple-slash `localo:///auth-callback` on a
+   device — which `localo://*` would reject.
+3. **Site URL** — set it to `localo://auth-callback`.
+
+   > This is not cosmetic. When Supabase is handed a `redirect_to` that is **not** on the list
+   > above, it does not error — it silently redirects to the Site URL instead. Left at the
+   > Supabase default `http://localhost:3000`, a device that misses the allowlist lands on
+   > "this site can't be reached" with nothing explaining why. Pointing Site URL at the app scheme
+   > makes that failure land somewhere real.
 
 ---
 

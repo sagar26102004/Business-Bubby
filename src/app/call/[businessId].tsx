@@ -9,6 +9,7 @@ import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import { useAuth, useRepositories } from '@/data/DataProvider';
+import { useCallSession } from '@/features/calls/CallSessionContext';
 import { useAsync } from '@/lib/useAsync';
 import { Avatar, Button, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
@@ -20,6 +21,7 @@ export default function CallScreen() {
   const router = useRouter();
   const dismiss = useDismiss(`/business/${businessId}`);
   const { currentUser, signInGuest } = useAuth();
+  const { enter } = useCallSession();
   const [starting, setStarting] = useState(false);
   // Shown inline rather than as a popup: a failed start (e.g. guest access
   // switched off) belongs on the screen the user is already looking at.
@@ -57,6 +59,8 @@ export default function CallScreen() {
       // without a sign-up form, while they stay a guest everywhere else.
       const me = currentUser ?? (await signInGuest());
       const call = await repos.calls.start(business.id, { id: me.id, name: me.name });
+      // The provider owns the call from here; the screen is only a view of it.
+      enter(call.id);
       router.replace(`/call/session/${call.id}`);
     } catch (err) {
       setStartError(err instanceof Error ? err.message : 'Could not start the call. Try again.');

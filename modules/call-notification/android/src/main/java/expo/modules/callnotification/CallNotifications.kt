@@ -43,6 +43,7 @@ object CallNotifications {
 
   private const val PREFS = "localo.callNotification"
   private const val KEY_ANSWER_URI = "answerUriTemplate"
+  private const val KEY_PENDING_ANSWER = "pendingAnswer"
   private const val KEY_DECLINE_URL = "declineUrl"
   private const val KEY_PUSH_TOKEN = "pushToken"
 
@@ -85,6 +86,45 @@ object CallNotifications {
       .edit()
       .putString(KEY_ANSWER_URI, template)
       .apply()
+  }
+
+  /**
+   * Remember that the user pressed ANSWER, so the app can act on it once it is
+   * running.
+   *
+   * ⚠️ THIS IS THE ANSWER, NOT THE DEEP LINK. Answering used to be expressed
+   * ONLY as a URL — open the app at /call/session/<id>?answer=1 and let the
+   * screen there join. That makes picking up a call depend on a cold-start deep
+   * link resolving through the JS router, and when it doesn't, the app opens on
+   * the home screen with the call still ringing: pressing the green button
+   * looks like it did nothing. The URL is now an optimisation. THIS is the
+   * instruction, and JS acts on it wherever it lands.
+   *
+   * Stamped with the time so a stale one can't answer a call that ended while
+   * the app was starting — see takePendingAnswer.
+   */
+  fun storePendingAnswer(context: Context, callId: String) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+      .edit()
+      .putString(KEY_PENDING_ANSWER, "$callId|${System.currentTimeMillis()}")
+      .apply()
+  }
+
+  /**
+   * Read the pending answer and CLEAR it, so one press answers exactly one
+   * call. Returns null when there isn't one, or when it is older than the ring
+   * window — a call nobody got to in 60 seconds is over, and joining it on the
+   * next launch would be a ghost.
+   */
+  fun takePendingAnswer(context: Context): String? {
+    val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    val raw = prefs.getString(KEY_PENDING_ANSWER, null) ?: return null
+    prefs.edit().remove(KEY_PENDING_ANSWER).apply()
+    val parts = raw.split("|")
+    if (parts.size != 2) return null
+    val at = parts[1].toLongOrNull() ?: return null
+    if (System.currentTimeMillis() - at > 60_000L) return null
+    return parts[0].ifEmpty { null }
   }
 
   fun answerUriFor(context: Context, callId: String): String? =

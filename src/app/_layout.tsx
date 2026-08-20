@@ -15,7 +15,9 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { Icon } from '@/components/ui';
 import { IS_EPHEMERAL_BACKEND } from '@/data/backend';
 import { DataProvider, useAuth } from '@/data/DataProvider';
+import { CallSessionProvider } from '@/features/calls/CallSessionContext';
 import { IncomingCallGate } from '@/features/calls/IncomingCallGate';
+import { OngoingCallBar } from '@/features/calls/OngoingCallBar';
 import { PushRegistrar } from '@/features/notifications/PushRegistrar';
 import { CartProvider } from '@/features/orders/CartContext';
 import { spacing, useColors } from '@/theme/theme';
@@ -200,6 +202,9 @@ function ColdStartRedirect() {
   return null;
 }
 
+/** The navigator fills whatever the ongoing-call bar leaves. */
+const styles = StyleSheet.create({ root: { flex: 1 } });
+
 export default function RootLayout() {
   const colors = useColors();
 
@@ -208,7 +213,14 @@ export default function RootLayout() {
       <DataProvider>
         {/* Menu picks survive the menu ⇄ your-order round trip. */}
         <CartProvider>
+        {/* A live call belongs ABOVE the navigator, not inside a screen —
+            otherwise navigating away unmounts the call. See CallSessionContext. */}
+        <CallSessionProvider>
         <StatusBar style="dark" />
+        {/* Wrapping the navigator lets the ongoing-call bar push it down rather
+            than float over the header's back button. */}
+        <View style={styles.root}>
+        <OngoingCallBar />
         <Stack
           screenOptions={{
             header: ({ options, route }) => (
@@ -304,14 +316,18 @@ export default function RootLayout() {
           <Stack.Screen name="sign-in" options={{ presentation: 'modal', title: 'Sign in' }} />
           <Stack.Screen name="auth-callback" options={{ title: 'Signing in' }} />
         </Stack>
+        </View>
         {/* Keeps the splash up until the session is restored. */}
         <SplashGate />
         {/* On a reload, send deep routes back to Home (mock/auth reset). */}
         <ColdStartRedirect />
-        {/* Rings business members on incoming voice calls, on any screen. */}
+        {/* Rings business members on incoming voice calls, on any screen.
+            Outside the wrapper on purpose: a full-screen incoming call must
+            cover the ongoing-call bar too, not sit underneath it. */}
         <IncomingCallGate />
         {/* Registers this device for push, so a CLOSED app still gets called. */}
         <PushRegistrar />
+        </CallSessionProvider>
         </CartProvider>
       </DataProvider>
     </SafeAreaProvider>

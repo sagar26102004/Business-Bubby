@@ -657,6 +657,27 @@ export interface CallRepository {
    */
   listForBusiness(businessId: string, sinceIso?: string): Promise<Call[]>;
   /**
+   * "I am still on this call" — renew a joined participant's liveness.
+   *
+   * ⚠️ THIS IS WHAT ENDS A CALL NOBODY HUNG UP. Every other way out of a call
+   * is a message the leaving device sends, and a device that is killed mid-call
+   * — the OS reclaiming memory, a battery dying, an app force-stopped from
+   * Recents — sends nothing. The other side was then left on a call with no
+   * audio and no way to learn it was over, short of hanging up themselves.
+   *
+   * So presence is a lease, not a fact: the client renews it every few seconds
+   * while joined, the SERVER stamps `aliveAt` with its own clock (never the
+   * device's — see migration 0010), and the lazy sweep on read marks a
+   * participant whose lease expired as `left`, applying exactly the same
+   * end-of-call rules as a deliberate `leave`.
+   *
+   * Best-effort by design: returns the call when the lease was renewed, `null`
+   * when there was nothing to renew (call gone, already ended, or not a
+   * participant). A failed heartbeat must never surface to the user — the next
+   * one, moments later, is the retry.
+   */
+  heartbeat(callId: string, participantId: string): Promise<Call | null>;
+  /**
    * Mint a short-lived access token so a joined participant can connect to the
    * call's REAL audio room (LiveKit; room = `call_<callId>`, identity = the
    * user id). Returns the token plus the media-server URL to connect to. The

@@ -88,3 +88,69 @@ re-derivation from the Supabase diff is required:
 
 <!-- No pending entries. Append new [SYNC-NNN] blocks above this line. -->
 
+## [SYNC-037] Voice calls: participant liveness lease (dead-peer timeout)
+
+- **Area:** CallRepository / calls
+- **Why:** hanging up was only ever a MESSAGE the leaving device sent. A device killed
+  mid-call — OS reclaiming memory, force-stop from Recents, flat battery — sent nothing, so
+  its participant stayed `joined` for ever: the other side sat on "On call" with no audio,
+  and the row never reached `ended` (it stayed `active` in the DB, polluting the call log).
+- **Supabase change:** `src/data/supabase/calls.ts`
+  - new `PRESENCE_TIMEOUT_MS = 45_000`;
+  - new `dropExpiredParticipants(call, createdAt)`: for an **active** call, every
+    participant with `state === 'joined'` whose lease has expired becomes `state: 'left'` +
+    `leftAt`. If that leaves no joined customer OR no joined business member, the call
+    becomes `ended` + `endedAt` — i.e. exactly the same end-of-call rules `leave()` applies.
+  - ⚠️ **Expiry is judged on `aliveAt` ONLY, never on `joinedAt`.** `joinedAt` is written by
+    the participant's own device, and comparing a device timestamp against the server's
+    clock is precisely the bug migration 0010 fixed for ring expiry — here a phone running
+    45s slow would be hung up on the instant it joined. A participant with NO `aliveAt` yet
+    is judged on the CALL's server-side age (`created_at`) instead, so everyone gets a full
+    timeout's grace to produce a first lease.
+  - `sweepOne()` calls it after the ring-timeout branch (and returns early when the
+    ring-timeout branch already fired), persisting only when something changed;
+  - `join()` deliberately sets `p.aliveAt = undefined` — it runs on the device, and only a
+    server-stamped lease is trustworthy. The client's first heartbeat fires immediately on
+    joining and opens the lease properly.
+  - new `heartbeat()` — see below.
+- **Domain/interface (shared, already done):** `CallParticipant.aliveAt?: string` in
+  `src/domain/types.ts`; `heartbeat(callId, participantId): Promise<Call | null>` added to
+  `CallRepository` in `src/data/repositories.ts` (read the doc comment there — it is the spec).
+- **Mock (shared, already done):** `src/data/mock/mockRepositories.ts` — same
+  `PRESENCE_TIMEOUT_MS`, `dropExpiredParticipants(call, now)` called from `sweepCalls()`,
+  and a `heartbeat()` method. **This is the behavioural spec.** It DOES stamp `aliveAt` in
+  `join()` and falls back to `joinedAt`, which is not a divergence: the mock runs in one
+  process, so there is only one clock and the distinction the real backends must draw
+  does not exist.
+- **Path B — backend/:** in `backend/src/services/calls.ts`
+  - port `PRESENCE_TIMEOUT_MS` + `dropExpiredParticipants` into the existing lazy sweep, so
+    every call read runs it. Path B talks to Postgres directly, so "the server clock" is
+    simply `new Date()` on the server — no `serverNow()` offset machinery needed. Keep the
+    `aliveAt`-only rule and the call-age fallback: Path B's clients are the same phones, so
+    `joinedAt` is no more trustworthy there than it is on Path A.
+  - add `heartbeat(callId, participantId)`: load the call; return `null` unless its status is
+    `ringing`/`active` AND that participant exists AND `state === 'joined'` (a ringing,
+    left or declined participant must NOT be able to renew — that would let someone the
+    sweep just dropped un-leave themselves); otherwise set `aliveAt = new Date().toISOString()`,
+    persist, sweep, and return the call.
+  - router: `POST /calls/:callId/heartbeat` with body `{ participantId }`, thin as usual.
+  - **authz** (`backend/src/authz.ts` rules apply): the caller must BE that participant —
+    `participantId === req.user.id` — and be on the call. Do not accept a participantId for
+    someone else; a spoofed heartbeat would keep a dead device's seat alive for ever.
+  - Prisma: no schema change — `aliveAt` lives inside the `data` jsonb document.
+- **Path B — src/data/api/ (already done):** `repositories.ts` already has
+  `heartbeat: (callId, participantId) => http.post<Call | null>(\`/calls/${seg(callId)}/heartbeat\`, { participantId })`.
+  Nothing further unless the endpoint path changes.
+- **DB/migration:** `supabase/migrations/0021_call_heartbeat.sql` — a `security invoker`
+  `call_heartbeat(p_call_id uuid, p_participant_id text)` RPC that stamps `aliveAt` at ONE
+  jsonb path with `now()`. **Path A only**: it exists because browser clients write the whole
+  `data` document (two concurrent heartbeats would clobber each other) and because the client
+  must not be the one timestamping. Path B holds a privileged connection and serialises its
+  own writes, so it should update the document in its service and **not** call this RPC.
+  The migration is still shared DB state — apply it once; it is harmless to Path B.
+- **Client (shared, already done):** `src/features/calls/CallSessionContext.tsx` beats every
+  `HEARTBEAT_MS = 10_000` while joined (a quarter of the timeout, so three misses are
+  tolerated), best-effort, and folds the returned call into state.
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; then two clients on one
+  call — kill one outright (force-stop, not hang up) and the other must go to "Call ended"
+  within ~45–60s, with the row's status `ended` in the DB.

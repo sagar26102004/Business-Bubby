@@ -136,6 +136,34 @@ class CallNotificationModule : Module() {
     AsyncFunction("openBatterySettings") {
       CallNotifications.openBatterySettings(context)
     }
+
+    /**
+     * The call the user pressed ANSWER on while the app was closed, if any.
+     * Reading it CLEARS it, so one press answers one call. See
+     * CallNotifications.storePendingAnswer for why answering is expressed as a
+     * stored instruction rather than only as a deep link.
+     */
+    AsyncFunction("takePendingAnswer") {
+      CallNotifications.takePendingAnswer(context)
+    }
+
+    /**
+     * Go foreground for the duration of a call, so it survives the app leaving
+     * the screen. See OngoingCallService for why this is the difference
+     * between a call and a call that dies when you lock your phone.
+     *
+     * Deliberately NOT silent about failure, unlike most of this file: if
+     * Android refuses (a background start on 12+, or a missing microphone
+     * permission on 14+) the call is about to become fragile, and the JS side
+     * turns that into something it can log rather than pretending all is well.
+     */
+    AsyncFunction("startOngoingCall") { callId: String, title: String, text: String ->
+      OngoingCallService.start(context, callId, title, text)
+    }
+
+    AsyncFunction("stopOngoingCall") {
+      OngoingCallService.stop(context)
+    }
   }
 
   private val context: Context

@@ -33,7 +33,6 @@ const OTHER = 'Everything else';
 
 export interface OfferingGroup {
   key: string;
-  icon: string;
   title: string;
   /** Line under the title, e.g. "12 dishes · per day". */
   subtitle?: string;
@@ -83,7 +82,6 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
   return (
     <Card style={styles.block}>
       <View style={styles.head}>
-        <Text style={styles.headIcon}>{group.icon}</Text>
         <View style={styles.headInfo}>
           <Text variant="subheading" weight="bold">
             {group.title}
@@ -190,7 +188,6 @@ const styles = StyleSheet.create({
   section: { gap: spacing.md },
   block: { paddingVertical: spacing.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  headIcon: { fontSize: 22 },
   headInfo: { flex: 1 },
   chips: { gap: spacing.sm, paddingVertical: spacing.md, paddingRight: spacing.sm },
   chip: {

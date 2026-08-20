@@ -5,21 +5,26 @@
  *    answered first they can still join here (group call) or hang up alone —
  *    the call keeps going as long as the customer and someone are on.
  *
- * The screen polls CallRepository — the mock stand-in for a realtime signaling
- * channel. Audio itself is simulated until the WebRTC backend is wired in.
+ * ⚠️ THIS SCREEN DOES NOT OWN THE CALL. It used to: it polled the signaling and
+ * held the LiveKit room itself, which meant pressing back unmounted the audio
+ * and left the other side talking to nobody while their screen still read "On
+ * call". The call now lives in CallSessionProvider, above the router — read
+ * that file first. Everything here is a view onto it, so leaving this screen is
+ * exactly as harmless as leaving any other, and OngoingCallBar offers the way
+ * back.
  */
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import type { Call, CallParticipant } from '@/domain/types';
-import { useAuth, useRepositories } from '@/data/DataProvider';
-import { useCallAudio, type CallAudioState } from '@/features/calls/useCallAudio';
-import { Avatar, Button, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
+import { useAuth } from '@/data/DataProvider';
+import { useCallSession } from '@/features/calls/CallSessionContext';
+import type { CallAudioState } from '@/features/calls/useCallAudio';
+import type { AudioOutput } from '@/features/calls/livekitNative';
+import { Avatar, Button, EmptyView, LoadingView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
-
-const POLL_MS = 1500;
 
 function formatDuration(fromIso: string, toMs: number): string {
   const s = Math.max(0, Math.floor((toMs - new Date(fromIso).getTime()) / 1000));
@@ -36,71 +41,102 @@ const STATUS_LABEL: Record<Call['status'], string> = {
   declined: 'Call declined',
 };
 
+/** What each route is called, and the icon that carries it at a glance. */
+const OUTPUT_LABEL: Record<AudioOutput, { label: string; emoji: string }> = {
+  earpiece: { label: 'Phone', emoji: '📱' },
+  speaker: { label: 'Speaker', emoji: '🔊' },
+  bluetooth: { label: 'Bluetooth', emoji: '🎧' },
+  headset: { label: 'Headset', emoji: '🎧' },
+};
+
 export default function CallSessionScreen() {
   // `answer=1` means we got here from the ANSWER pill on the system call
   // notification — the user has already said yes, so joining is not something
   // to ask them a second time.
   const { callId, answer } = useLocalSearchParams<{ callId: string; answer?: string }>();
-  const repos = useRepositories();
-  const router = useRouter();
+  const { currentUser } = useAuth();
+  const myId = currentUser?.id ?? 'guest';
   // A push notification can make the live call the app's FIRST screen.
   const dismiss = useDismiss('/');
   const colors = useColors();
-  const { currentUser } = useAuth();
-  const myId = currentUser?.id ?? 'guest';
 
-  const [call, setCall] = useState<Call | null>(null);
-  const [loadError, setLoadError] = useState<string>();
-  const [muted, setMuted] = useState(false);
+  const session = useCallSession();
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
 
-  // Poll the call state (mock signaling) and tick the duration timer.
+  // Tell the provider which call this screen is about. Idempotent, so the
+  // common case — opening the screen for the call already in progress — does
+  // nothing at all.
   useEffect(() => {
-    let active = true;
-    const load = () =>
-      repos.calls
-        .getById(callId)
-        .then((c) => active && setCall(c))
-        .catch((e: unknown) => active && setLoadError(e instanceof Error ? e.message : String(e)));
-    load();
-    const timer = setInterval(load, POLL_MS);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [repos, callId]);
+    if (callId) session.enter(callId);
+    // `session` is a new object on every state change; entering on each of
+    // those would reset the call it is meant to be tracking.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [callId]);
+
+  /**
+   * The last state we saw for THIS call.
+   *
+   * The provider drops a finished call a few seconds after it ends, so that a
+   * hung-up call stops holding the microphone and the ongoing-call bar. This
+   * screen still has to show "Call ended" and the final duration after that, so
+   * it keeps its own copy rather than blanking out mid-sentence.
+   */
+  const [shown, setShown] = useState<Call | null>(null);
+  useEffect(() => {
+    if (session.call && session.call.id === callId) setShown(session.call);
+  }, [session.call, callId]);
 
   useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(tick);
   }, []);
 
-  // Real audio (LiveKit) rides on top of the signaling: connect only while this
-  // user is actually joined and the call is still live; `muted` drives the mic.
-  // Hooks run before the early returns, so compute the inputs null-safely here.
+  /**
+   * Give up waiting eventually.
+   *
+   * The provider swallows a failed poll on purpose — one dropped request says
+   * nothing about a call — but that leaves a genuinely unloadable call spinning
+   * forever, which is exactly what a notification for a call that has since
+   * been cleaned up produces. A real call resolves in about a second, so ten is
+   * long enough that this can't fire on a slow connection.
+   */
+  const [gaveUp, setGaveUp] = useState(false);
+  useEffect(() => {
+    if (session.call?.id === callId) return;
+    const timer = setTimeout(() => setGaveUp(true), 10000);
+    return () => clearTimeout(timer);
+  }, [session.call?.id, callId]);
+
+  const call = shown;
+  const isOver =
+    !!call && (call.status === 'ended' || call.status === 'missed' || call.status === 'declined');
   const meLive = call?.participants.find((p) => p.id === myId);
-  const callLive = call ? call.status === 'ringing' || call.status === 'active' : false;
-  const audio = useCallAudio(callId, meLive?.state === 'joined' && callLive, muted);
 
   // Answered from the notification: join as soon as the call loads. Guarded by
   // a ref rather than state so a re-render mid-request can't fire a second join.
   const autoJoined = useRef(false);
   useEffect(() => {
     if (answer !== '1' || autoJoined.current) return;
-    if (!call || !callLive || meLive?.state !== 'ringing') return;
+    if (!call || isOver || meLive?.state !== 'ringing') return;
     autoJoined.current = true;
-    repos.calls
-      .join(callId, myId)
-      .then(setCall)
-      .catch(() => {
-        // Rang out or was answered by a teammate while the app was starting —
-        // the polled state below already shows the truth.
-      });
-  }, [answer, call, callLive, meLive?.state, repos, callId, myId]);
+    session.join().catch(() => {
+      // Rang out or was answered by a teammate while the app was starting —
+      // the polled state below already shows the truth.
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answer, call, isOver, meLive?.state]);
 
-  if (loadError) return <ErrorView message={loadError} />;
-  if (!call) return <LoadingView />;
+  if (!call) {
+    return gaveUp ? (
+      <EmptyView
+        title="Call not available"
+        subtitle="This call has ended, or it isn’t one this account can join."
+      />
+    ) : (
+      <LoadingView />
+    );
+  }
 
   // Dedupe defensively: older calls (created before start() deduped) can carry
   // the same person twice, which would crash the list with duplicate React keys.
@@ -110,22 +146,18 @@ export default function CallSessionScreen() {
   const me = participants.find((p) => p.id === myId);
   const iAmOn = me?.state === 'joined';
   const canJoin = me?.side === 'business' && me.state === 'ringing';
-  const isOver = call.status === 'ended' || call.status === 'missed' || call.status === 'declined';
   const onCall = participants.filter((p) => p.state === 'joined');
 
-  const act = async (fn: () => Promise<Call>) => {
+  const act = async (fn: () => Promise<void>) => {
     setBusy(true);
     try {
-      setCall(await fn());
+      await fn();
     } catch (err) {
       showAlert('Call', err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
       setBusy(false);
     }
   };
-
-  const hangUp = () => act(() => repos.calls.leave(call.id, myId));
-  const join = () => act(() => repos.calls.join(call.id, myId));
 
   return (
     <Screen scroll>
@@ -170,7 +202,7 @@ export default function CallSessionScreen() {
           </Text>
           <Button
             title="📞 Join call"
-            onPress={join}
+            onPress={() => act(session.join)}
             loading={busy}
             style={[styles.actionBtn, { backgroundColor: colors.success }]}
           />
@@ -178,26 +210,88 @@ export default function CallSessionScreen() {
       ) : null}
 
       {!isOver && iAmOn ? (
-        <View style={styles.controls}>
-          <Button
-            title={muted ? '🔇 Unmute' : '🎙 Mute'}
-            variant="secondary"
-            onPress={() => setMuted((m) => !m)}
-            style={styles.controlBtn}
+        <>
+          <AudioRoutePicker
+            outputs={session.outputs}
+            selected={session.output}
+            onSelect={session.setOutput}
           />
-          <Button
-            title={me?.side === 'customer' ? '📵 End call' : '📵 Leave call'}
-            onPress={hangUp}
-            loading={busy}
-            style={[styles.controlBtn, { backgroundColor: colors.danger }]}
-          />
-        </View>
+          <View style={styles.controls}>
+            <Button
+              title={session.muted ? '🔇 Unmute' : '🎙 Mute'}
+              variant="secondary"
+              onPress={() => session.setMuted(!session.muted)}
+              style={styles.controlBtn}
+            />
+            <Button
+              title={me?.side === 'customer' ? '📵 End call' : '📵 Leave call'}
+              onPress={() => act(session.hangUp)}
+              loading={busy}
+              style={[styles.controlBtn, { backgroundColor: colors.danger }]}
+            />
+          </View>
+          {/* Back no longer hangs up, which is not something a user will guess. */}
+          <Text variant="caption" tone="muted" style={styles.backHint}>
+            You can leave this screen and use the app — the call keeps going, and the green bar at
+            the top brings you back.
+          </Text>
+        </>
       ) : null}
 
       {isOver ? <Button title="Close" onPress={dismiss} style={styles.actionBtn} /> : null}
 
-      {!isOver && iAmOn ? <AudioStatusNote audio={audio} /> : null}
+      {!isOver && iAmOn ? <AudioStatusNote audio={session.audio} /> : null}
     </Screen>
+  );
+}
+
+/**
+ * Where the sound comes out.
+ *
+ * Hidden when the OS gives us nothing to choose between — a browser, or a
+ * phone whose audio session isn't up yet — because a route button that changes
+ * nothing is worse than no button. Bluetooth and wired headsets appear only
+ * while they're actually connected, so the row is as long as reality is.
+ */
+function AudioRoutePicker({
+  outputs,
+  selected,
+  onSelect,
+}: {
+  outputs: AudioOutput[];
+  selected: AudioOutput | null;
+  onSelect: (output: AudioOutput) => void;
+}) {
+  const colors = useColors();
+  if (outputs.length < 2) return null;
+  return (
+    <View style={styles.routeRow}>
+      {outputs.map((output) => {
+        const { label, emoji } = OUTPUT_LABEL[output];
+        const active = output === selected;
+        return (
+          <Pressable
+            key={output}
+            onPress={() => onSelect(output)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`Play the call through the ${label.toLowerCase()}`}
+            style={[
+              styles.routeBtn,
+              {
+                backgroundColor: active ? colors.brand : colors.surfaceAlt,
+                borderColor: active ? colors.brand : colors.border,
+              },
+            ]}
+          >
+            <Text style={styles.routeEmoji}>{emoji}</Text>
+            <Text variant="label" weight="semibold" tone={active ? 'inverse' : 'default'}>
+              {label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -306,8 +400,19 @@ const styles = StyleSheet.create({
   stateDot: { width: 8, height: 8, borderRadius: 4 },
   joinHint: { textAlign: 'center', marginBottom: spacing.md },
   actionBtn: { marginBottom: spacing.sm },
+  routeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  routeBtn: {
+    flex: 1,
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  routeEmoji: { fontSize: 18 },
   controls: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
   controlBtn: { flex: 1 },
+  backHint: { textAlign: 'center', marginBottom: spacing.sm },
   demoNote: { textAlign: 'center', marginTop: spacing.lg },
   audioNote: {
     flexDirection: 'row',

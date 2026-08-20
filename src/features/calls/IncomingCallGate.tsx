@@ -16,6 +16,7 @@ import { setAudioModeAsync, useAudioPlayer } from 'expo-audio';
 import { router } from 'expo-router';
 import type { Call } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
+import { useCallSession } from './CallSessionContext';
 import { Avatar, Text } from '@/components/ui';
 import { dismissIncomingCall } from '../../../modules/call-notification';
 import { dismissCallNotifications } from '../notifications/push';
@@ -37,6 +38,7 @@ export function IncomingCallGate() {
   const repos = useRepositories();
   const colors = useColors();
   const { currentUser } = useAuth();
+  const { enter } = useCallSession();
   const [call, setCall] = useState<Call | null>(null);
   const [dismissedId, setDismissedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -152,6 +154,11 @@ export function IncomingCallGate() {
     setBusy(true);
     try {
       await repos.calls.join(call.id, currentUser.id);
+      // Hand it over BEFORE navigating. The provider is what holds the audio
+      // and the foreground service, so a slow route change (or one that never
+      // happens, on a cold start from a notification) must not be what decides
+      // whether an answered call is actually connected.
+      enter(call.id);
       setCall(null);
       router.push(`/call/session/${call.id}`);
     } catch {

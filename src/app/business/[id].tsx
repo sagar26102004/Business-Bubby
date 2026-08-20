@@ -170,7 +170,6 @@ export default function BusinessDetailScreen() {
   if (hasMenu) {
     groups.push({
       key: 'menu',
-      icon: '📖',
       title: 'Menu',
       subtitle: `${business.menu!.length} dish${business.menu!.length === 1 ? '' : 'es'}`,
       entries: business.menu!.map((m) => ({
@@ -186,7 +185,6 @@ export default function BusinessDetailScreen() {
   if ((business.services?.length ?? 0) > 0) {
     groups.push({
       key: 'services',
-      icon: '🛠️',
       title: 'Services',
       subtitle: `${business.services!.length} service${business.services!.length === 1 ? '' : 's'}`,
       entries: sortBySection(business.services!, SERVICE_SECTIONS),
@@ -196,7 +194,6 @@ export default function BusinessDetailScreen() {
     const basis = rentalBasisLabel(business.rentalBasis);
     groups.push({
       key: 'rentals',
-      icon: '🔑',
       title: 'For rent',
       subtitle: [
         `${business.rentals!.length} item${business.rentals!.length === 1 ? '' : 's'}`,
@@ -216,7 +213,6 @@ export default function BusinessDetailScreen() {
   if (!isStall && (business.products?.length ?? 0) > 0) {
     groups.push({
       key: 'products',
-      icon: '🛍️',
       title: 'Products',
       subtitle: `${business.products!.length} item${business.products!.length === 1 ? '' : 's'}`,
       entries: business.products!.map((p) => ({
@@ -230,7 +226,6 @@ export default function BusinessDetailScreen() {
   if ((business.partyPackages?.length ?? 0) > 0) {
     groups.push({
       key: 'party',
-      icon: '🎉',
       title: 'Party packages',
       subtitle: `${business.partyPackages!.length} package${business.partyPackages!.length === 1 ? '' : 's'}`,
       entries: business.partyPackages!.map((pkg) => ({

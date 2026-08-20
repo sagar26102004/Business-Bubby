@@ -170,6 +170,12 @@ class IncomingCallActivity : Activity() {
         ?.requestDismissKeyguard(this, null)
     }
 
+    // Record the DECISION before opening anything. Whether the app lands on the
+    // call screen, the home screen, or somewhere else entirely, JS reads this on
+    // startup and joins — so answering no longer depends on a cold-start deep
+    // link surviving the router.
+    CallNotifications.storePendingAnswer(this, callId)
+
     val uri = CallNotifications.answerUriFor(this, callId)
     val open = if (uri != null) {
       Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(packageName)
@@ -178,6 +184,11 @@ class IncomingCallActivity : Activity() {
       // pressed Answer and had nothing happen.
       packageManager.getLaunchIntentForPackage(packageName)
     }
+    // WHICH ROUTE this took is the one fact the log was missing, and it is the
+    // difference between "the deep link is wrong" and "the template was never
+    // stored" — two problems with nothing in common, and one APK build each to
+    // tell apart without this line.
+    CallLog.add(this, if (uri != null) "answering via deep link $uri" else "answering via the launcher (no deep link stored)")
     open?.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
     try {
       if (open != null) startActivity(open)

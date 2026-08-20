@@ -2109,7 +2109,20 @@ const RING_TIMEOUT_MS = 30_000;
 /** Default window of the workspace call log: the last 7 days. */
 const CALL_LOG_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** Expire calls that rang out. Run lazily at the top of every call method. */
+/**
+ * How long a joined participant may go without renewing their liveness lease
+ * before they count as gone. See CallRepository.heartbeat — hanging up is a
+ * message, and a device that is killed mid-call never sends it.
+ *
+ * Four times the client's beat interval: three missed beats in a row is a dead
+ * device, one or two is a phone changing cell tower.
+ */
+const PRESENCE_TIMEOUT_MS = 45_000;
+
+/**
+ * Expire calls that rang out, and drop participants whose device went away
+ * without hanging up. Run lazily at the top of every call method.
+ */
 function sweepCalls(): void {
   const now = Date.now();
   calls.forEach((call) => {
@@ -2117,8 +2130,44 @@ function sweepCalls(): void {
       call.status = 'missed';
       call.endedAt = new Date().toISOString();
       notifyMissedCall(call);
+      return;
     }
+    dropExpiredParticipants(call, now);
   });
+}
+
+/**
+ * Mark joined participants whose lease has expired as `left`, and end the call
+ * if that leaves nobody to talk to — the same end-of-call rules a deliberate
+ * hang-up applies, so a dead device and a pressed button look identical from
+ * the other side. That is the point: before this, a killed app left the other
+ * person on "On call" with no audio and no way to find out it was over.
+ *
+ * (The real backends measure this against the SERVER's clock, because the
+ * server is what stamps `aliveAt`. In-process there is only one clock, so
+ * Date.now() IS the server clock here.)
+ */
+function dropExpiredParticipants(call: Call, now: number): void {
+  if (call.status !== 'active') return;
+  let changed = false;
+  call.participants.forEach((p) => {
+    if (p.state !== 'joined') return;
+    // Fall back to joinedAt for a participant who has never beaten — a client
+    // killed before its first beat is exactly the case this catches.
+    const last = p.aliveAt ?? p.joinedAt;
+    if (!last) return;
+    if (now - new Date(last).getTime() <= PRESENCE_TIMEOUT_MS) return;
+    p.state = 'left';
+    p.leftAt = new Date().toISOString();
+    changed = true;
+  });
+  if (!changed) return;
+  const customerOn = call.participants.some((p) => p.side === 'customer' && p.state === 'joined');
+  const businessOn = call.participants.some((p) => p.side === 'business' && p.state === 'joined');
+  if (!customerOn || !businessOn) {
+    call.status = 'ended';
+    call.endedAt = new Date().toISOString();
+  }
 }
 
 /** Tell every handler who was rung that they missed the customer. */
@@ -2229,6 +2278,11 @@ class MockCallRepository implements CallRepository {
     p.state = 'joined';
     p.joinedAt = new Date().toISOString();
     p.leftAt = undefined;
+    // Open the lease the moment the seat is claimed. (The real backends leave
+    // this to the first heartbeat, because only a SERVER-stamped lease is
+    // trustworthy; in-process there is one clock, so stamping it here is the
+    // same thing and saves the first sweep a special case.)
+    p.aliveAt = p.joinedAt;
     if (call.status === 'ringing') {
       call.status = 'active';
       call.answeredAt = p.joinedAt;
@@ -2309,6 +2363,20 @@ class MockCallRepository implements CallRepository {
       .filter((c) => c.businessId === businessId && new Date(c.startedAt).getTime() >= since)
       .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
       .map(clone);
+  }
+
+  async heartbeat(callId: string, participantId: string): Promise<Call | null> {
+    await delay(20);
+    sweepCalls();
+    const call = calls.find((c) => c.id === callId);
+    if (!call || (call.status !== 'ringing' && call.status !== 'active')) return null;
+    const p = call.participants.find((x) => x.id === participantId);
+    // Only a JOINED participant holds a lease. Someone still ringing hasn't
+    // claimed a seat, and someone the sweep just marked `left` must not be able
+    // to un-leave themselves by beating.
+    if (!p || p.state !== 'joined') return null;
+    p.aliveAt = new Date().toISOString();
+    return clone(call);
   }
 
   async getAudioToken(): Promise<{ token: string; url: string }> {

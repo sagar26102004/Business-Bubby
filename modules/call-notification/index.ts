@@ -46,6 +46,9 @@ interface CallNotificationNative {
   openBatterySettings(): Promise<void>;
   setAnswerUriTemplate(template: string): Promise<void>;
   setDeclineEndpoint(url: string, pushToken: string): Promise<void>;
+  takePendingAnswer(): Promise<string | null>;
+  startOngoingCall(callId: string, title: string, text: string): Promise<void>;
+  stopOngoingCall(): Promise<void>;
   /** What to substitute the call id for inside that template. */
   callIdPlaceholder: string;
 }
@@ -303,6 +306,72 @@ export async function openBatterySettings(): Promise<void> {
     await mod.openBatterySettings();
   } catch {
     /* no such screen on this ROM */
+  }
+}
+
+/**
+ * The call the user pressed ANSWER on while the app was closed — read once,
+ * then forgotten.
+ *
+ * ⚠️ This is what makes the green button mean something. Answering used to be
+ * expressed ONLY as a deep link into `/call/session/<id>?answer=1`, so picking
+ * up depended on that URL surviving a cold start and routing correctly. When it
+ * didn't, the app opened on the home screen with the call still ringing and the
+ * press looked like it had done nothing. The native side now records the
+ * decision itself; this reads it wherever the app happens to land.
+ *
+ * Returns null on every platform without the module, when nothing is pending,
+ * or when the press is older than the ring window (that call is over).
+ */
+export async function takePendingAnswer(): Promise<string | null> {
+  const mod = native();
+  if (!mod) return null;
+  try {
+    return (await mod.takePendingAnswer()) || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Go foreground for the duration of a live call.
+ *
+ * ⚠️ THE CALL DEPENDS ON THIS ONE. Android suspends a backgrounded app's
+ * timers and then kills the process outright when it is swiped out of Recents
+ * — which used to take the WebRTC session with it, silently, mid-sentence,
+ * without ever telling the other side. A foreground service is the only thing
+ * that keeps the process alive, and the ongoing notification it must show
+ * doubles as the way back into the call.
+ *
+ * Returns whether Android accepted it. `false` means the call still works but
+ * is now only as durable as the screen — worth knowing, never worth an alert.
+ */
+export async function startOngoingCall(input: {
+  callId: string;
+  title: string;
+  text: string;
+}): Promise<boolean> {
+  const mod = native();
+  if (!mod) return false;
+  try {
+    await mod.startOngoingCall(input.callId, input.title, input.text);
+    return true;
+  } catch {
+    // A background start is refused on Android 12+, and the microphone service
+    // type on 14+ without the runtime mic permission. Neither is worth breaking
+    // a working call over.
+    return false;
+  }
+}
+
+/** Drop back out of the foreground once the call is over. Safe to call twice. */
+export async function stopOngoingCall(): Promise<void> {
+  const mod = native();
+  if (!mod) return;
+  try {
+    await mod.stopOngoingCall();
+  } catch {
+    /* never started, or already gone */
   }
 }
 

@@ -1014,6 +1014,17 @@ export interface CallParticipant {
   state: CallParticipantState;
   joinedAt?: string;
   leftAt?: string;
+  /**
+   * Last time this participant confirmed they were still on the call, on the
+   * SERVER's clock (see CallRepository.heartbeat).
+   *
+   * Hanging up is a message, and a device that dies mid-call never sends it —
+   * the process is killed, the audio stops, and everyone else sits looking at
+   * "On call" forever. So being on a call is a claim that has to be renewed:
+   * stop renewing it and the sweep on read marks you `left`, exactly as if you
+   * had pressed the button. Absent on a participant who is not (yet) joined.
+   */
+  aliveAt?: string;
 }
 
 /**

@@ -14,6 +14,17 @@ import {
 
 const RING_TIMEOUT_MS = 30_000;
 
+/**
+ * How long a joined participant may go without renewing their liveness lease
+ * before the sweep treats them as gone. See CallRepository.heartbeat.
+ *
+ * Four times the client's beat interval on purpose: three missed beats in a row
+ * is a dead device, one or two is a phone changing cell tower. Erring short
+ * here hangs up healthy calls, which is far worse than the stuck call this
+ * exists to clear — so when in doubt, wait.
+ */
+const PRESENCE_TIMEOUT_MS = 45_000;
+
 /** Default window of the workspace call log: the last 7 days. */
 const CALL_LOG_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -106,8 +117,69 @@ async function sweepOne(call: Call, createdAt?: string): Promise<Call> {
     call.endedAt = nowIso();
     await saveCall(call);
     await notifyMissedCall(call);
+    return call;
+  }
+  if (dropExpiredParticipants(call, createdAt)) {
+    await saveCall(call);
   }
   return call;
+}
+
+/**
+ * Mark every joined participant whose liveness lease has expired as `left`, and
+ * end the call if that leaves nobody to talk to. Returns whether anything
+ * changed, so a healthy call costs a comparison and no write.
+ *
+ * This is the read half of the heartbeat: whoever polls does the work. Both
+ * sides poll while a call is up, so a device that dies is noticed by the one
+ * that didn't — and once the call is over, the next reader (the workspace call
+ * log) finishes the job even if nobody was watching at the time.
+ *
+ * ⚠️ Compared against the SERVER clock, because that is what wrote `aliveAt`
+ * (migration 0021). Using the device's would let a fast phone hang up a call
+ * that is perfectly alive — the same class of bug migration 0010 fixed for ring
+ * expiry, but with a live conversation as the casualty.
+ */
+function dropExpiredParticipants(call: Call, createdAt?: string): boolean {
+  if (call.status !== 'active') return false;
+  const now = serverNow();
+  // A participant who has never beaten is judged on the CALL's age instead, so
+  // that everyone gets a full timeout's grace to produce a first lease before
+  // anything can drop them. `created_at` is server-assigned; `startedAt` is the
+  // caller's own clock and is a last resort for a caller that didn't select the
+  // column.
+  const callAged = now - new Date(createdAt ?? call.startedAt).getTime() > PRESENCE_TIMEOUT_MS;
+  let changed = false;
+
+  for (const p of call.participants) {
+    if (p.state !== 'joined') continue;
+    // ⚠️ ONLY `aliveAt` counts, and ONLY because the server wrote it (migration
+    // 0021). Falling back to the participant's own `joinedAt` here looks
+    // harmless and is not: that is a DEVICE timestamp being compared against
+    // the server's clock, so a phone whose clock ran 45s slow would be hung up
+    // on the instant it joined — the same drift that, in migration 0010, made a
+    // fast phone expire every incoming call before it could ring. A participant
+    // with no lease at all is dropped on the call's server-side age instead.
+    const expired = p.aliveAt
+      ? now - new Date(p.aliveAt).getTime() > PRESENCE_TIMEOUT_MS
+      : callAged;
+    if (!expired) continue;
+    p.state = 'left';
+    p.leftAt = nowIso();
+    changed = true;
+  }
+  if (!changed) return false;
+
+  // Same end-of-call rules as a deliberate hang-up, so a dropped device and a
+  // pressed button are indistinguishable from the other side — which is the
+  // whole point.
+  const customerOn = call.participants.some((p) => p.side === 'customer' && p.state === 'joined');
+  const businessOn = call.participants.some((p) => p.side === 'business' && p.state === 'joined');
+  if (!customerOn || !businessOn) {
+    call.status = 'ended';
+    call.endedAt = nowIso();
+  }
+  return true;
 }
 
 async function loadCall(id: string): Promise<{ call: Call; createdAt: string }> {
@@ -233,6 +305,11 @@ export function createSupabaseCalls(): CallRepository {
       p.state = 'joined';
       p.joinedAt = nowIso();
       p.leftAt = undefined;
+      // Deliberately NOT stamping aliveAt here: this runs on the device, and a
+      // lease is only meaningful when the SERVER timestamps it. The client's
+      // first heartbeat fires the moment it is joined and opens it properly;
+      // until then the sweep judges this participant on the call's own age.
+      p.aliveAt = undefined;
       if (call.status === 'ringing') {
         call.status = 'active';
         call.answeredAt = p.joinedAt;
@@ -327,6 +404,30 @@ export function createSupabaseCalls(): CallRepository {
         (data ?? []).map((r) => sweepOne(r.data as Call, r.created_at as string)),
       );
       return rows.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    },
+
+    async heartbeat(callId: string, participantId: string): Promise<Call | null> {
+      // The RPC does the write (server clock, one key, no lost updates — see
+      // migration 0021) and answers with the timestamp it stamped, or null when
+      // there was nothing to renew.
+      const { data: stamped, error } = await sb().rpc('call_heartbeat', {
+        p_call_id: callId,
+        p_participant_id: participantId,
+      });
+      if (error) throw error;
+      if (!stamped) return null;
+      // Read back rather than patching a local copy: the same poll that renews
+      // the lease is how this client learns the other side dropped, and
+      // sweeping here means a call whose last watcher is THIS device still gets
+      // closed out.
+      const { data, error: readError } = await sb()
+        .from('calls')
+        .select('data, created_at')
+        .eq('id', callId)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!data) return null;
+      return sweepOne(data.data as Call, data.created_at as string);
     },
 
     async getAudioToken(callId: string): Promise<{ token: string; url: string }> {
