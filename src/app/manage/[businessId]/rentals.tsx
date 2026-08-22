@@ -5,9 +5,10 @@
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import type { RentalItem } from '@/domain/types';
-import { RENTAL_SECTIONS } from '@/domain/offeringSections';
+import { RENTAL_BASES } from '@/domain/catalog';
+import { RENTAL_SECTIONS, upgradeRentalFiling } from '@/domain/offeringSections';
 import { ManageGate, type ManageFormProps } from '@/features/businesses/ManageGate';
-import { OfferingsEditor } from '@/features/businesses/OfferingsEditor';
+import { OfferingFolderEditor } from '@/features/businesses/OfferingFolderEditor';
 import { Button } from '@/components/ui';
 import { spacing } from '@/theme/theme';
 
@@ -23,19 +24,31 @@ export default function ManageRentalsScreen() {
 }
 
 function RentalsForm({ business, save, saving }: ManageFormProps) {
-  const [rentals, setRentals] = useState<RentalItem[]>(business.rentals ?? []);
+  // Anything filed against the old library is re-filed as it loads, so the
+  // folders here match the business page — and saving makes it permanent.
+  const [rentals, setRentals] = useState<RentalItem[]>(() =>
+    (business.rentals ?? []).map(upgradeRentalFiling),
+  );
 
   return (
     <>
-      <OfferingsEditor
+      <OfferingFolderEditor
         value={rentals}
         onChange={setRentals}
-        namePlaceholder="e.g. 2BHK flat, Activa 6G, DSLR kit"
-        addLabel="Add rental"
         sections={RENTAL_SECTIONS}
-        sectionsLabel="What kind of thing is it?"
+        noun="rental"
+        hint="Tap what you rent out — flats, PG beds, shops, vehicles. Skip the rest."
+        newSectionPlaceholder="Section name — e.g. Parking space"
+        customIcon="🔑"
+        folderLabel="What kind of thing? (optional)"
+        folderExample="Studio, Rooftop shop"
         withDescription
-        descriptionPlaceholder="Condition, deposit, what's included (optional)"
+        descriptionPlaceholder="Condition, deposit, what’s included (optional)"
+        // Per day or per month is decided PER THING: a flat is monthly while
+        // the same lister's scooter is daily.
+        basisOptions={RENTAL_BASES}
+        basisDefault={business.rentalBasis ?? 'monthly'}
+        basisLabel="Rented out per…"
       />
       <Button
         title="Save"

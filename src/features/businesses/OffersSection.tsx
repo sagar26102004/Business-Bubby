@@ -7,6 +7,9 @@
  * sideways so a busy shop can run several without pushing the rest of the page
  * down, and each shows what's included, the offer price, the normal price
  * struck through, and the saving.
+ *
+ * A card is tappable when `onPress` is given: it starts an order with the whole
+ * bundle already picked, so an offer is something you can BUY, not just read.
  */
 import { ScrollView, StyleSheet, View } from 'react-native';
 import type { Offer } from '@/domain/types';
@@ -16,11 +19,17 @@ import { offerLineLabel, offerSavingPercent } from './offerUtils';
 
 export interface OffersSectionProps {
   offers: Offer[];
-  /** Tapping a card, e.g. to start an order for the bundle. */
+  /** Tapping a card — starts an order for the bundle. */
   onPress?: (offer: Offer) => void;
+  /** Call to action on each card, shown only when `onPress` is set. */
+  actionLabel?: string;
 }
 
-export function OffersSection({ offers, onPress }: OffersSectionProps) {
+export function OffersSection({
+  offers,
+  onPress,
+  actionLabel = 'Order this offer →',
+}: OffersSectionProps) {
   const colors = useColors();
   if (offers.length === 0) return null;
 
@@ -41,6 +50,7 @@ export function OffersSection({ offers, onPress }: OffersSectionProps) {
               key={offer.id}
               style={{ ...styles.card, borderColor: colors.brand }}
               onPress={onPress ? () => onPress(offer) : undefined}
+              accessibilityLabel={onPress ? `${offer.title} — ${actionLabel}` : undefined}
             >
               <View style={styles.top}>
                 <Text variant="heading">{offer.emoji ?? '🎉'}</Text>
@@ -88,6 +98,14 @@ export function OffersSection({ offers, onPress }: OffersSectionProps) {
                   </Text>
                 ) : null}
               </View>
+
+              {/* Says out loud that the card does something — a price alone
+                  reads as a poster, not a button. */}
+              {onPress ? (
+                <Text variant="caption" weight="bold" tone="brand" style={styles.action}>
+                  {actionLabel}
+                </Text>
+              ) : null}
             </Card>
           );
         })}
@@ -108,6 +126,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   description: { marginTop: 2 },
+  action: { marginTop: spacing.sm },
   lines: { marginTop: spacing.sm, gap: 2 },
   priceRow: {
     flexDirection: 'row',

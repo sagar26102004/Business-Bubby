@@ -41,7 +41,7 @@ import {
 } from '@/domain/catalog';
 import { COUNTRIES, STATE_NAMES, citiesForState, stateForCity } from '@/domain/geoCatalog';
 import { SUGGESTED_BUSINESS_TAGS, hasTag, isFoodShop } from '@/domain/tags';
-import { RENTAL_SECTIONS, SERVICE_SECTIONS } from '@/domain/offeringSections';
+import { RENTAL_SECTIONS, SERVICE_SECTIONS, serviceJobs } from '@/domain/offeringSections';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import {
   AVAILABLE_MODULES,
@@ -70,7 +70,22 @@ import { AutocompleteInput, Button, Card, Input, Screen, Tag, Text } from '@/com
 import { EmployeeEditor } from '@/features/businesses/EmployeeEditor';
 import { FoodMenuEditor } from '@/features/businesses/FoodMenuEditor';
 import { LocationPicker } from '@/features/businesses/LocationPicker';
-import { OfferingsEditor } from '@/features/businesses/OfferingsEditor';
+import { GoodsEditor } from '@/features/businesses/GoodsEditor';
+import { OfferingFolderEditor } from '@/features/businesses/OfferingFolderEditor';
+import {
+  GOODS_EXAMPLE,
+  INLINE_EXAMPLES,
+  MENU_EXAMPLE,
+  OfferingImport,
+  RENTAL_EXAMPLE,
+  SERVICE_EXAMPLE,
+} from '@/features/offerings/OfferingImport';
+import {
+  toMenuItem,
+  toProductItem,
+  toRentalItem,
+  toServiceItem,
+} from '@/features/offerings/importOfferings';
 import { OwnerPicker } from '@/features/businesses/OwnerPicker';
 import { OpeningHoursField } from '@/features/businesses/OpeningHoursField';
 import { hasUsableHours, summarizeHours, type OpeningHours } from '@/domain/hours';
@@ -902,18 +917,29 @@ export default function RegisterScreen() {
               onPick={answer(setSellChoice)}
             />
             {sellChoice === 'yes' ? (
-              foodShop ? (
-                // Food menus use the prebuilt library (Soups, Main Course,
-                // Beverages › Tea…) — no section is invented or typed.
-                <FoodMenuEditor value={sellItems} onChange={setSellItems} />
-              ) : (
-                <OfferingsEditor
+              <>
+                {/* Most owners already have the list written down somewhere —
+                    let them drop the whole thing in rather than tap out sixty
+                    rows. Whatever it produces lands in the editor below. */}
+                <OfferingImport
                   value={sellItems}
                   onChange={setSellItems}
-                  namePlaceholder="Product (e.g. Touring tyre 205/55 R16)"
-                  addLabel="Add item"
+                  map={foodShop ? toMenuItem : toProductItem}
+                  noun={foodShop ? 'dish' : 'product'}
+                  example={foodShop ? MENU_EXAMPLE : GOODS_EXAMPLE}
+                  inlineExample={foodShop ? INLINE_EXAMPLES.menu : INLINE_EXAMPLES.goods}
                 />
-              )
+                {foodShop ? (
+                  // Food menus use the prebuilt library (Soups, Main Course,
+                  // Beverages › Tea…) — no section is invented or typed.
+                  <FoodMenuEditor value={sellItems} onChange={setSellItems} />
+                ) : (
+                  // A non-food shop builds its catalog the way a restaurant
+                  // builds its menu — shelf › kind › brand, out of the goods
+                  // library — instead of typing loose lines.
+                  <GoodsEditor value={sellItems} onChange={setSellItems} />
+                )}
+              </>
             ) : null}
           </>
         );
@@ -929,16 +955,30 @@ export default function RegisterScreen() {
               onPick={answer(setServicesChoice)}
             />
             {servicesChoice === 'yes' ? (
-              <OfferingsEditor
-                value={services}
-                onChange={setServices}
-                namePlaceholder="Service (e.g. Wheel alignment)"
-                addLabel="Add service"
-                sections={SERVICE_SECTIONS}
-                sectionsLabel="What kind of service is it?"
-                withDescription
-                descriptionPlaceholder="What's included (optional)"
-              />
+              <>
+                <OfferingImport
+                  value={services}
+                  onChange={setServices}
+                  map={toServiceItem}
+                  noun="service"
+                  example={SERVICE_EXAMPLE}
+                  inlineExample={INLINE_EXAMPLES.services}
+                />
+                {/* Services are built the way the menu is — section › kind of
+                    work, with the jobs people ask for offered inside. */}
+                <OfferingFolderEditor
+                  value={services}
+                  onChange={setServices}
+                  sections={SERVICE_SECTIONS}
+                  noun="service"
+                  hint="Tap a section to add the work you do. Skip the ones you don’t."
+                  newSectionPlaceholder="Section name — e.g. Borewell, Solar"
+                  customIcon="🛠️"
+                  jobsFor={(section, kind) => serviceJobs(section.id, kind)}
+                  withDescription
+                  descriptionPlaceholder="What’s included (optional)"
+                />
+              </>
             ) : null}
           </>
         );
@@ -950,16 +990,17 @@ export default function RegisterScreen() {
               value={rentChoice}
               yesLabel="Yes, I rent things out"
               noLabel="Nothing for rent"
-              yesIcon="🔑"
               onPick={answer(setRentChoice)}
             />
             {rentChoice === 'yes' ? (
               <>
                 <Text variant="label" weight="semibold" style={styles.sectionLabel}>
-                  Rented out per day or per month?
+                  Mostly per day or per month?
                 </Text>
                 <Text variant="caption" tone="muted" style={styles.hint}>
-                  Pick “Day or month” if you offer both — you won’t need to list it again.
+                  Just the starting point — each thing you add below carries its own
+                  “per day” / “per month” sticker, so a flat can be monthly while your
+                  scooter is daily.
                 </Text>
                 <View style={styles.pillRow}>
                   {RENTAL_BASES.map((b) => (
@@ -977,16 +1018,29 @@ export default function RegisterScreen() {
                 <Text variant="label" weight="semibold" style={styles.sectionLabel}>
                   What do you rent out?
                 </Text>
-                <Text variant="caption" tone="muted" style={styles.hint}>
-                  List each thing with its{rentalBasis === 'monthly' ? ' monthly' : rentalBasis === 'daily' ? ' daily' : ''} price and pick what kind of thing it is.
-                </Text>
-                <OfferingsEditor
+                <OfferingImport
                   value={rentalItems}
                   onChange={setRentalItems}
-                  namePlaceholder="e.g. 2BHK flat, Activa 6G, DSLR kit"
-                  addLabel="Add rental"
+                  map={(row) => toRentalItem(row, rentalBasis)}
+                  noun="rental"
+                  example={RENTAL_EXAMPLE}
+                  inlineExample={INLINE_EXAMPLES.rentals}
+                />
+                <OfferingFolderEditor
+                  value={rentalItems}
+                  onChange={setRentalItems}
                   sections={RENTAL_SECTIONS}
-                  sectionsLabel="What kind of thing is it?"
+                  noun="rental"
+                  hint="Tap what you rent out — flats, PG beds, shops, vehicles. Skip the rest."
+                  newSectionPlaceholder="Section name — e.g. Parking space"
+                  customIcon="🔑"
+                  folderLabel="What kind of thing? (optional)"
+                  folderExample="Studio, Rooftop shop"
+                  withDescription
+                  descriptionPlaceholder="Condition, deposit, what’s included (optional)"
+                  basisOptions={RENTAL_BASES}
+                  basisDefault={rentalBasis}
+                  basisLabel="Rented out per…"
                 />
               </>
             ) : null}

@@ -253,6 +253,8 @@ export default function RootLayout() {
           <Stack.Screen name="showcase/[businessId]" options={{ title: 'Work showcase' }} />
           <Stack.Screen name="product/[businessId]/[productId]" options={{ title: 'Item' }} />
           <Stack.Screen name="menu/[businessId]" options={{ title: 'Menu' }} />
+          {/* The same screen for products, services and rentals — see domain/offerings.ts. */}
+          <Stack.Screen name="catalog/[businessId]" options={{ title: 'What they offer' }} />
           <Stack.Screen name="cart/[businessId]" options={{ headerShown: false }} />
           <Stack.Screen name="order/new/[businessId]" options={{ title: 'Place an order' }} />
           <Stack.Screen name="order/[orderId]" options={{ title: 'Order' }} />

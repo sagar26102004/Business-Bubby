@@ -49,6 +49,7 @@ import type { AdPlacement } from '@/data/repositories';
 import type { Business, SavedPlace } from '@/domain/types';
 import { INTENT_CATEGORIES, intentMatches } from '@/domain/intents';
 import { ANY_RANGE_KM, DEFAULT_FEED_RANGE_KM, FEED_RANGES_KM, formatRangeKm } from '@/domain/ads';
+import { liveOffers } from '@/domain/offers';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { shareText } from '@/lib/share';
@@ -323,7 +324,15 @@ export default function DealsScreen() {
               height={pageHeight}
               onOpen={() => open(item)}
               onOrder={
-                canOrderFrom(item.business) ? () => router.push(`/order/new/${item.business.id}`) : undefined
+                canOrderFrom(item.business)
+                  ? () =>
+                      router.push({
+                        pathname: '/order/new/[businessId]',
+                        // The reel IS an offer — order screen opens with that
+                        // bundle picked, not an empty catalog.
+                        params: { businessId: item.business.id, offer: item.offer.id },
+                      })
+                  : undefined
               }
               onShare={() => share(item)}
             />
@@ -339,7 +348,10 @@ function canOrderFrom(business: Business): boolean {
   return (
     (business.menu?.length ?? 0) +
       (business.products?.length ?? 0) +
-      (business.services?.length ?? 0) >
+      (business.services?.length ?? 0) +
+      // An offer is orderable in its own right, even when what it bundles
+      // (rentals, say) isn't picked item by item.
+      liveOffers(business).length >
     0
   );
 }

@@ -38,6 +38,8 @@ export type IconName =
   | 'phone'
   | 'mail'
   | 'lock'
+  | 'eye'
+  | 'eyeOff'
   | 'settings'
   | 'shield'
   | 'camera'
@@ -204,6 +206,19 @@ export function Icon({ name, size = 24, color = '#000', filled, strokeWidth = 2 
         <>
           <Rect x={4} y={10} width={16} height={11} rx={2} {...solid} />
           <Path d="M7.5 10V7.5a4.5 4.5 0 0 1 9 0V10" {...s} />
+        </>
+      ) : null}
+
+      {/* Reveal / hide, for password fields. `eyeOff` is the same eye with a
+          stroke through it — the one hide idiom everybody already reads. */}
+      {name === 'eye' || name === 'eyeOff' ? (
+        <>
+          <Path
+            d="M12 5.5c-5 0-8.5 4.2-9.5 6.5 1 2.3 4.5 6.5 9.5 6.5s8.5-4.2 9.5-6.5c-1-2.3-4.5-6.5-9.5-6.5Z"
+            {...s}
+          />
+          <Circle cx={12} cy={12} r={2.75} {...s} />
+          {name === 'eyeOff' ? <Path d="M4 20 20 4" {...s} /> : null}
         </>
       ) : null}
 

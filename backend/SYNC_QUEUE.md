@@ -154,3 +154,109 @@ re-derivation from the Supabase diff is required:
 - **Verify:** `npm run typecheck` + `npm run build` in `backend/`; then two clients on one
   call — kill one outright (force-stop, not hang up) and the other must go to "Call ended"
   within ~45–60s, with the row's status `ended` in the DB.
+## [SYNC-038] Goods taxonomy fields on ProductItem (category/subcategory/brand/variants)
+
+- **Area:** BusinessRepository / businesses — product documents only. No endpoint, no authz,
+  no RLS and no migration: the four fields ride inside the existing `data` jsonb document.
+- **Supabase change:** none needed in `src/data/supabase/` — `businesses.ts` spreads whole
+  product objects (`withProductIds`, the `create`/`update` paths), so the new fields persist
+  as they are. Verified by inspection; nothing was edited there.
+- **Domain/interface (shared, already done):** `src/domain/types.ts` — `ProductItem` gains
+  `category?: string`, `subcategory?: string`, `brand?: string`, `variants?: string[]`. They
+  come from the new goods library `src/domain/goods.ts` (shelves -> kinds -> brands -> spec
+  chips), which the register wizard and Manage > Products now walk through the new
+  `src/features/businesses/GoodsEditor.tsx` (folder navigation, same flow as the food menu
+  builder).
+- **Path B — backend/:** mirror the four optional fields on `ProductItem` in
+  `backend/src/domain/types.ts` so the server-side type matches the client's. Check that
+  `backend/src/services/businesses.ts` copies products as whole objects when creating and
+  updating a listing (it should already — the same document model); if any code rebuilds a
+  product field-by-field, add the four fields there so they are not silently dropped.
+  There is no new validation to add: every field is optional free text and the library is a
+  suggestion source on the client, never a server-enforced vocabulary.
+- **Path B — src/data/api/:** nothing. Products are carried inside the business payload the
+  existing `businesses` client methods already send.
+- **DB/migration:** none.
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; then create a listing
+  through Path B with a product carrying a brand + variants and read it back — all four
+  fields must survive the round trip.
+
+## [SYNC-039] People search matches the username, not just the display name
+
+- **Area:** UserRepository / users — `search(term)`
+- **The bug it fixes:** since sign-in moved to username + password, accounts are addressed
+  and written down by their handle (`sparksemp1`, `cornercafeown`). Search matched only
+  `name`, so typing the handle you signed the account up with returned "No one found" — in
+  the super-admin owner-reassign picker, the team-member picker, the bill-a-customer picker
+  and the fleet assign picker, all of which call this one method.
+- **Domain/interface (shared, already done):** `src/domain/types.ts` gains
+  `matchesUserSearch(user, term)` — the single rule: case-insensitive substring over `name`,
+  `username` and `email`, plus a digits-only match on `phone` when 4+ digits were typed; a
+  leading `@` is stripped. `src/data/repositories.ts` documents it on `search`.
+- **Supabase change (done):** `src/data/supabase/users.ts` filters the fetched `profiles`
+  rows with `matchesUserSearch` (the public card carries `name` AND `username`). If nothing
+  public matches and the term contains a digit or `@`, it merges `profiles_private` and
+  retries, so a phone/email search works for the callers RLS lets see those fields (yourself,
+  a super-admin) and silently finds nothing for everyone else.
+- **Mock (done):** same one-liner via `matchesUserSearch`.
+- **Path B — backend/:** in the users service (`backend/src/services/users.ts` or wherever
+  `search` lives), replace the name-only filter with the same rule — port
+  `matchesUserSearch` into `backend/src/domain/types.ts` (it is pure, copy it verbatim) and
+  call it. Two things to get right: the profile row's `data` carries `username`, and the
+  server sees phone/email for EVERY user because it holds a privileged connection — so it
+  must NOT match on phone/email unless the caller is the user themselves or a super-admin
+  (`backend/src/authz.ts` knows). Path A gets that restriction free from RLS; Path B has to
+  reimplement it, or it leaks a phone-number lookup to anyone.
+- **Path B — src/data/api/:** nothing — the client already calls the same endpoint.
+- **DB/migration:** none.
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; then search a known
+  username (a handle from docs/testing/TEST-DATA.md) and confirm the account comes back,
+  and that a non-admin searching someone else's phone number gets nothing.
+
+## [SYNC-040] Per-item rental basis (`RentalItem.basis`)
+
+- **Area:** BusinessRepository / businesses — rental documents only. No endpoint, no authz, no
+  migration: the field rides inside the existing `data` jsonb document.
+- **Why:** `Business.rentalBasis` was one setting for the whole listing, so a property dealer
+  whose flats go per month and whose scooter goes per day could not say so, and the business
+  page had no period to print next to a price. The basis now belongs to the ITEM; the business
+  setting is just the default a new item starts on.
+- **Domain/interface (shared, already done):** `src/domain/types.ts` — `RentalItem` gains
+  `basis?: RentalBasis`. `src/domain/catalog.ts` gains `rentalBasisSticker(basis)` ("per day" /
+  "per month" / "per day / month") for the tag beside the price.
+- **Supabase change:** none needed — `src/data/supabase/businesses.ts` writes whole rental
+  objects, so the field persists as it is.
+- **Path B — backend/:** mirror `basis?: RentalBasis` on `RentalItem` in
+  `backend/src/domain/types.ts`, and check nothing in `backend/src/services/businesses.ts`
+  rebuilds rentals field-by-field (it should copy the objects whole, same document model).
+  No validation to add — it is an optional enum-ish string the client picks from the library.
+- **Path B — src/data/api/:** nothing; rentals ride inside the business payload.
+- **DB/migration:** none.
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; save a rental with
+  `basis: 'daily'` on a listing whose `rentalBasis` is `'monthly'` and read it back unchanged.
+
+## [SYNC-041] Service/rental photos (`ServiceItem.imageUrl`, `RentalItem.imageUrl`)
+
+- **Area:** BusinessRepository / businesses — service and rental documents only. No endpoint,
+  no authz, no migration: the field rides inside the existing `data` jsonb document.
+- **Why:** menu, products, services and rentals are now one offering model
+  (`src/domain/offerings.ts`) shown by one catalog screen
+  (`src/features/offerings/OfferingCatalog.tsx`), which leads every row with a photo the way a
+  food app does. Dishes and products already carried one; services and rentals did not, so
+  those two lists rendered as a wall of emoji placeholders.
+- **Domain/interface (shared, already done):** `src/domain/types.ts` — `ServiceItem` and
+  `RentalItem` each gain `imageUrl?: string`. Written by
+  `src/features/businesses/OfferingFolderEditor.tsx`, which now shows a `PhotosField` (max 1)
+  on the composer, exactly as `FoodMenuEditor` does; the upload itself goes straight to
+  Supabase Storage on every backend (`lib/upload.ts`), so there is nothing backend-specific
+  about the value — it is a public URL string.
+- **Supabase change:** none needed — `src/data/supabase/businesses.ts` writes whole
+  service/rental objects, so the field persists as it is.
+- **Path B — backend/:** mirror `imageUrl?: string` on `ServiceItem` and `RentalItem` in
+  `backend/src/domain/types.ts`, and check nothing in `backend/src/services/businesses.ts`
+  rebuilds those arrays field-by-field (it should copy the objects whole, same document model
+  as [SYNC-040]). No validation to add — an optional URL string.
+- **Path B — src/data/api/:** nothing; services and rentals ride inside the business payload.
+- **DB/migration:** none.
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; save a service with an
+  `imageUrl` and read it back unchanged.

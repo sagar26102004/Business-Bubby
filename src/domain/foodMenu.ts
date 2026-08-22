@@ -73,34 +73,16 @@ export function foodSectionOrder(category?: string): number {
 }
 
 /**
- * A subcategory can nest — "South Indian › Dosa › Plain". We keep MenuItem's
- * single `subcategory` string and encode the nested path inside it with this
- * separator, so every existing consumer (search, cart keys, order grouping)
- * keeps working while the menu editor and menu screen read it back as a tree.
+ * Nested subcategories ("South Indian › Dosa › Plain") are a plain-string path
+ * encoded inside the item's single `subcategory` field. The helpers moved to
+ * `domain/subcategoryPath.ts` when services started nesting too; they are
+ * re-exported here so every menu caller keeps importing them from the menu
+ * library it already talks to.
  */
-export const SUBCATEGORY_SEP = ' › ';
-
-/** The nested subcategory segments of a MenuItem, outermost first ([] if none). */
-export function subcategoryPath(subcategory?: string): string[] {
-  if (!subcategory) return [];
-  return subcategory
-    .split('›')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-/** Join nested segments back into a MenuItem.subcategory (undefined if empty). */
-export function joinSubcategoryPath(path: string[]): string | undefined {
-  const clean = path.map((s) => s.trim()).filter(Boolean);
-  return clean.length ? clean.join(SUBCATEGORY_SEP) : undefined;
-}
-
-/** Do two subcategory paths point at the exact same folder? */
-export function samePath(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((seg, i) => seg === b[i]);
-}
-
-/** Is `prefix` an ancestor-or-equal of `path`? */
-export function isPathPrefix(prefix: string[], path: string[]): boolean {
-  return prefix.length <= path.length && prefix.every((seg, i) => seg === path[i]);
-}
+export {
+  SUBCATEGORY_SEP,
+  isPathPrefix,
+  joinSubcategoryPath,
+  samePath,
+  subcategoryPath,
+} from './subcategoryPath';

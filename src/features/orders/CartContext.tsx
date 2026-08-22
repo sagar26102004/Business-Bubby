@@ -1,29 +1,34 @@
 /**
  * The customer's cart, held per business.
  *
- * The food flow bounces between two screens — /menu/[businessId] (pick) and
- * /cart/[businessId] (review, then "Add" back to the menu) — so the picks
- * can't live in either screen's state. They live here, keyed by business, and
- * are cleared once the order is actually sent.
+ * The picking flow bounces between two screens — the catalog
+ * (/menu/[businessId] or /catalog/[businessId]) and /cart/[businessId]
+ * (review, then "Add" to go back for more) — so the picks can't live in either
+ * screen's state. They live here, keyed by business, and are cleared once the
+ * order is actually sent.
+ *
+ * A line holds a `CatalogItem`, not a dish: a service or a rental is picked
+ * exactly the way a dish is, and the item carries the bucket it came from so
+ * the cart knows where "Add" goes back to and whether the line orders as a
+ * product or a service.
  *
  * In-memory only, like the rest of the app pre-backend: a reload empties it.
  */
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import type { MenuItem } from '@/domain/types';
+import type { CatalogItem } from '@/domain/offerings';
 
 export interface CartLine {
-  item: MenuItem;
+  item: CatalogItem;
   quantity: number;
 }
 
-/** Menu items have no id — name + group is what makes one unique on a menu. */
-export const cartKey = (item: MenuItem) =>
-  `${item.category ?? ''}|${item.subcategory ?? ''}|${item.name}`;
+/** Offerings have no id of their own — `CatalogItem.key` is what identifies one. */
+export const cartKey = (item: CatalogItem) => item.key;
 
 interface CartState {
   lines: (businessId: string) => CartLine[];
-  quantityOf: (businessId: string, item: MenuItem) => number;
-  bump: (businessId: string, item: MenuItem, delta: number) => void;
+  quantityOf: (businessId: string, item: CatalogItem) => number;
+  bump: (businessId: string, item: CatalogItem, delta: number) => void;
   clear: (businessId: string) => void;
 }
 
@@ -40,11 +45,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const quantityOf = useCallback(
-    (businessId: string, item: MenuItem) => carts[businessId]?.[cartKey(item)]?.quantity ?? 0,
+    (businessId: string, item: CatalogItem) => carts[businessId]?.[cartKey(item)]?.quantity ?? 0,
     [carts],
   );
 
-  const bump = useCallback((businessId: string, item: MenuItem, delta: number) => {
+  const bump = useCallback((businessId: string, item: CatalogItem, delta: number) => {
     setCarts((prev) => {
       const cart = { ...(prev[businessId] ?? {}) };
       const key = cartKey(item);
@@ -82,8 +87,8 @@ export function useCart(businessId: string) {
     return {
       lines: myLines,
       itemCount: myLines.reduce((n, l) => n + l.quantity, 0),
-      quantityOf: (item: MenuItem) => quantityOf(businessId, item),
-      bump: (item: MenuItem, delta: number) => bump(businessId, item, delta),
+      quantityOf: (item: CatalogItem) => quantityOf(businessId, item),
+      bump: (item: CatalogItem, delta: number) => bump(businessId, item, delta),
       clear: () => clear(businessId),
     };
   }, [businessId, lines, quantityOf, bump, clear]);

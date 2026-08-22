@@ -2,8 +2,42 @@
  * Shared order helpers: line/total math over free-text prices, and one place
  * that says how each order status is presented on either side of the counter.
  */
-import type { Order, OrderFulfillment, OrderLine, OrderStatus } from '@/domain/types';
+import type { Business, Offer, Order, OrderFulfillment, OrderLine, OrderStatus } from '@/domain/types';
+import { liveOffers, offerLineLabel } from '@/features/businesses/offerUtils';
 import { formatMoney, parsePrice } from '@/lib/money';
+import type { Offering } from './OfferingPicker';
+
+/** The order-picker identity of an offer bundle. */
+export const offerKey = (offerId: string) => `offer:${offerId}`;
+
+/**
+ * One offer as something orderable. A bundle is ordered as a SINGLE line named
+ * after the offer and priced at the offer price — it can't be split, which is
+ * exactly what makes it an offer rather than a list of items. What's inside
+ * rides along as the row's description so the customer sees what they get.
+ */
+export function offerAsOffering(offer: Offer): Offering {
+  const contents = offer.lines.map(offerLineLabel).join(' + ') || offer.description;
+  return {
+    key: offerKey(offer.id),
+    // Goods unless everything in the bundle is a service.
+    kind:
+      offer.lines.length > 0 && offer.lines.every((l) => l.kind === 'service')
+        ? 'service'
+        : 'product',
+    name: offer.title,
+    price: offer.price,
+    description:
+      [contents, offer.wasPrice ? `normally ${offer.wasPrice}` : undefined]
+        .filter(Boolean)
+        .join(' · ') || undefined,
+  };
+}
+
+/** A business's live offers, ready to drop into the order picker. */
+export function offerOfferings(business: Business): Offering[] {
+  return liveOffers(business).map(offerAsOffering);
+}
 
 /** A line's price fields — enough of an OrderLine to do money math on. */
 export interface PricedLine {

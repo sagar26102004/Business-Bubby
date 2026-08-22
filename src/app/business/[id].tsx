@@ -3,9 +3,10 @@
  *
  *  1. WHO THEY ARE — the display picture, name, tagline, description, status
  *     and location with a single "Get directions" button + the distance.
- *  2. WHAT THEY OFFER — menu, services and rentals (and products) side by side,
- *     each opening by category, with the action buttons (order, book, enrol…)
- *     at the foot of the section.
+ *  2. WHAT THEY OFFER — menu, services, rentals and products side by side, all
+ *     four built from the one offering model (`domain/offerings.ts`) so they
+ *     open, fold and read identically, with the action buttons (order, book,
+ *     enrol…) at the foot of the section.
  *  3. SHOWCASE — an auto-rotating slider of their work, full-screen on tap.
  *  4. RATINGS & REVIEWS — the star breakdown, filterable, over a rotating
  *     slider of what customers wrote.
@@ -19,13 +20,8 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Business, TrackedItem, User } from '@/domain/types';
 import { commerceVocab, getSubcategory, offersDineIn, rentalBasisLabel } from '@/domain/catalog';
+import { offeringBuckets } from '@/domain/offerings';
 import { hasModule } from '@/domain/modules';
-import {
-  RENTAL_SECTIONS,
-  SERVICE_SECTIONS,
-  rentalCategory,
-  sortBySection,
-} from '@/domain/offeringSections';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { isBusinessTeamMember } from '@/domain/access';
 import { haversineKm } from '@/lib/geo';
@@ -44,6 +40,7 @@ import {
 } from '@/components/ui';
 import { BusinessHero } from '@/features/businesses/BusinessHero';
 import { OfferingsSection, type OfferingGroup } from '@/features/businesses/OfferingsSection';
+import { catalogLink } from '@/features/offerings/links';
 import { OffersSection } from '@/features/businesses/OffersSection';
 import { liveOffers } from '@/features/businesses/offerUtils';
 import { ProductTile } from '@/features/businesses/ProductTile';
@@ -166,68 +163,43 @@ export default function BusinessDetailScreen() {
       : business.distanceKm;
 
   /* ——— Section 2: everything the business offers, block by block ——— */
-  const groups: OfferingGroup[] = [];
-  if (hasMenu) {
-    groups.push({
-      key: 'menu',
-      title: 'Menu',
-      subtitle: `${business.menu!.length} dish${business.menu!.length === 1 ? '' : 'es'}`,
-      entries: business.menu!.map((m) => ({
-        name: m.name,
-        price: m.price,
-        description: m.description,
-        category: m.category,
-        subcategory: m.subcategory,
+  // Menu, services, rentals and products are one model with four names
+  // (`domain/offerings.ts`), so each block is built the same way and links out
+  // to the same full-catalog screen. A stall's products are the exception —
+  // they're shown picture-first below instead of as a list.
+  const groups: OfferingGroup[] = offeringBuckets(business)
+    .filter((view) => !(isStall && view.bucket === 'products'))
+    .map((view) => ({
+      key: view.bucket,
+      title: view.title,
+      subtitle:
+        view.bucket === 'rentals'
+          ? [view.subtitle, rentalBasisLabel(business.rentalBasis)?.toLowerCase()]
+              .filter(Boolean)
+              .join(' · ')
+          : view.subtitle,
+      icon: view.icon,
+      entries: view.items.map((item) => ({
+        name: item.name,
+        price: item.price,
+        description: item.description,
+        category: item.category,
+        subcategory: item.detail,
+        path: item.path,
+        imageUrl: item.imageUrl,
+        badge: item.badge,
       })),
-      seeAll: { label: 'Full menu', onPress: () => router.push(`/menu/${business.id}`) },
-    });
-  }
-  if ((business.services?.length ?? 0) > 0) {
-    groups.push({
-      key: 'services',
-      title: 'Services',
-      subtitle: `${business.services!.length} service${business.services!.length === 1 ? '' : 's'}`,
-      entries: sortBySection(business.services!, SERVICE_SECTIONS),
-    });
-  }
-  if ((business.rentals?.length ?? 0) > 0) {
-    const basis = rentalBasisLabel(business.rentalBasis);
-    groups.push({
-      key: 'rentals',
-      title: 'For rent',
-      subtitle: [
-        `${business.rentals!.length} item${business.rentals!.length === 1 ? '' : 's'}`,
-        basis?.toLowerCase(),
-      ]
-        .filter(Boolean)
-        .join(' · '),
-      // Older rentals only carry a browse subcategoryId — rentalCategory() turns
-      // that into their section so nothing lands ungrouped.
-      entries: sortBySection(
-        business.rentals!.map((item) => ({ ...item, category: rentalCategory(item) })),
-        RENTAL_SECTIONS,
-      ),
-    });
-  }
-  // A stall's products are shown picture-first below instead of as a list.
-  if (!isStall && (business.products?.length ?? 0) > 0) {
-    groups.push({
-      key: 'products',
-      title: 'Products',
-      subtitle: `${business.products!.length} item${business.products!.length === 1 ? '' : 's'}`,
-      entries: business.products!.map((p) => ({
-        name: p.name,
-        price: p.price,
-        description: p.description,
-        category: getSubcategory('item', p.subcategoryId)?.name,
-      })),
-    });
-  }
+      seeAll: {
+        label: view.seeAllLabel,
+        onPress: () => router.push(catalogLink(business.id, view.bucket)),
+      },
+    }));
   if ((business.partyPackages?.length ?? 0) > 0) {
     groups.push({
       key: 'party',
       title: 'Party packages',
       subtitle: `${business.partyPackages!.length} package${business.partyPackages!.length === 1 ? '' : 's'}`,
+      icon: '🎉',
       entries: business.partyPackages!.map((pkg) => ({
         name: pkg.name,
         price: pkg.price,
@@ -280,8 +252,17 @@ export default function BusinessDetailScreen() {
       />
 
       {/* Offers — the business's own promotions, straight under the
-          description so they're the first thing read after the intro. */}
-      <OffersSection offers={offers} />
+          description so they're the first thing read after the intro. Tapping
+          one opens the order screen with that bundle already picked. */}
+      <OffersSection
+        offers={offers}
+        onPress={(offer) =>
+          router.push({
+            pathname: '/order/new/[businessId]',
+            params: { businessId: business.id, offer: offer.id },
+          })
+        }
+      />
 
       {/* ——— 2. What they offer ——— */}
       {hasOfferings ? <SectionTitle>What we offer</SectionTitle> : null}
@@ -568,9 +549,19 @@ function HeaderAction({
   );
 }
 
-/** True when the business lists anything a customer could put on an order. */
+/**
+ * True when the business lists anything a customer could put on a request.
+ * Rentals count: a flat or a bike is requested through the same flow, which is
+ * why a rental listing had no action button at all before.
+ */
 function hasCatalog(b: Business): boolean {
-  return (b.products?.length ?? 0) + (b.menu?.length ?? 0) + (b.services?.length ?? 0) > 0;
+  return (
+    (b.products?.length ?? 0) +
+      (b.menu?.length ?? 0) +
+      (b.services?.length ?? 0) +
+      (b.rentals?.length ?? 0) >
+    0
+  );
 }
 
 /** "Track my child" / "Track my children" / "Track my goods" / mixed. */

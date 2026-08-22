@@ -244,6 +244,13 @@ export interface UserRepository {
   /** All users — used by dev tools to list/impersonate accounts. */
   list(): Promise<User[]>;
   /** Search registered users by name — used when adding employees. */
+  /**
+   * Find people to link — a teammate, a customer to bill, the person a listing
+   * is being handed to. Matches the display NAME or the USERNAME, and (for a
+   * caller allowed to see them) the phone or email: a username is how accounts
+   * are addressed since sign-in moved to username + password, so searching one
+   * has to find its owner. Case-insensitive substring match, `@handle` welcome.
+   */
   search(term: string): Promise<User[]>;
   /** Create a new account (used by dev tools). */
   create(input: NewUserInput): Promise<User>;

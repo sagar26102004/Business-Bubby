@@ -105,10 +105,14 @@ export default function OrderDetailScreen() {
   const isDineIn = order.fulfillment === 'dine_in';
   // QR handover (takeaway today): the order carries a scannable ticket from the
   // moment it's placed; staff scan it to take payment and hand it over. Hidden
-  // only once the order is dead (rejected/declined).
+  // once the order is dead (rejected/declined).
   const isTerminal = order.status === 'rejected' || order.status === 'declined';
   const handover = usesQrHandover(order) ? handoverOf(order, bill) : null;
   const showTicket = !!handover && !isTerminal;
+  // The code is only a shortcut through pay → collect. Once it's been handed
+  // over there is nothing left to scan, so the QR goes and the card keeps just
+  // the record of who handed it over.
+  const showTicketQr = !!handover && !handover.collected;
   // A confirmed dine-in order without a bill is an OPEN TAB: the customer can
   // keep adding items; the business closes it by moving it to billing.
   const openTab = order.status === 'accepted' && !order.billId;
@@ -274,20 +278,26 @@ export default function OrderDetailScreen() {
       {showTicket && handover ? (
         <Card style={styles.ticketCard}>
           <Text variant="caption" weight="semibold" tone="muted">
-            🎟️ ORDER TICKET
+            {showTicketQr ? '🎟️ ORDER TICKET' : '🤝 HANDOVER'}
           </Text>
-          <View style={styles.ticketQrWrap}>
-            <QRCode
-              value={orderTicketUrl(order.id)}
-              size={168}
-              backgroundColor="#FFFFFF"
-              color="#000000"
+          {showTicketQr ? (
+            <View style={styles.ticketQrWrap}>
+              <QRCode
+                value={orderTicketUrl(order.id)}
+                size={168}
+                backgroundColor="#FFFFFF"
+                color="#000000"
+              />
+            </View>
+          ) : null}
+          {/* The QR's own margin used to space this out; without it the tag
+              would sit flush against the heading. */}
+          <View style={showTicketQr ? undefined : styles.ticketTagGap}>
+            <Tag
+              label={`${HANDOVER_META[handover.stage].icon} ${HANDOVER_META[handover.stage].label}`}
+              tone={handover.collected ? 'default' : 'brand'}
             />
           </View>
-          <Tag
-            label={`${HANDOVER_META[handover.stage].icon} ${HANDOVER_META[handover.stage].label}`}
-            tone={handover.collected ? 'default' : 'brand'}
-          />
           <Text variant="caption" tone="muted" style={styles.ticketHint}>
             {handover.collected
               ? isMember
@@ -298,11 +308,6 @@ export default function OrderDetailScreen() {
                 : isMember
                   ? 'Scan this at the counter to take payment, then to hand it over.'
                   : 'Show this at the counter — staff scan it to take payment and hand over your order.'}
-          </Text>
-
-          {/* Web has no camera scanner — this link is what you paste into /scan. */}
-          <Text variant="caption" tone="muted" style={styles.ticketLink} selectable>
-            {orderTicketUrl(order.id)}
           </Text>
 
           {/* The same pay → collect actions the scan screen offers, inline.
@@ -384,7 +389,8 @@ export default function OrderDetailScreen() {
                   tone={included ? 'default' : 'muted'}
                   style={included ? undefined : styles.struck}
                 >
-                  {line.kind === 'service' ? '🛠️' : '🛍️'} {line.name}
+                  {line.kind === 'product' ? '🛍️ ' : ''}
+                  {line.name}
                   {line.quantity > 1 ? ` ×${line.quantity}` : ''}
                 </Text>
                 {line.offerPrice ? (
@@ -573,8 +579,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: '#00000022',
   },
+  ticketTagGap: { marginTop: spacing.md },
   ticketHint: { textAlign: 'center', marginTop: spacing.sm, maxWidth: 320 },
-  ticketLink: { textAlign: 'center', marginTop: spacing.sm },
   ticketBtn: { alignSelf: 'stretch', marginTop: spacing.md },
   noteBody: { marginTop: spacing.xs, fontStyle: 'italic' },
   partyLine: { marginTop: spacing.xs },

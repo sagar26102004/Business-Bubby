@@ -8,9 +8,11 @@ export interface CardProps {
   onPress?: () => void;
   style?: StyleProp<ViewStyle>;
   padded?: boolean;
+  /** Spoken label for a pressable card, when the children don't read as one. */
+  accessibilityLabel?: string;
 }
 
-export function Card({ children, onPress, style, padded = true }: CardProps) {
+export function Card({ children, onPress, style, padded = true, accessibilityLabel }: CardProps) {
   const colors = useColors();
   // A full 1px warm border (not hairline) on the paper background: the card
   // edge should be visible enough to read as a distinct surface, the way it
@@ -28,6 +30,8 @@ export function Card({ children, onPress, style, padded = true }: CardProps) {
     return (
       <Pressable
         onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
         style={({ pressed }) => [base, pressed && styles.pressed, style]}
       >
         {children}

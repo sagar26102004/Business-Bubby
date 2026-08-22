@@ -6,8 +6,8 @@
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import type { ProductItem } from '@/domain/types';
+import { GoodsEditor } from '@/features/businesses/GoodsEditor';
 import { ManageGate, type ManageFormProps } from '@/features/businesses/ManageGate';
-import { OfferingsEditor } from '@/features/businesses/OfferingsEditor';
 import { Button } from '@/components/ui';
 import { spacing } from '@/theme/theme';
 
@@ -28,15 +28,10 @@ function ProductsForm({ business, save, saving }: ManageFormProps) {
 
   return (
     <>
-      <OfferingsEditor
+      <GoodsEditor
         value={products}
         onChange={setProducts}
-        namePlaceholder={
-          isStall ? 'Item (e.g. iPhone 15 Pro)' : 'Product (e.g. Touring tyre 205/55 R16)'
-        }
-        addLabel={isStall ? 'Add item' : 'Add product'}
-        // Buyers browse stalls picture-first, so items sell on their photo.
-        withImage
+        noun={isStall ? 'item' : 'product'}
       />
       <Button
         title="Save"

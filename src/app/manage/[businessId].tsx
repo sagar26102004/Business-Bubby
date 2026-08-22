@@ -34,7 +34,8 @@ import { Card, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/compone
 import { radius, spacing, useColors } from '@/theme/theme';
 
 interface Tile {
-  icon: string;
+  /** Omitted where a glyph would say less than the label already does. */
+  icon?: string;
   label: string;
   /** What's inside — a count of the real data beats a static hint. */
   sub: string;
@@ -156,14 +157,12 @@ export default function ManageScreen() {
           href: `${base}/products` as Href,
         },
         !isStall && {
-          icon: '🛠️',
           label: 'Services offered',
           sub: count((business.services ?? []).length, 'service', 'services'),
           href: `${base}/services` as Href,
         },
         // A rental listing always; anyone else only once they rent something.
         (isRental || rentals.length > 0) && {
-          icon: '🔑',
           label: 'For rent',
           sub: count(rentals.length, 'thing', 'things'),
           href: `${base}/rentals` as Href,
@@ -224,9 +223,11 @@ export default function ManageScreen() {
           </Text>
           {group.tiles.map((tile) => (
             <Card key={tile.label} onPress={() => router.push(tile.href)} style={styles.tile}>
-              <View style={[styles.iconBox, { backgroundColor: colors.brandSoft }]}>
-                <Text style={styles.icon}>{tile.icon}</Text>
-              </View>
+              {tile.icon ? (
+                <View style={[styles.iconBox, { backgroundColor: colors.brandSoft }]}>
+                  <Text style={styles.icon}>{tile.icon}</Text>
+                </View>
+              ) : null}
               <View style={styles.tileText}>
                 <Text weight="semibold">{tile.label}</Text>
                 <Text variant="caption" tone="muted" numberOfLines={1}>

@@ -3,10 +3,18 @@
  * name, one quiet meta line, and soft-tinted status chips — no saturated
  * badges competing with the content. Icons carry the meaning that emoji used
  * to, so every row lines up on the same baseline.
+ *
+ * When the owner has uploaded a display picture the card opens with it, using
+ * the SAME treatment as the business page hero — the photo behind a dark
+ * scrim, with the name, provider line and status chips reading on top of it —
+ * so a listing looks like itself whether you meet it in a list or on its own
+ * page. Everything below (rating, address, tags) stays on plain surface, and a
+ * card with no picture keeps exactly the layout it had before.
  */
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import type { Business, PlaceKind } from '@/domain/types';
 import { openState } from '@/domain/hours';
 import { formatDistance, priceLevelLabel, rentalBasisLabel } from '@/domain/catalog';
@@ -25,6 +33,9 @@ const PLACE_ICONS: Record<PlaceKind, string> = {
   custom: '📌',
 };
 
+/** Shorter than the hero's 200 — a list has to fit several of these on screen. */
+const COVER_H = 150;
+
 export function BusinessCard({ business }: { business: Business }) {
   const router = useRouter();
   const colors = useColors();
@@ -33,6 +44,16 @@ export function BusinessCard({ business }: { business: Business }) {
 
   const distance = formatDistance(business.distanceKm);
   const price = priceLevelLabel(business.priceLevel);
+
+  // The display picture doubles as the header background; without one the
+  // header is simply the top of the card, on plain surface.
+  const cover = business.coverImageUrl;
+  const onPhoto = !!cover;
+  const tone = onPhoto ? ('inverse' as const) : ('default' as const);
+  const mutedTone = onPhoto ? ('inverse' as const) : ('muted' as const);
+  // Muted text would vanish against the scrim, so on a photo the hours and
+  // distance ride in surface pills — the same trick the hero uses.
+  const pillStyle = onPhoto ? [styles.metaPill, { backgroundColor: colors.surface }] : null;
 
   // Open/Closed is computed from structured hours when present, else the stored
   // openNow flag; the 🕒 label prefers today's timings over the legacy summary.
@@ -70,63 +91,86 @@ export function BusinessCard({ business }: { business: Business }) {
         ? [business.providerType, basis].filter(Boolean).join(' · ')
         : business.providerType;
 
-  return (
-    <Card onPress={() => router.push(`/business/${business.id}`)} style={styles.card}>
-      {/* Body */}
-      <View style={styles.body}>
-        <View style={styles.titleRow}>
-          <Text variant="subheading" weight="bold" style={styles.name} numberOfLines={1}>
-            {business.name}
-          </Text>
-          {price ? (
-            <Text variant="label" weight="semibold" tone="muted">
-              {price}
-            </Text>
-          ) : null}
-          <Pressable onPress={() => setFavorite((f) => !f)} hitSlop={10} style={styles.heart}>
-            <Icon
-              name="heart"
-              size={19}
-              color={favorite ? colors.danger : colors.textMuted}
-              filled={favorite}
-            />
-          </Pressable>
-        </View>
-
-        {providerLine ? (
-          <Text variant="label" tone="muted" style={styles.provider} numberOfLines={1}>
-            {providerLine}
+  // Identity block — this is the part that sits on the photo when there is one.
+  const header = (
+    <>
+      <View style={styles.titleRow}>
+        <Text variant="subheading" weight="bold" tone={tone} style={styles.name} numberOfLines={1}>
+          {business.name}
+        </Text>
+        {price ? (
+          <Text variant="label" weight="semibold" tone={mutedTone}>
+            {price}
           </Text>
         ) : null}
+        <Pressable onPress={() => setFavorite((f) => !f)} hitSlop={10} style={styles.heart}>
+          <Icon
+            name="heart"
+            size={19}
+            color={favorite ? colors.danger : onPhoto ? '#FFFFFF' : colors.textMuted}
+            filled={favorite}
+          />
+        </Pressable>
+      </View>
 
-        {/* Status · hours · distance — soft chips, not saturated badges. */}
-        <View style={styles.badgeRow}>
-          {business.rentalStatus ? (
-            <StatusChip
-              label={business.rentalStatus === 'available' ? 'Available' : 'Rented'}
-              positive={business.rentalStatus === 'available'}
-            />
-          ) : typeof status.open === 'boolean' ? (
-            <StatusChip label={status.open ? 'Open now' : 'Closed'} positive={status.open} />
-          ) : null}
-          {hoursLabel ? (
-            <View style={styles.metaItem}>
-              <Icon name="clock" size={13} color={colors.textMuted} strokeWidth={2.2} />
-              <Text variant="caption" tone="muted">
-                {hoursLabel}
-              </Text>
-            </View>
-          ) : null}
-          {distance ? (
-            <View style={styles.metaItem}>
-              <Icon name="pin" size={13} color={colors.textMuted} strokeWidth={2.2} />
-              <Text variant="caption" weight="semibold" tone="muted">
-                {distance}
-              </Text>
-            </View>
-          ) : null}
+      {providerLine ? (
+        <Text variant="label" tone={mutedTone} style={styles.provider} numberOfLines={1}>
+          {providerLine}
+        </Text>
+      ) : null}
+
+      {/* Status · hours · distance — soft chips, not saturated badges. */}
+      <View style={[styles.badgeRow, onPhoto && styles.badgeRowOnPhoto]}>
+        {business.rentalStatus ? (
+          <StatusChip
+            label={business.rentalStatus === 'available' ? 'Available' : 'Rented'}
+            positive={business.rentalStatus === 'available'}
+          />
+        ) : typeof status.open === 'boolean' ? (
+          <StatusChip label={status.open ? 'Open now' : 'Closed'} positive={status.open} />
+        ) : null}
+        {hoursLabel ? (
+          <View style={[styles.metaItem, pillStyle]}>
+            <Icon name="clock" size={13} color={colors.textMuted} strokeWidth={2.2} />
+            <Text variant="caption" tone="muted">
+              {hoursLabel}
+            </Text>
+          </View>
+        ) : null}
+        {distance ? (
+          <View style={[styles.metaItem, pillStyle]}>
+            <Icon name="pin" size={13} color={colors.textMuted} strokeWidth={2.2} />
+            <Text variant="caption" weight="semibold" tone="muted">
+              {distance}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </>
+  );
+
+  return (
+    <Card
+      onPress={() => router.push(`/business/${business.id}`)}
+      padded={false}
+      style={styles.card}
+      accessibilityLabel={business.name}
+    >
+      {onPhoto ? (
+        <View style={styles.top}>
+          <Image source={{ uri: cover }} style={styles.cover} resizeMode="cover" />
+          <LinearGradient
+            colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.72)']}
+            style={StyleSheet.absoluteFill}
+          />
+          <View style={styles.headerOnPhoto}>{header}</View>
         </View>
+      ) : (
+        <View style={styles.header}>{header}</View>
+      )}
 
+      {/* Everything below the picture reads on plain surface. */}
+      <View style={styles.body}>
         <View style={styles.ratingRow}>
           <Stars rating={business.ratingAvg} count={business.ratingCount} />
         </View>
@@ -176,6 +220,21 @@ export function BusinessCard({ business }: { business: Business }) {
 const styles = StyleSheet.create({
   card: { marginBottom: spacing.md },
   heart: { alignItems: 'center', justifyContent: 'center' },
+  // Photo header: the identity sits at the BOTTOM of the frame, where the
+  // scrim is darkest.
+  top: { justifyContent: 'flex-end', minHeight: COVER_H },
+  cover: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+  },
+  header: { padding: spacing.lg, paddingBottom: 0 },
+  headerOnPhoto: { padding: spacing.lg, paddingTop: spacing.xxl },
+  body: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
   badgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -184,8 +243,13 @@ const styles = StyleSheet.create({
     rowGap: spacing.xs,
     marginTop: spacing.md,
   },
+  badgeRowOnPhoto: { columnGap: spacing.sm, rowGap: spacing.sm },
   metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  body: {},
+  metaPill: {
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   name: { flex: 1 },
   provider: { marginTop: 3 },

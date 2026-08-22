@@ -5,9 +5,9 @@
 import { useState } from 'react';
 import { StyleSheet } from 'react-native';
 import type { ServiceItem } from '@/domain/types';
-import { SERVICE_SECTIONS } from '@/domain/offeringSections';
+import { SERVICE_SECTIONS, serviceJobs } from '@/domain/offeringSections';
 import { ManageGate, type ManageFormProps } from '@/features/businesses/ManageGate';
-import { OfferingsEditor } from '@/features/businesses/OfferingsEditor';
+import { OfferingFolderEditor } from '@/features/businesses/OfferingFolderEditor';
 import { Button } from '@/components/ui';
 import { spacing } from '@/theme/theme';
 
@@ -27,15 +27,17 @@ function ServicesForm({ business, save, saving }: ManageFormProps) {
 
   return (
     <>
-      <OfferingsEditor
+      <OfferingFolderEditor
         value={services}
         onChange={setServices}
-        namePlaceholder="Service (e.g. Wheel alignment)"
-        addLabel="Add service"
         sections={SERVICE_SECTIONS}
-        sectionsLabel="What kind of service is it?"
+        noun="service"
+        hint="Tap a section to add the work you do. Skip the ones you don’t."
+        newSectionPlaceholder="Section name — e.g. Borewell, Solar"
+        customIcon="🛠️"
+        jobsFor={(section, kind) => serviceJobs(section.id, kind)}
         withDescription
-        descriptionPlaceholder="What's included (optional)"
+        descriptionPlaceholder="What’s included (optional)"
       />
       <Button
         title="Save"

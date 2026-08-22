@@ -121,6 +121,32 @@ export interface User {
 }
 
 /**
+ * Does this person match what was typed in a people-search box?
+ *
+ * Every picker in the app (link a teammate, bill a customer, hand a listing to
+ * its owner) searches the same way, so the rule lives here rather than in each
+ * backend: the display name, the USERNAME, and — when the caller is allowed to
+ * see them, which RLS decides rather than this function — the phone and email.
+ *
+ * The username matters: sign-in moved to username + password, so that handle is
+ * how an account is addressed and written down. Searching one has to find its
+ * owner, or the person doing the linking is left guessing at display names.
+ *
+ * Names match as a substring so half a name finds someone; a phone matches on
+ * digits alone, so "98765 43210" finds "+91 9876543210".
+ */
+export function matchesUserSearch(user: User, term: string): boolean {
+  const q = term.trim().toLowerCase().replace(/^@/, '');
+  if (!q) return false;
+  if ([user.name, user.username, user.email].some((f) => f?.toLowerCase().includes(q))) return true;
+  const typedDigits = q.replace(/\D/g, '');
+  const phone = (user.phone ?? '').replace(/\D/g, '');
+  // 4 digits is the shortest thing worth calling a phone search; below that
+  // every number in the directory would match.
+  return typedDigits.length >= 4 && phone.includes(typedDigits);
+}
+
+/**
  * Where an employee sits in the business hierarchy. The business owner (the
  * user who registered it, `Business.ownerId`) sits above all of these.
  */
@@ -485,6 +511,11 @@ export interface ServiceItem {
   category?: string;
   /** Optional group inside the category, e.g. "AC" / "Fridge". */
   subcategory?: string;
+  /**
+   * Photo of the work, shown beside the service on the catalog screen exactly
+   * as a dish photo is — a service list is browsed the way a menu is.
+   */
+  imageUrl?: string;
 }
 
 /**
@@ -529,6 +560,17 @@ export interface ProductItem {
    * filters match on what's inside the stall, not on the stall itself.
    */
   subcategoryId?: string;
+  /**
+   * Where the product is filed in the goods library (`domain/goods.ts`):
+   * `category` is the shelf ("Home electronics"), `subcategory` the kind of
+   * thing ("Air conditioner"), `brand` who makes it and `variants` the specs
+   * that pick out this exact one ("1.5 Ton", "Split"). All optional — a shop
+   * that just types a name still lists fine.
+   */
+  category?: string;
+  subcategory?: string;
+  brand?: string;
+  variants?: string[];
 }
 
 /**
@@ -588,6 +630,15 @@ export interface RentalItem {
   category?: string;
   /** Group inside the section, e.g. "SUV". */
   subcategory?: string;
+  /** Photo of the thing, shown beside it on the catalog screen (as a dish photo is). */
+  imageUrl?: string;
+  /**
+   * How THIS thing is charged — a flat goes per month while the same lister's
+   * car goes per day, so the basis belongs to the item, not the business.
+   * Falls back to `Business.rentalBasis` (which is now just the default for new
+   * items) when unset, so listings made before this still read correctly.
+   */
+  basis?: RentalBasis;
 }
 
 /** What a line on an order or bill refers to. */

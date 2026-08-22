@@ -26,6 +26,7 @@ import {
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { ProductMessage } from '@/domain/types';
 import { formatDistance, getSubcategory } from '@/domain/catalog';
+import { productDetailLine } from '@/domain/goods';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
@@ -188,7 +189,10 @@ export default function ProductScreen() {
     return <EmptyView title="Item not found" subtitle="This item is no longer listed." />;
   }
 
-  const category = getSubcategory('item', product.subcategoryId)?.name;
+  // The shelf it's filed on — the goods library's if the seller picked one,
+  // else the stall subcategory older items carry.
+  const category = product.category?.trim() || getSubcategory('item', product.subcategoryId)?.name;
+  const specLine = productDetailLine(product);
 
   return (
     <Screen scroll padded={false}>
@@ -264,6 +268,13 @@ export default function ProductScreen() {
         <Text variant="subheading" weight="bold" style={styles.name}>
           {product.name}
         </Text>
+
+        {/* "Air conditioner · Samsung · 1.5 Ton" — what exactly this one is. */}
+        {specLine ? (
+          <Text variant="caption" tone="muted" style={styles.spec}>
+            {specLine}
+          </Text>
+        ) : null}
 
         {product.description ? (
           <Text tone="muted" style={styles.description}>
@@ -622,6 +633,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: radius.sm,
   },
+  spec: { marginBottom: spacing.sm },
   name: { marginTop: spacing.sm },
   description: { marginTop: spacing.sm, lineHeight: 22 },
   seller: { marginTop: spacing.lg },

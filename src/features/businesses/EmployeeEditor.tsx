@@ -158,12 +158,18 @@ export function EmployeeEditor({ value, onChange }: EmployeeEditorProps) {
 
       <Input
         label="Or link a registered user"
-        placeholder="Search by name…"
+        placeholder="Name or username — e.g. Nitin, sparksemp1"
         value={searchTerm}
         onChangeText={runSearch}
+        autoCapitalize="none"
         autoCorrect={false}
         style={styles.searchSpacing}
       />
+      {searchTerm.trim().length >= 2 && !searching && results.length === 0 ? (
+        <Text variant="caption" tone="muted">
+          No one found. Try the username they sign in with.
+        </Text>
+      ) : null}
       {searching ? <Text variant="caption" tone="muted">Searching…</Text> : null}
       {!pendingUser
         ? results.map((user) => (
@@ -173,7 +179,12 @@ export function EmployeeEditor({ value, onChange }: EmployeeEditorProps) {
                 <View style={styles.resultInfo}>
                   <Text weight="medium">{user.name}</Text>
                   <Text variant="caption" tone="muted">
-                    {user.isProfilePublic ? 'Public profile' : 'Private profile'}
+                    {[
+                      user.username ? `@${user.username}` : null,
+                      user.isProfilePublic ? 'Public profile' : 'Private profile',
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
                   </Text>
                 </View>
                 <Text tone="brand" variant="label" weight="medium">

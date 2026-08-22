@@ -2,7 +2,7 @@
  * Supabase-backed UserRepository over the `profiles` table (data = domain User).
  */
 import type { NewUserInput, UserRepository } from '@/data/repositories';
-import type { User } from '@/domain/types';
+import { matchesUserSearch, type User } from '@/domain/types';
 import { getSupabase } from '@/lib/supabase';
 import {
   PRIVATE_PROFILE_KEYS,
@@ -45,19 +45,26 @@ export function createSupabaseUsers(): UserRepository {
     },
 
     async search(term: string): Promise<User[]> {
-      const q = term.trim().toLowerCase();
-      if (!q) return [];
-      // Small directory — fetch and filter by name in JS. Every named account
-      // is findable (matching the mock): search is how a business links a
+      if (!term.trim()) return [];
+      // Small directory — fetch and filter in JS. Every named account is
+      // findable (matching the mock): search is how a business links a
       // teammate or bills a customer, so a private profile — which only hides
       // someone's tappable employee page — must still be reachable here.
-      // Anonymous guests have no name, so they never match.
+      // Anonymous guests have no name and no username, so they never match.
       const { data, error } = await sb.from('profiles').select('data');
       if (error) throw error;
-      const matches = (data ?? [])
-        .map((r) => r.data as User)
-        .filter((u) => !!u.name && u.name.toLowerCase().includes(q));
-      return withPrivate(matches);
+      const all = (data ?? []).map((r) => r.data as User).filter((u) => !!u.name || !!u.username);
+      // The public card carries the name and the username; that answers almost
+      // every search without a second round trip.
+      const matches = all.filter((u) => matchesUserSearch(u, term));
+      if (matches.length > 0) return withPrivate(matches);
+      // Nothing public matched. If what was typed looks like a phone or an
+      // email, try again over the private half — which RLS hands back only for
+      // yourself or a super-admin, so this finds nothing extra for anyone else.
+      const looksPrivate = /[@\d]/.test(term);
+      if (!looksPrivate) return [];
+      const merged = await withPrivate(all);
+      return merged.filter((u) => matchesUserSearch(u, term));
     },
 
     async create(input: NewUserInput): Promise<User> {

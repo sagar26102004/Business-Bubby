@@ -21,10 +21,16 @@ export interface Offering {
   /** Free-text menu grouping ("Starters" → "Veg"), copied from MenuItem. */
   category?: string;
   subcategory?: string;
+  /**
+   * Identity override for offerings whose name isn't unique on its own — an
+   * offer bundle is named after the offer, which may read exactly like one of
+   * the dishes inside it.
+   */
+  key?: string;
 }
 
 /** Stable identity for an offering inside the quantity/offer maps. */
-export const keyOf = (o: Offering) => `${o.kind}:${o.name}`;
+export const keyOf = (o: Offering) => o.key ?? `${o.kind}:${o.name}`;
 
 interface OfferingSubGroup {
   name: string;

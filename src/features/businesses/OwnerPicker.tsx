@@ -2,9 +2,12 @@
  * Super-admin owner picker — choose which registered user a business belongs to.
  *
  * Used on the register wizard's "owner" step (shown only to super-admins) and on
- * the business page's reassign-owner control. Search registered users by name;
- * `null` means "myself" (the acting super-admin), so a super-admin can also just
- * list something under their own account.
+ * the business page's reassign-owner control. Search registered users by name
+ * OR username — the handle is what an account is addressed by since sign-in
+ * moved to username + password, and it is what gets written down and passed
+ * around, so it has to find its owner. `null` means "myself" (the acting
+ * super-admin), so a super-admin can also just list something under their own
+ * account.
  */
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -86,9 +89,10 @@ export function OwnerPicker({ value, onChange, selfLabel, hideSelf }: OwnerPicke
 
       <Input
         label={value ? 'Choose someone else' : 'Assign to a registered user'}
-        placeholder="Search by name…"
+        placeholder="Name or username — e.g. Anil, sparksown"
         value={term}
         onChangeText={runSearch}
+        autoCapitalize="none"
         autoCorrect={false}
       />
       {searching ? (
@@ -98,7 +102,8 @@ export function OwnerPicker({ value, onChange, selfLabel, hideSelf }: OwnerPicke
       ) : null}
       {term.trim().length >= 2 && !searching && results.length === 0 ? (
         <Text variant="caption" tone="muted">
-          No one found. They need a public One Place account first.
+          No one found. Try their username (the handle they sign in with) — they
+          need a One Place account before a listing can be put in their name.
         </Text>
       ) : null}
       {results.map((user) => (
@@ -107,8 +112,16 @@ export function OwnerPicker({ value, onChange, selfLabel, hideSelf }: OwnerPicke
             <Avatar name={user.name} size={36} />
             <View style={styles.info}>
               <Text weight="medium">{user.name}</Text>
+              {/* The handle first: two people share a name, never a username,
+                  and handing a business to the wrong Sagar is not undoable by
+                  anyone but a super-admin. */}
               <Text variant="caption" tone="muted">
-                {user.phone ? user.phone : user.isProfilePublic ? 'Public profile' : 'Private profile'}
+                {[
+                  user.username ? `@${user.username}` : null,
+                  user.phone ?? (user.isProfilePublic ? 'Public profile' : 'Private profile'),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </Text>
             </View>
             <Text tone="brand" variant="label" weight="medium">

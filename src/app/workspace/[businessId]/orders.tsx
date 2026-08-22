@@ -74,12 +74,52 @@ export default function WorkspaceOrdersScreen() {
   }
 
   const vocab = commerceVocab(business);
-  const pendingOrders = orders.filter((o) => o.status === 'requested');
-  const openProposals = orders.filter((o) => o.status === 'proposed');
-  const openTabs = orders.filter((o) => o.status === 'accepted' && !o.billId);
+  // A finished order is off the desk. Billing it is what closes it (`billId`),
+  // and a handed-over ticket (`deliveredAt`) or a refusal ends it too — all of
+  // them still live in "All orders today", which is where you go to look back.
+  // The desk itself only ever shows work that is still open.
+  const isDone = (o: Order) =>
+    !!o.billId || !!o.deliveredAt || o.status === 'rejected' || o.status === 'declined';
+  const live = orders.filter((o) => !isDone(o));
+
+  const pendingOrders = live.filter((o) => o.status === 'requested');
+  const openProposals = live.filter((o) => o.status === 'proposed');
+  const openTabs = live.filter((o) => o.status === 'accepted');
   // The desk cares about the shift it's working, so the history link below is
   // scoped to today — the full history is one tap further, on that screen.
   const todaysOrders = orders.filter((o) => isToday(o.createdAt));
+
+  // Dine-in and takeaway are two different jobs on the floor — a table being
+  // served vs a bag waiting at the counter — so the desk keeps them in separate
+  // queues instead of one mixed list you have to read line by line. A party
+  // books the room, so it counts as dine-in. Orders with no fulfillment at all
+  // (services, stalls, enrolments) keep the plain heading, which is exactly how
+  // a non-food business still sees this screen.
+  const isDineIn = (o: Order) => o.fulfillment === 'dine_in' || !!o.party;
+  const isTakeaway = (o: Order) => o.fulfillment === 'takeaway' && !o.party;
+  const isPlain = (o: Order) => !isDineIn(o) && !isTakeaway(o);
+
+  const group = (list: Order[], dineInTitle: string, takeawayTitle: string, plainTitle: string) =>
+    [
+      { key: 'dine_in', title: dineInTitle, orders: list.filter(isDineIn) },
+      { key: 'takeaway', title: takeawayTitle, orders: list.filter(isTakeaway) },
+      { key: 'plain', title: plainTitle, orders: list.filter(isPlain) },
+    ].filter((g) => g.orders.length > 0);
+
+  const pendingGroups = group(
+    pendingOrders,
+    `${FULFILLMENT_META.dine_in.icon} New dine-in`,
+    `${FULFILLMENT_META.takeaway.icon} New takeaway`,
+    `New ${vocab.requestNoun}s`,
+  );
+  // An open tab is dine-in by nature; a takeaway lands here only when the
+  // customer accepted a proposal, so it's simply waiting to be billed.
+  const tabGroups = group(
+    openTabs,
+    `${FULFILLMENT_META.dine_in.icon} Open tabs`,
+    `${FULFILLMENT_META.takeaway.icon} Takeaway to bill`,
+    'Awaiting billing',
+  );
 
   return (
     <Screen scroll>
@@ -106,9 +146,9 @@ export default function WorkspaceOrdersScreen() {
         </Section>
       ) : null}
 
-      {pendingOrders.length > 0 ? (
-        <Section title={`New ${vocab.requestNoun}s · ${pendingOrders.length}`}>
-          {pendingOrders.map((o: Order) => {
+      {pendingGroups.map((g) => (
+        <Section key={g.key} title={`${g.title} · ${g.orders.length}`}>
+          {g.orders.map((o: Order) => {
             const kept = includedLines(o);
             return (
               <Card key={o.id} style={styles.card} onPress={() => router.push(`/order/${o.id}`)}>
@@ -121,9 +161,9 @@ export default function WorkspaceOrdersScreen() {
                   </Text>
                 </View>
                 <Text variant="caption" tone="muted" numberOfLines={1}>
-                  {o.fulfillment
-                    ? `${FULFILLMENT_META[o.fulfillment].icon} ${FULFILLMENT_META[o.fulfillment].label}${o.tableNumber != null ? ` · Table ${o.tableNumber}` : ''} · `
-                    : ''}
+                  {/* The heading already says dine-in or takeaway, so the line
+                      below only adds what THIS order needs: its table. */}
+                  {o.tableNumber != null ? `Table ${o.tableNumber} · ` : ''}
                   {kept.map((l) => (l.quantity > 1 ? `${l.name} ×${l.quantity}` : l.name)).join(', ')}
                 </Text>
                 <Button
@@ -135,11 +175,11 @@ export default function WorkspaceOrdersScreen() {
             );
           })}
         </Section>
-      ) : null}
+      ))}
 
-      {openTabs.length > 0 ? (
-        <Section title={`Open tabs · ${openTabs.length}`}>
-          {openTabs.map((o: Order) => {
+      {tabGroups.map((g) => (
+        <Section key={g.key} title={`${g.title} · ${g.orders.length}`}>
+          {g.orders.map((o: Order) => {
             const kept = includedLines(o);
             return (
               <Card key={o.id} style={styles.card} onPress={() => router.push(`/order/${o.id}`)}>
@@ -147,7 +187,9 @@ export default function WorkspaceOrdersScreen() {
                   <Text weight="semibold">
                     {o.party
                       ? `🎉 ${o.customerName} · party · ${o.party.guests} guests`
-                      : `🍽️ ${o.customerName}${o.tableNumber != null ? ` · Table ${o.tableNumber}` : ''} · open tab`}
+                      : o.fulfillment === 'takeaway'
+                        ? `${FULFILLMENT_META.takeaway.icon} ${o.customerName} · to bill`
+                        : `${FULFILLMENT_META.dine_in.icon} ${o.customerName}${o.tableNumber != null ? ` · Table ${o.tableNumber}` : ''} · open tab`}
                   </Text>
                   <Text weight="semibold" tone="brand">
                     {totalLabel(totalOf(kept))}
@@ -166,21 +208,32 @@ export default function WorkspaceOrdersScreen() {
             );
           })}
         </Section>
-      ) : null}
+      ))}
 
       {orders.length === 0 ? (
         <EmptyView
           title={`No ${vocab.requestNoun}s yet`}
           subtitle={`${vocab.requestsTitle} customers send from your page show up here.`}
         />
-      ) : (
+      ) : null}
+
+      {/* Everything dealt with: say so, rather than leaving a blank screen that
+          looks like the orders went missing. */}
+      {orders.length > 0 && live.length === 0 ? (
+        <EmptyView
+          title="All caught up"
+          subtitle={`Nothing open right now. Finished ${vocab.requestNoun}s are in the day's list below.`}
+        />
+      ) : null}
+
+      {orders.length > 0 ? (
         <Button
           title={`📦 All ${vocab.requestNoun}s today · ${todaysOrders.length}`}
           variant="secondary"
           onPress={() => router.push(`/orders/${business.id}?range=today`)}
           style={styles.allBtn}
         />
-      )}
+      ) : null}
     </Screen>
   );
 }

@@ -1,13 +1,16 @@
 /**
- * "Your order" — what the customer picked on the menu, before it's sent.
+ * "Your order" — what the customer picked in the catalog, before it's sent.
+ * The picks may be dishes, products, services or rentals: all four are picked
+ * the same way, on the same screen, and land in the same cart.
  *
  * Owns its top bar (back chevron, title, and an "Add" button that goes back to
- * the menu for more), and keeps "Confirm order" stuck to the bottom so it's
+ * the catalog they were picking from), and keeps "Confirm order" stuck to the
+ * bottom so it's
  * reachable without scrolling a long order. Confirming asks dine-in or takeaway,
  * then sends it — or, when the customer already has an open dine-in tab here,
  * appends to that tab instead of starting a second order.
  */
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
@@ -19,6 +22,7 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Card, EmptyView, ErrorView, Input, LoadingView, Text } from '@/components/ui';
 import { VegDot } from '@/features/businesses/FoodMenuEditor';
+import { catalogLink } from '@/features/offerings/links';
 import { useCart } from '@/features/orders/CartContext';
 import { FULFILLMENT_META, totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { radius, spacing, useColors } from '@/theme/theme';
@@ -28,15 +32,20 @@ export default function CartScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
-  const dismiss = useDismiss(`/menu/${businessId}`);
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { currentUser, signInGuest } = useAuth();
   const cart = useCart(businessId);
+  // Back to wherever these picks came from — the menu for a dish, the catalog
+  // screen for a service or a product. An empty cart falls back to the menu.
+  const pickingFrom = catalogLink(businessId, cart.lines[0]?.item.bucket ?? 'menu');
+  const dismiss = useDismiss(pickingFrom);
 
   const [note, setNote] = useState('');
   const [fulfillment, setFulfillment] = useState<OrderFulfillment | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // One order per confirm, even if the button is hit twice before React repaints.
+  const sending = useRef(false);
 
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
@@ -61,14 +70,31 @@ export default function CartScreen() {
   const total = totalOf(cart.lines.map((l) => ({ price: l.item.price, quantity: l.quantity })));
   // Adding to an existing tab: it's already dine-in, so don't ask again.
   const asksFulfillment = offersDineIn(business) && !openOrder;
-  const ready = cart.itemCount > 0 && (!asksFulfillment || fulfillment !== null);
+  // Something in the cart is all it takes to press Confirm. A missing dine-in /
+  // takeaway choice does NOT grey the button out — it's caught on press with a
+  // message, because a dead button just looks broken.
+  const canSend = cart.itemCount > 0;
 
   const submit = async () => {
-    if (!ready || submitting) return;
+    if (!canSend) return;
+    // `submitting` is state, so two taps in the same frame both read the stale
+    // `false` — the ref flips synchronously and is what actually stops a
+    // double order.
+    if (sending.current) return;
+    if (asksFulfillment && !fulfillment) {
+      showAlert(
+        'Dine in or take away?',
+        'Choose how you want this order before sending it — the kitchen needs to know.',
+      );
+      return;
+    }
+    sending.current = true;
     setSubmitting(true);
     try {
       const lines: NewOrderLineInput[] = cart.lines.map((l) => ({
-        kind: 'product',
+        // Goods are ordered as products, work and rentals as services — the
+        // item already knows which it is.
+        kind: l.item.kind,
         name: l.item.name,
         price: l.item.price,
         quantity: l.quantity,
@@ -93,6 +119,7 @@ export default function CartScreen() {
     } catch (err) {
       showAlert('Could not order', err instanceof Error ? err.message : 'Try again.');
     } finally {
+      sending.current = false;
       setSubmitting(false);
     }
   };
@@ -130,7 +157,7 @@ export default function CartScreen() {
           </Text>
         </View>
         <Pressable
-          onPress={() => router.push(`/menu/${businessId}`)}
+          onPress={() => router.push(pickingFrom)}
           accessibilityRole="button"
           accessibilityLabel="Add more items"
           style={({ pressed }) => [
@@ -147,7 +174,7 @@ export default function CartScreen() {
       {cart.itemCount === 0 ? (
         <EmptyView
           title="Nothing picked yet"
-          subtitle="Tap Add above to go back to the menu and choose some dishes."
+          subtitle="Tap Add above to go back and choose what you want."
         />
       ) : (
         <>
@@ -164,7 +191,7 @@ export default function CartScreen() {
             <Card style={styles.list}>
               {cart.lines.map((line, i) => (
                 <View
-                  key={`${line.item.name}-${i}`}
+                  key={line.item.key}
                   style={[
                     styles.row,
                     i < cart.lines.length - 1 && {
@@ -276,17 +303,17 @@ export default function CartScreen() {
             </View>
             <Pressable
               onPress={submit}
-              disabled={!ready || submitting}
+              disabled={!canSend || submitting}
               accessibilityRole="button"
               style={({ pressed }) => [
                 styles.barBtn,
                 {
-                  backgroundColor: ready ? colors.brand : colors.surfaceAlt,
+                  backgroundColor: canSend ? colors.brand : colors.surfaceAlt,
                   opacity: pressed ? 0.85 : 1,
                 },
               ]}
             >
-              <Text weight="bold" tone={ready ? 'inverse' : 'muted'}>
+              <Text weight="bold" tone={canSend ? 'inverse' : 'muted'}>
                 {submitting ? 'Sending…' : openOrder ? 'Add to my tab' : 'Confirm order'}
               </Text>
             </Pressable>

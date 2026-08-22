@@ -171,7 +171,8 @@ export default function FulfillOrderScreen() {
             ]}
           >
             <Text style={styles.lineName}>
-              {l.kind === 'service' ? '🛠️' : '🛍️'} {l.name}
+              {l.kind === 'product' ? '🛍️ ' : ''}
+              {l.name}
               {l.quantity > 1 ? ` ×${l.quantity}` : ''}
             </Text>
             <Text weight="semibold" tone="brand">

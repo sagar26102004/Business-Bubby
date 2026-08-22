@@ -3,23 +3,38 @@
  * from the business's own catalog (products, menu, services), sets quantities,
  * and sends it. The business then accepts, rejects, or proposes back the part
  * it can provide — see /order/[orderId].
+ *
+ * The business's live OFFERS are pickable here too, each as one indivisible
+ * line at the offer price. Tapping an offer card (business page, deals feed)
+ * lands here with `?offer=<id>` and that bundle already in the order, so the
+ * customer only has to send it.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { OrderFulfillment } from '@/domain/types';
 import type { NewOrderLineInput } from '@/data/repositories';
-import { commerceVocab, offersDineIn } from '@/domain/catalog';
+import { commerceVocab, offersDineIn, rentalBasisLabel } from '@/domain/catalog';
+import { rentalCategory } from '@/domain/offeringSections';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Text } from '@/components/ui';
-import { FULFILLMENT_META, totalLabel, totalOf } from '@/features/orders/orderUtils';
+import {
+  FULFILLMENT_META,
+  offerKey,
+  offerOfferings,
+  totalLabel,
+  totalOf,
+} from '@/features/orders/orderUtils';
 import { OfferingGroup, keyOf, type Offering } from '@/features/orders/OfferingPicker';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
 
 export default function NewOrderScreen() {
-  const { businessId } = useLocalSearchParams<{ businessId: string }>();
+  const { businessId, offer: offerId } = useLocalSearchParams<{
+    businessId: string;
+    offer?: string;
+  }>();
   const repos = useRepositories();
   const router = useRouter();
   const colors = useColors();
@@ -65,22 +80,62 @@ export default function NewOrderScreen() {
   const isMember = data?.isMember ?? false;
   const seats = data?.seats ?? [];
 
-  // The orderable catalog: products + menu count as goods, services as services.
-  const offerings = useMemo((): Offering[] => {
-    if (!business) return [];
-    return [
-      ...(business.products ?? []).map((p): Offering => ({ ...p, kind: 'product' })),
-      ...(business.menu ?? []).map((m): Offering => ({ ...m, kind: 'product' })),
-      ...(business.services ?? []).map((s): Offering => ({ ...s, kind: 'service' })),
+  // The requestable catalog: products + menu count as goods; services and
+  // rentals are both things the business PROVIDES rather than hands over, so a
+  // rental rides as a 'service' line — same shape, no new line kind, and the
+  // business reads it under its own "For rent" heading either way.
+  const catalog = useMemo(() => {
+    const products: Offering[] = [
+      ...(business?.products ?? []).map((p): Offering => ({ ...p, kind: 'product' })),
+      ...(business?.menu ?? []).map((m): Offering => ({ ...m, kind: 'product' })),
     ];
+    const services: Offering[] = (business?.services ?? []).map(
+      (s): Offering => ({ ...s, kind: 'service' }),
+    );
+    const rentals: Offering[] = (business?.rentals ?? []).map(
+      (r): Offering => ({
+        ...r,
+        kind: 'service',
+        // Rentals and services can share a name ("Tempo") on one listing, so
+        // the key has to say which list it came from.
+        key: `rental:${r.name}`,
+        category: rentalCategory(r),
+      }),
+    );
+    return { products, services, rentals };
   }, [business]);
+
+  const offerings = useMemo(
+    (): Offering[] => [...catalog.products, ...catalog.services, ...catalog.rentals],
+    [catalog],
+  );
+
+  // The business's live promotions, each pickable as one bundle.
+  const bundles = useMemo(() => (business ? offerOfferings(business) : []), [business]);
+  // Everything that can go in this order — bundles lead, then the catalog.
+  const pickable = useMemo(() => [...bundles, ...offerings], [bundles, offerings]);
+
+  // One order per send, even if the button is hit twice before React repaints.
+  const sending = useRef(false);
+
+  // Arrived by tapping an offer: start with it in the order. Once only, so
+  // removing it again doesn't put it straight back on the next render.
+  const preselected = useRef(false);
+  useEffect(() => {
+    if (preselected.current || !offerId) return;
+    const bundle = bundles.find((b) => b.key === offerKey(offerId));
+    if (!bundle) return;
+    preselected.current = true;
+    setQuantities((prev) => ({ ...prev, [keyOf(bundle)]: prev[keyOf(bundle)] ?? 1 }));
+  }, [bundles, offerId]);
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!business) return <EmptyView title="Not found" />;
 
-  const products = offerings.filter((o) => o.kind === 'product');
-  const services = offerings.filter((o) => o.kind === 'service');
+  const { products, services, rentals } = catalog;
+  // "per day" / "per month" — the price on a rental line is a rate, not a total.
+  const rentalBasis = rentalBasisLabel(business.rentalBasis);
 
   // Cafes/restaurants ask how the order is handed over; stalls allow bargaining.
   // Not asked when adding to an open tab — that order is already dine-in.
@@ -91,13 +146,14 @@ export default function NewOrderScreen() {
   const showTables = onBehalf && fulfillment === 'dine_in' && !!business.tableCount;
   const isStall = business.type === 'item';
   const vocab = commerceVocab(business);
+  const isRent = vocab.mode === 'rent';
   // Gyms/classes enrol PEOPLE — the customer names everyone the plan covers
   // (themselves and/or their children), so the business knows who's signed up.
   const asksEnrollees = (vocab.mode === 'enroll' || vocab.mode === 'subscribe') && !openOrder;
   const namedEnrollees = enrollees.map((n) => n.trim()).filter(Boolean);
   const enrolleesReady = !asksEnrollees || namedEnrollees.length > 0;
 
-  const picked = offerings
+  const picked = pickable
     .map((o) => ({
       offering: o,
       quantity: quantities[keyOf(o)] ?? 0,
@@ -122,7 +178,28 @@ export default function NewOrderScreen() {
     setEnrollees((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
 
   const submit = async () => {
-    if (picked.length === 0 || submitting) return;
+    if (picked.length === 0) return;
+    // `submitting` is state, so two taps in the same frame both read the stale
+    // `false` — the ref flips synchronously and is what actually stops a
+    // double order.
+    if (sending.current) return;
+
+    // The button stays live when a choice is missing, so the tap SAYS what's
+    // missing instead of doing nothing. These are the real gates: nothing gets
+    // sent until they pass, whatever the button looked like.
+    if (asksFulfillment && !fulfillment) {
+      showAlert(
+        'Dine in or take away?',
+        'Choose how you want this order before sending it — the kitchen needs to know.',
+      );
+      return;
+    }
+    if (asksEnrollees && !enrolleesReady) {
+      showAlert('Who is this for?', 'Add at least one name so the business knows who’s signed up.');
+      return;
+    }
+
+    sending.current = true;
     setSubmitting(true);
     try {
       const lines: NewOrderLineInput[] = picked.map((p) => ({
@@ -157,17 +234,20 @@ export default function NewOrderScreen() {
     } catch (err) {
       showAlert('Could not order', err instanceof Error ? err.message : 'Try again.');
     } finally {
+      sending.current = false;
       setSubmitting(false);
     }
   };
 
-  if (offerings.length === 0) {
+  if (pickable.length === 0) {
     return (
       <Screen>
-        <Stack.Screen options={{ title: 'Order' }} />
+        <Stack.Screen options={{ title: isRent ? 'Request to rent' : 'Order' }} />
         <EmptyView
-          title="Nothing to order yet"
-          subtitle={`${business.name} hasn’t listed products or services to order. Try chatting with them instead.`}
+          title={isRent ? 'Nothing listed to rent yet' : 'Nothing to order yet'}
+          subtitle={`${business.name} hasn’t listed ${
+            isRent ? 'anything for rent' : 'products or services to order'
+          }. Try chatting with them instead.`}
         />
       </Screen>
     );
@@ -181,7 +261,9 @@ export default function NewOrderScreen() {
             ? 'Add to your order'
             : vocab.mode === 'order'
               ? 'Place an order'
-              : vocab.verb,
+              : isRent
+                ? 'Request to rent'
+                : vocab.verb,
         }}
       />
 
@@ -330,6 +412,14 @@ export default function NewOrderScreen() {
         </View>
       ) : null}
 
+      {bundles.length > 0 ? (
+        <OfferingGroup
+          title="🎉 Offers"
+          offerings={bundles}
+          quantities={quantities}
+          onBump={bump}
+        />
+      ) : null}
       {products.length > 0 ? (
         <OfferingGroup
           title={isStall ? '🏷️ Items' : '🛍️ Products'}
@@ -341,13 +431,26 @@ export default function NewOrderScreen() {
         />
       ) : null}
       {services.length > 0 ? (
-        <OfferingGroup title="🛠️ Services" offerings={services} quantities={quantities} onBump={bump} />
+        <OfferingGroup title="Services" offerings={services} quantities={quantities} onBump={bump} />
+      ) : null}
+      {rentals.length > 0 ? (
+        <OfferingGroup
+          title={rentalBasis ? `For rent · ${rentalBasis.toLowerCase()}` : 'For rent'}
+          offerings={rentals}
+          quantities={quantities}
+          onBump={bump}
+        />
       ) : null}
 
       {!openOrder ? (
         <Input
-          label="Note (optional)"
-          placeholder="Anything the business should know"
+          // A rental request is useless to the owner without dates, so for
+          // rentals the note asks the question outright instead of being a
+          // blank "anything else?".
+          label={isRent ? 'When do you need it, and for how long? (optional)' : 'Note (optional)'}
+          placeholder={
+            isRent ? 'e.g. from 1 September, for 3 months' : 'Anything the business should know'
+          }
           value={note}
           onChangeText={setNote}
           multiline
@@ -385,7 +488,10 @@ export default function NewOrderScreen() {
         title={openOrder ? 'Add to my order' : `Send ${vocab.requestNoun}`}
         onPress={submit}
         loading={submitting}
-        disabled={picked.length === 0 || submitting || (asksFulfillment && !fulfillment) || !enrolleesReady}
+        // Only an EMPTY order disables the button. With something picked but a
+        // choice still missing it stays live on purpose: pressing it explains
+        // what's missing, which a greyed-out button never did.
+        disabled={picked.length === 0 || submitting}
         style={styles.submit}
       />
     </Screen>

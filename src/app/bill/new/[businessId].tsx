@@ -286,7 +286,7 @@ export default function NewBillScreen() {
         />
       ) : null}
       {services.length > 0 ? (
-        <OfferingGroup title="🛠️ Services" offerings={services} quantities={quantities} onBump={bump} />
+        <OfferingGroup title="Services" offerings={services} quantities={quantities} onBump={bump} />
       ) : null}
 
       {/* Anything not on the catalog. */}

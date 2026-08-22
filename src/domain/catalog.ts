@@ -161,14 +161,18 @@ export function commerceVocab(business: {
   tags?: string[];
 }): CommerceVocab {
   const tags = (business.tags ?? []).map((t) => t.trim().toLowerCase());
-  // Rentals hand the item back — you "Rent" it, you don't order/buy it.
+  // Rentals hand the item back, and nothing changes hands until both sides
+  // agree — so a customer REQUESTS one, the way they request a service, rather
+  // than ordering it off a shelf. The noun carries "request" so every screen
+  // that builds a label from it ("Send …", "New …s", "Review …") says what is
+  // actually happening.
   if (business.type === 'rental') {
     return {
       mode: 'rent',
-      customerAction: '🔑 Rent',
+      customerAction: 'Request to rent',
       verb: 'Rent',
       requestsTitle: 'Rental requests',
-      requestNoun: 'rental',
+      requestNoun: 'rental request',
     };
   }
   // Stalls always "buy"; a tagged membership business overrides "order".
@@ -225,6 +229,20 @@ export function rentalBasisLabel(id?: RentalBasis): string | undefined {
   if (!id) return undefined;
   if (id === 'both') return 'Per day or per month';
   return RENTAL_BASES.find((b) => b.id === id)?.label;
+}
+
+/**
+ * The little tag that rides beside a rental's price — "per day", "per month".
+ *
+ * Deliberately lower-case and short: it sits next to "₹12,000" as a sticker on
+ * the thing itself, because on one lister's page a flat is monthly while their
+ * scooter is daily, and a price with no period is a price nobody can compare.
+ */
+export function rentalBasisSticker(id?: RentalBasis): string | undefined {
+  if (id === 'daily') return 'per day';
+  if (id === 'monthly') return 'per month';
+  if (id === 'both') return 'per day / month';
+  return undefined;
 }
 
 /** The kinds of vehicle a business can add to its fleet, as data. */

@@ -37,6 +37,7 @@ import type {
   User,
   Vehicle,
 } from '@/domain/types';
+import { matchesUserSearch } from '@/domain/types';
 import { getVehicleKind } from '@/domain/catalog';
 import { campaignGoal, campaignPlanSummary, getAdPlan, isCampaignRunning, viewBandKey } from '@/domain/ads';
 import { isOfferLive } from '@/domain/offers';
@@ -758,9 +759,9 @@ class MockUserRepository implements UserRepository {
 
   async search(term: string): Promise<User[]> {
     await delay(100);
-    const q = term.trim().toLowerCase();
-    if (!q) return [];
-    return users.filter((u) => u.name.toLowerCase().includes(q)).map(clone);
+    if (!term.trim()) return [];
+    // Name, username, phone or email — one rule, shared with the real backends.
+    return users.filter((u) => matchesUserSearch(u, term)).map(clone);
   }
 
   async update(id: string, patch: Partial<User>): Promise<User> {

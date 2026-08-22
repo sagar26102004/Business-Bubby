@@ -10,6 +10,10 @@
  *    emoji tiles → tap opens /browse/[intent]?sub=Tag), and filters the nearby
  *    business list below.
  *
+ * The list below is bounded: only listings within HOME_RADIUS_KM of the active
+ * place, nearest first. Search and the category pages stay unbounded — see the
+ * constant's note for why.
+ *
  * The ad slot is the platform's revenue line (domain/ads.ts): sponsored cards
  * from businesses that bought a campaign, then any live offer from a shop close
  * by. What goes in it is decided by AdRepository.listPlacements, not here — see
@@ -45,6 +49,29 @@ import { AD_GRADIENTS } from '@/features/ads/adGradients';
 import { ModePills } from '@/features/shell/ModePills';
 import { radius, spacing, useColors } from '@/theme/theme';
 
+/**
+ * How far Home looks. Everything inside this ring is listed, nearest first;
+ * anything beyond it is not on Home at all.
+ *
+ * Home is the "what's around me" screen, so an unbounded list was wrong in both
+ * directions: a shop 60 km away padded the bottom of every scroll, and the
+ * fetch grew with the whole database rather than with the neighborhood. 20 km
+ * is a city, not a street — wide enough that a thin area still fills the screen
+ * and a business on the far side of town is reachable, tight enough that the
+ * list stays about places you could actually go.
+ *
+ * Deliberately NOT applied to search or the category pages: someone who typed
+ * "bullet rental" or opened Rentals is looking for a specific thing and would
+ * rather travel for it than be told there are no results. The ad slot has its
+ * own reach rules (domain/ads.ts) and the deals feed lets the customer pick a
+ * range up to Anywhere — this constant governs the Home list only.
+ *
+ * The cap only applies once we know where "here" is: with no `near` point the
+ * repository ignores it and lists everything, so a device still waiting on GPS
+ * sees a full screen instead of an empty one.
+ */
+const HOME_RADIUS_KM = 20;
+
 const placeIcon = (kind: PlaceKind) =>
   kind === 'current' ? '📍' : kind === 'home' ? '🏠' : kind === 'work' ? '💼' : '⭐';
 
@@ -71,7 +98,7 @@ export default function BrowseScreen() {
   const near = activePlace?.point;
 
   const { data, loading, error, reload } = useAsync(
-    () => repos.businesses.list({ near, sortByDistance: true }),
+    () => repos.businesses.list({ near, sortByDistance: true, maxDistanceKm: HOME_RADIUS_KM }),
     [near?.latitude, near?.longitude],
   );
 
@@ -447,10 +474,13 @@ export default function BrowseScreen() {
           ) : (
             <EmptyView
               title="No results"
+              // Home only looks HOME_RADIUS_KM out, so say so — otherwise an
+              // empty screen reads as "nothing exists" when the answer is
+              // "nothing this close". Search has no such limit.
               subtitle={
                 selected
-                  ? `Nothing under ${selected.label} near this location yet.`
-                  : 'Try a different search, category, or location.'
+                  ? `Nothing under ${selected.label} within ${HOME_RADIUS_KM} km of this location yet.`
+                  : `Nothing listed within ${HOME_RADIUS_KM} km of this location yet. Try another location, or search — search looks further.`
               }
             />
           )

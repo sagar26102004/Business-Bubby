@@ -123,9 +123,15 @@ export default function WorkspaceScreen() {
       : false;
   const role = isOwner ? 'Owner' : meEmployee ? cap(meEmployee.level ?? 'staff') : 'Visitor';
 
-  const pendingOrders = orders.filter((o) => o.status === 'requested').length;
-  const openProposals = orders.filter((o) => o.status === 'proposed').length;
-  const openTabs = orders.filter((o) => o.status === 'accepted' && !o.billId).length;
+  // Same rule the orders desk uses: a billed, handed-over or refused order is
+  // finished and stops counting here, so the tile's badge matches the queue you
+  // land in when you tap it.
+  const live = orders.filter(
+    (o) => !o.billId && !o.deliveredAt && o.status !== 'rejected' && o.status !== 'declined',
+  );
+  const pendingOrders = live.filter((o) => o.status === 'requested').length;
+  const openProposals = live.filter((o) => o.status === 'proposed').length;
+  const openTabs = live.filter((o) => o.status === 'accepted').length;
   const requests = bookings.filter((b) => b.status === 'requested').length;
   // A gym "enrolls", a school-bus service takes "subscriptions" — same order
   // desk, different words (derived from tags).
@@ -240,7 +246,7 @@ export default function WorkspaceScreen() {
       title: 'Sales & orders',
       tiles: [
         mods.has('orders') && canUse('orders') && {
-          icon: vocab.mode === 'rent' ? '🔑' : vocab.mode === 'order' ? '🛒' : '🎫',
+          icon: vocab.mode === 'rent' ? undefined : vocab.mode === 'order' ? '🛒' : '🎫',
           label: vocab.requestsTitle,
           sub:
             pendingOrders > 0
@@ -504,9 +510,11 @@ export default function WorkspaceScreen() {
               onPress={tile.disabled ? undefined : () => router.push(tile.href)}
               style={StyleSheet.flatten([styles.tile, tile.disabled && styles.tileDisabled])}
             >
-              <View style={[styles.iconBox, { backgroundColor: colors.brandSoft }]}>
-                <Text style={styles.icon}>{tile.icon}</Text>
-              </View>
+              {tile.icon ? (
+                <View style={[styles.iconBox, { backgroundColor: colors.brandSoft }]}>
+                  <Text style={styles.icon}>{tile.icon}</Text>
+                </View>
+              ) : null}
               <View style={styles.tileText}>
                 <Text weight="semibold">{tile.label}</Text>
                 <Text variant="caption" tone="muted">
@@ -530,7 +538,8 @@ export default function WorkspaceScreen() {
 }
 
 interface Tile {
-  icon: string;
+  /** Omitted where a glyph would say less than the label already does. */
+  icon?: string;
   label: string;
   sub: string;
   href: Href;

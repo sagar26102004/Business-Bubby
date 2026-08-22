@@ -3,6 +3,11 @@
  * domain/foodMenu.ts — the owner starts from ready-made sections instead of
  * inventing one, and starts from ready-made dishes instead of typing one out.
  *
+ * This is the original of a flow its two twins copy: `GoodsEditor` for products
+ * and `OfferingFolderEditor` for services and rentals. All four lists are the
+ * same kind of thing (`domain/offerings.ts`), so they are filled the same way
+ * here and shown the same way by `features/offerings/OfferingCatalog`.
+ *
  * The flow is folder-like, one level at a time: the sections list (with a
  * count of what's in each), tap one to open it, then EITHER add dishes right
  * here OR open a subcategory folder and add dishes inside it. Subcategories
@@ -68,18 +73,24 @@ export interface FoodMenuEditorProps {
 
 export function FoodMenuEditor({ value, onChange }: FoodMenuEditorProps) {
   const colors = useColors();
-  const derived = useRef(deriveCustomSections(value)).current;
-  const [customSections, setCustomSections] = useState<FoodMenuSection[]>(derived);
+  // Sections the owner made by hand that hold no dish YET — a freshly created
+  // empty section would otherwise vanish before anything is put in it. The
+  // sections that DO hold dishes are re-derived from `value` every render, so a
+  // menu pasted in through the import panel shows its own sections at once.
+  const [ownSections, setOwnSections] = useState<FoodMenuSection[]>([]);
   const [openSectionId, setOpenSectionId] = useState<string | null>(null);
   const [newSection, setNewSection] = useState<string | null>(null);
   // Renaming a custom section (id + name), plus the in-progress text.
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameText, setRenameText] = useState('');
 
-  const sections = useMemo(
-    () => [...FOOD_MENU_SECTIONS, ...customSections],
-    [customSections],
-  );
+  const sections = useMemo(() => {
+    const fromDishes = deriveCustomSections(value);
+    const empty = ownSections.filter(
+      (own) => !fromDishes.some((d) => d.name.toLowerCase() === own.name.toLowerCase()),
+    );
+    return [...FOOD_MENU_SECTIONS, ...fromDishes, ...empty];
+  }, [value, ownSections]);
   const openSection = sections.find((s) => s.id === openSectionId) ?? null;
 
   const countIn = (section: FoodMenuSection) =>
@@ -103,7 +114,7 @@ export function FoodMenuEditor({ value, onChange }: FoodMenuEditorProps) {
     if (sections.some((s) => s.id !== section.id && s.name.toLowerCase() === name.toLowerCase())) return;
     // The name lives on every dish in the section — move them all.
     onChange(value.map((m) => (m.category === section.name ? { ...m, category: name } : m)));
-    setCustomSections((prev) =>
+    setOwnSections((prev) =>
       prev.map((s) => (s.id === section.id ? { ...s, id: `custom:${name}`, name } : s)),
     );
   };
@@ -119,7 +130,7 @@ export function FoodMenuEditor({ value, onChange }: FoodMenuEditorProps) {
       return;
     }
     const section: FoodMenuSection = { id: `custom:${name}`, name, icon: '🍽️' };
-    setCustomSections((prev) => [...prev, section]);
+    setOwnSections((prev) => [...prev, section]);
     setNewSection(null);
     setOpenSectionId(section.id);
   };
