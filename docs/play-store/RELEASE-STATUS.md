@@ -466,21 +466,64 @@ media-playback "the only one in the 1.0 manifest" — `FOREGROUND_SERVICE_MICROP
 declared in `app.json` and again in `modules/call-notification/.../AndroidManifest.xml:23`. And it
 justified the permission as keeping the ringtone audible while backgrounded, which no code does.
 
-**What this changes:** the media-playback declaration is **no longer owed** — from the next bundle
-onward the Console should stop asking for it. The microphone one stays and is answered
-**"Background audio input"**: `OngoingCallService` starts with
-`FOREGROUND_SERVICE_TYPE_MICROPHONE` (`OngoingCallService.kt:77`) to hold a LiveKit call's mic
-capture open while the app is backgrounded or the screen is locked.
+**The microphone declaration** stays and is answered **"Background audio input"**:
+`OngoingCallService` starts with `FOREGROUND_SERVICE_TYPE_MICROPHONE` (`OngoingCallService.kt:77`)
+to hold a LiveKit call's mic capture open while the app is backgrounded or the screen is locked.
+The Console asks for a **demo video link** on that form.
 
-🔎 **Verify on the next build, two ways.** Nothing here was checked against a merged manifest —
-there is no `android/` directory in the repo, so the plugin source is the only local evidence.
-Either `npx expo prebuild --platform android` and read
-`android/app/src/main/AndroidManifest.xml`, or upload the bundle and confirm the Console has
-dropped the question. **Also worth one device check in internal testing:** that an incoming call
-still rings audibly with the app backgrounded. Background audio playback does not itself require a
-foreground service, and the closed-app ring comes from the notification sound and
-`CallNotifications` rather than `expo-audio` — but that path has never been exercised on a real
-handset, and this is the change that would expose it.
+✅ **The manifest fix is verified.** The shipped `.aab` (versionCode 10) was unpacked and its merged
+`base/manifest/AndroidManifest.xml` read directly: the only foreground-service permissions in it are
+`FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_MICROPHONE`, with no `AudioControlsService`. No
+transitive library re-adds it — an `androidx.media3` theory was floated and disproved.
+
+### ⚠️ But it did NOT clear the Console question, and here is the rule that matters
+
+**This section originally claimed "from the next bundle onward the Console should stop asking."
+That was wrong, and it cost half an evening.** Foreground-service declarations live under **App
+content**, which is **per-app, not per-bundle and not per-track**. Play evaluates them against
+every bundle that is live on *any* track, so a clean new bundle cannot clear a declaration while an
+older dirty one is still published somewhere.
+
+What was actually tried on 23 Aug, in order, none of which cleared it:
+
+1. Uploaded bundle 10 (clean manifest) to the closed-testing draft — question remained.
+2. Removed bundle 5 from that draft — question remained.
+3. Published a new **internal testing** release carrying bundle 10 — question still remained.
+
+**How it was settled:** ticked **Media playback** and supplied a video of the app playing business
+showcase videos and deal reels. That is honest about what the app does with video, and the
+permission is genuinely gone from the current build, so the declaration is expected to lapse on its
+own once no live release predates versionCode 10. Do not spend more time fighting it.
+
+**The transferable lesson:** never plan a release around "the next build will clear that Console
+warning." Bundles change what you ship; App content declarations describe the app. They clear on
+Play's schedule, not yours.
+
+🔎 **Still unverified — one device check.** That an incoming call rings audibly with the app
+backgrounded. Background audio playback does not itself require a foreground service, and the
+closed-app ring comes from the notification sound and `CallNotifications` rather than `expo-audio`
+— but that path has never been exercised on a real handset, and this is the change that would
+expose it.
+
+---
+
+### 7. `Continue with Google` is hidden for 1.0
+
+Decided 23 Aug 2026. The button rendered **unconditionally** on `sign-in.tsx` while the Google
+provider was never configured on the Supabase project — so it could only ever fail, with an error
+message, on the first screen a Play reviewer opens while holding the credentials handed to them in
+**App access**. Broken functionality there is a plausible rejection and an expensive one.
+
+Gated behind `GOOGLE_SIGN_IN_ENABLED = false` at the top of `src/app/sign-in.tsx` (commit
+`8ab0989`), matching the `BACKGROUND_LOCATION_ENABLED` pattern. **Hidden, not deleted** —
+`signInWithGoogle` and the handler are untouched and correct. Flip the one line once
+Authentication → Providers → Google has a client ID and secret.
+
+⚠️ **The cost, which is real: as it ships the app has NO account recovery.** There is no "Forgot
+password?" link because a `<username>@localo.app` address has no inbox, and Google was the
+documented way around that. A tester who forgets their password needs a manual reset in the
+Supabase dashboard. **Say so in the tester invite.** Configuring the provider properly is the fix
+and should not wait long.
 
 ---
 
@@ -525,9 +568,10 @@ walk the list and tick off what the Console already shows as complete rather tha
 copy to paste is all authored either way.
 
 - `USE_FULL_SCREEN_INTENT` declaration — `permission-declarations.md` §2
-- ~~`FOREGROUND_SERVICE_MEDIA_PLAYBACK` service-type declaration~~ — **dropped, decision 6.**
-  The permission is out of the manifest as of 23 Aug; from the next bundle the Console should
-  stop asking. Nothing to write.
+- `FOREGROUND_SERVICE_MEDIA_PLAYBACK` service-type declaration — **answered 23 Aug: "Media
+  playback"**, with a video of in-app video reels and showcase playback. The permission is out of
+  the manifest as of versionCode 10 (verified), but the question did **not** go away — declarations
+  are per-app, not per-bundle. See decision 6; do not re-fight this.
 - `FOREGROUND_SERVICE_MICROPHONE` service-type declaration — answer **"Background audio input"**
   (in-app voice calls). ⚠️ **This form wants a demo video link**, contrary to the "light form, no
   video" note that used to sit here — the Console asked for one on 23 Aug. One recording of an
