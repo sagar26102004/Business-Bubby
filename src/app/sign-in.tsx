@@ -29,6 +29,22 @@ import { spacing, useColors } from '@/theme/theme';
 
 type Mode = 'signin' | 'signup';
 
+/*
+  Continue with Google is BUILT but the provider was never configured on the
+  Supabase project, so the button could only ever fail — with an error message,
+  on the first screen a Play reviewer sees, while holding the credentials we
+  handed them. Hidden for the 1.0 Play release rather than deleted: the code
+  below is correct and this is one line to flip once Authentication → Providers
+  → Google has a client ID and secret.
+
+  ⚠️ While this is false the app has NO account recovery at all. See the
+  comment above the sign-in button: a `<username>@localo.app` address has no
+  inbox, so there is no reset mail, and Google was the way around that. A user
+  who forgets their password is locked out for good until one of the two comes
+  back.
+*/
+const GOOGLE_SIGN_IN_ENABLED = false;
+
 export default function SignInScreen() {
   const router = useRouter();
   const colors = useColors();
@@ -278,6 +294,10 @@ export default function SignInScreen() {
         would open a screen that can only ever fail. Continue with Google is the
         recovery route: an account with no password cannot forget one. Bringing
         reset back needs custom SMTP AND a verified address on the account.
+
+        ⚠️ And Google is hidden for the 1.0 Play release
+        (GOOGLE_SIGN_IN_ENABLED at the top of this file), so as it ships there
+        is NO recovery route at all — a forgotten password is a dead account.
       */}
       <Button
         title={isSignup ? 'Create account' : 'Sign in'}
@@ -292,22 +312,26 @@ export default function SignInScreen() {
         should the screen. Placed under the primary action rather than above it:
         the app's own account is the default, and this is the shortcut.
       */}
-      <View style={styles.dividerRow}>
-        <View style={[styles.rule, { backgroundColor: colors.border }]} />
-        <Text tone="muted" variant="caption">
-          or
-        </Text>
-        <View style={[styles.rule, { backgroundColor: colors.border }]} />
-      </View>
+      {GOOGLE_SIGN_IN_ENABLED ? (
+        <>
+          <View style={styles.dividerRow}>
+            <View style={[styles.rule, { backgroundColor: colors.border }]} />
+            <Text tone="muted" variant="caption">
+              or
+            </Text>
+            <View style={[styles.rule, { backgroundColor: colors.border }]} />
+          </View>
 
-      <Button
-        title="Continue with Google"
-        variant="secondary"
-        onPress={() => void google()}
-        loading={googleBusy}
-        disabled={busy}
-        style={styles.submit}
-      />
+          <Button
+            title="Continue with Google"
+            variant="secondary"
+            onPress={() => void google()}
+            loading={googleBusy}
+            disabled={busy}
+            style={styles.submit}
+          />
+        </>
+      ) : null}
 
       <View style={styles.switchRow}>
         <Text tone="muted" variant="label">
