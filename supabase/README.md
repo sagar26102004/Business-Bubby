@@ -38,6 +38,44 @@ gives real accounts and sessions with **no paid SMS provider**. The `name` and
 `profiles` row by the `handle_new_user` trigger. Phone OTP can be layered on
 later without changing the schema.
 
+## One account, one device
+
+An account may be signed in on exactly ONE device at a time. Signing in
+somewhere else takes the account with you and the previous handset is signed
+out, told why, and left at the sign-in screen. **Last sign-in wins** — refusing
+the new device instead would lock someone out of their own account the moment
+they lose a phone.
+
+Supabase can do this itself (**Single session per user**, Auth → Sessions), but
+only on **Pro plans and up**, and only "at intervals of the JWT expiration
+time" — up to an hour of two live devices. So the app enforces it, in two
+layers that cover each other:
+
+1. **`signOut({ scope: 'others' })` on every sign-in** destroys the other
+   sessions' refresh tokens. Real, server-side revocation — but an
+   already-issued *access* token stays valid until it expires, so on its own
+   the old phone keeps working for up to an hour.
+2. **The `active_devices` claim** (`migrations/0022_single_device_session.sql`),
+   polled once a minute and on every foreground by `SingleDeviceGate`, so the
+   displaced device signs itself out inside a minute with a sentence a person
+   can read.
+
+Both halves live in `src/data/supabase/deviceLock.ts` and are shared by Path A
+and Path B — identity is Supabase on both, so there is no Express twin to keep
+in step (same as media uploads). Everything there is **best-effort and fails
+open**: a claim that can't be written never fails a sign-in, and a check that
+can't be read (offline, or 0022 not applied) never signs anyone out. Guests
+(anonymous sessions) are exempt — that identity is minted per install and
+shared with nobody.
+
+`device_id` is a random uuid in the app's own storage (`src/lib/device.ts`), not
+a hardware id. Clearing app data, reinstalling, or a private browser window all
+read as a new device, which is the honest answer.
+
+If you'd rather have Supabase do it on a Pro plan, turn the dashboard setting on
+*as well* — the two don't conflict — but don't remove the client half, or
+eviction goes back to taking up to an hour.
+
 ## Edge functions
 
 ```

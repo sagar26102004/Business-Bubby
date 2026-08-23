@@ -52,6 +52,7 @@ import type {
   AccountDeletionBlocker,
   AdRepository,
   AuthRepository,
+  DeviceClaimState,
   BillRepository,
   BizChatRepository,
   BizThreadSummary,
@@ -922,6 +923,19 @@ class MockAuthRepository implements AuthRepository {
     if (currentPassword === newPassword) {
       throw new Error('That is already your password. Choose a different one.');
     }
+  }
+
+  /**
+   * The one-account-one-device rule needs a second device to have any meaning,
+   * and the mock store lives inside a single running app — there is nowhere for
+   * that other device to be. So this device always holds the account.
+   *
+   * `'active'` rather than `'unknown'`: the honest answer here is not "we could
+   * not tell", it is "nothing has displaced you". Both leave the person signed
+   * in, so nothing offline behaves differently either way.
+   */
+  async checkDeviceClaim(): Promise<DeviceClaimState> {
+    return 'active';
   }
 }
 

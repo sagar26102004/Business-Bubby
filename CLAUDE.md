@@ -47,7 +47,7 @@ The end state is still both backends behaviour-identical to the mock; the queue 
 When Sagar says **"create the backend"** (or similar), the full from-scratch build plan for Path B lives in the **`create-backend` skill** (`.claude/skills/create-backend/SKILL.md`) — load it. Do NOT ask him to re-supply context; it all lives in the repo.
 
 ### Current backend status (as of this writing)
-DB is LIVE (document model, RLS, `handle_new_user` signup trigger, `is_business_member` helper). **Path A (Supabase) is fully BUILT (2026-07-23) and is the backend in use for testing** — every repo runs on the live Supabase Postgres, no mock delegation; 10 test users seeded via auth signup (phones 9812340001–10, password `localo123`). **Path B (api) is also fully BUILT** in `backend/` — all repositories except `places` implemented as Express services over the same Supabase Postgres (Prisma, privileged connection bypassing RLS; authz reimplemented in `backend/src/authz.ts`), plus the frontend client `src/data/api/`. Both `npx tsc --noEmit`/`npx expo export` (app) and `npm run build`/`typecheck` (backend) pass; the server boots and serves `/docs` (90 routes) — the only thing not yet exercised end-to-end is a live DB round-trip, which needs Sagar's own `DATABASE_URL` + `SUPABASE_JWT_SECRET` in `backend/.env`. Local caching landed (`src/lib/queryCache.ts` + `useAsync({ key })` SWR). Sign-up collects a password; phone → synthetic `<digits>@localo.app` email. **Supabase "Confirm email" must be OFF** for sign-in to work (synthetic emails have no inbox). See `supabase/README.md`, `backend/README.md`, and the memory `localo-backend-deferred`.
+DB is LIVE (document model, RLS, `handle_new_user` signup trigger, `is_business_member` helper). **Path A (Supabase) is fully BUILT (2026-07-23) and is the backend in use for testing** — every repo runs on the live Supabase Postgres, no mock delegation; 10 test users seeded via auth signup (phones 9812340001–10, password `localo123`). **Path B (api) is also fully BUILT** in `backend/` — all repositories except `places` implemented as Express services over the same Supabase Postgres (Prisma, privileged connection bypassing RLS; authz reimplemented in `backend/src/authz.ts`), plus the frontend client `src/data/api/`. Both `npx tsc --noEmit`/`npx expo export` (app) and `npm run build`/`typecheck` (backend) pass; the server boots and serves `/docs` (90 routes) — the only thing not yet exercised end-to-end is a live DB round-trip, which needs Sagar's own `DATABASE_URL` + `SUPABASE_JWT_SECRET` in `backend/.env`. Local caching landed (`src/lib/queryCache.ts` + `useAsync({ key })` SWR). Sign-up collects a password; phone → synthetic `<digits>@localo.app` email. **Supabase "Confirm email" must be OFF** for sign-in to work (synthetic emails have no inbox). **One account = one device**: every sign-in claims the account for this install (`active_devices`, migration 0022) AND revokes the other sessions server-side (`signOut({ scope: 'others' })`); `SingleDeviceGate` polls the claim and signs a displaced device out within a minute. Both halves are in `src/data/supabase/deviceLock.ts`, shared by Path A and Path B (identity is Supabase on both — no Express twin), best-effort and failing OPEN so a bad connection never logs anyone out; guests are exempt. See `supabase/README.md`, `backend/README.md`, and the memory `localo-backend-deferred`.
 
 ## Domain model (`src/domain/types.ts`)
 
@@ -70,6 +70,90 @@ DB is LIVE (document model, RLS, `handle_new_user` signup trigger, `is_business_
 - `BusinessLocation` carries privacy flags (`isHome`, `hidePreciseLocation`) — respect them when rendering a location.
 
 **Taxonomy note (tags-first):** discovery runs on **tags** — `Business.tags`, vocabulary + helpers in `src/domain/tags.ts` (`TAG_CATALOG`, `SUGGESTED_TAGS`, `hasTag`, `isFoodShop`). A business carries many tags (an MRF dealer is Tyres + Wheel alignment + Vehicle service) and appears under every matching filter; owners can also type custom tags. **Customer browse categories are `INTENT_CATEGORIES` in `domain/intents.ts`** (Food, Health, Home Services, Rentals, Stalls, … — each a bundle of tags); `ListingType` is now *internal-only* capability wiring (register flow shape, stall folding, rental basis) — never a customer-facing category; `subcategoryId` is legacy-but-alive: items still pick one (stall chips run on it), and for other types it's *derived* from tags when one matches (Cafe tag → `cafe`). `offersDineIn` is tag-aware. Don't key new features on subcategory — key them on tags or capabilities. **Listing what a business SELLS** runs on prebuilt libraries, not free text, and all of them are walked as FOLDERS — the flow `FoodMenuEditor` uses for a menu: food from `domain/foodMenu.ts` + `domain/dishes.ts`; goods from `domain/goods.ts` via `features/businesses/GoodsEditor.tsx` (shelf › kind › brand, then spec chips — the picks also WRITE the product's name); services from `domain/offeringSections.ts` (`SERVICE_SECTIONS` + `serviceJobs()`) via `features/businesses/OfferingFolderEditor.tsx` (section › kind of work › the owner’s own folders, nested without limit via `domain/subcategoryPath.ts`, then tap-to-fill job suggestions). Rentals use the same folder editor over `RENTAL_SECTIONS`, whose sections are NESTED (`OfferingSection.folders`: Flats & rooms › Flat › 2 BHK; PG & hostel › For girls › Double sharing) and whose shops/offices/godowns/halls are separate sections, never sub-entries of "flats"; each rental carries its OWN `basis` (per day / per month), printed as a sticker beside the price, with `Business.rentalBasis` demoted to the default for new items. `upgradeRentalFiling()` re-files listings made against the old flat library on read. **Menu, products, services and rentals are ONE model with four names** — `src/domain/offerings.ts` (`offeringBucket`/`offeringBuckets`) flattens all four into one `CatalogItem` shape (key, bucket, order `kind`, category, nested folder `path`, photo, veg dot, per-item badge), so they are filled the same way (the three folder editors above, each item taking a photo) and SHOWN the same way: one catalog screen, `src/features/offerings/OfferingCatalog.tsx` — collapsible sections, nested folders, a photo card per row with an ADD stepper and a sticky “Place order” bar — behind `/menu/[businessId]` (the menu keeps its readable URL) and `/catalog/[businessId]?bucket=products|services|rentals` for the rest, linked from `features/offerings/links.ts`. The business page's `OfferingsSection` renders every block identically from the same items, and the shared cart (`CartContext`) holds `CatalogItem`s, so a service is picked exactly like a dish and orders as `kind: 'service'`. Add a new offering list by adding a bucket there, not a new screen. **Filling any of them can also be a PASTE** — every list step in the register wizard carries an “Add the whole list” panel (`src/features/offerings/OfferingImport.tsx`) over a tolerant parser (`src/features/offerings/importOfferings.ts`): nested braces are nested folders (`Beverages: { Cold: { Shake: { Banana: 120 } } }`), the top level is the section, the leaf is the item, a numeric value is the price and other text the description, with `{ price, description, veg, photo, brand, per }` for the explicit form. It reads strict JSON AND the shorthand people type (unquoted names, newlines for commas, `{ Fries, Samosa }`, `[…]` lists, smart quotes), reports errors as “Line 7: …”, previews before committing, and snaps a section name onto the library’s spelling. It only feeds the same editors — nothing it produces is uneditable. The long-term model (customer marketplace + modular business workspace) lives in `docs/direction.md` — read it before big product changes.
+
+## Pasting a whole catalog — the import file format
+
+Every list step in the register wizard (`src/app/register.tsx` — *sell*, *services*, *rent*) carries a
+**"📋 Paste the whole list instead"** panel (`src/features/offerings/OfferingImport.tsx`). On the web it can
+also read a **`.json` / `.txt` file** ("📄 Choose a .json file"); on a phone it's a paste. The text is parsed on
+every keystroke by `src/features/offerings/importOfferings.ts`, previewed before anything is committed, and
+then either **Added** to or used to **Replace** the list — after which every row is still editable by hand in
+the folder editor below. (The panel lives in the *register* wizard only; Manage has no importer yet.)
+
+### The shape: nesting IS the folder tree
+
+Braces inside braces are folders inside folders, and the innermost name is the thing itself.
+
+```json
+{ "Beverages": { "Cold": { "Shake": { "Banana": 120, "Mango": 130 } } } }
+```
+
+→ Beverages › Cold › Shake › **Banana ₹120**. **Top level = the section/category**, every level below = the
+nested folder path, **leaf = the item**. A value that reads as money becomes the **price**; any other text
+becomes the **description**.
+
+**Strict JSON is a valid subset** — quoted keys, numbers, nested objects all parse — so a real `.json` file is
+the safest way to hand over a big catalog. The parser is hand-written (not `JSON.parse`) so it *also* accepts
+the shorthand people actually type; see "What it forgives" below.
+
+### What each level means, per list
+
+| List | Chosen when | Level 1 | Level 2 | Level 3 | Leaf |
+|---|---|---|---|---|---|
+| **Menu** (`toMenuItem`) | shop with a food tag — `isFoodShop(tags)` | section from `domain/foodMenu.ts` (`Appetizers`, `Soups`, `Main Course`, `Breads`, `Rice`, `Desserts`, `Beverages`…) | folder | folder (unlimited depth → `subcategory` path) | dish |
+| **Products** (`toProductItem`) | any non-food shop | category from `domain/goods.ts` (`Grocery & daily needs`, `Home & cleaning`, `Home electronics`, `Mobiles & computers`, `Kitchen appliances`, `Furniture`, `Beauty & personal care`, `Clothing & footwear`, `Hardware & building`, `Auto parts & accessories`, `Stationery & books`, `Sports & fitness`, `Toys & baby`, `Medical & wellness`, `Pet supplies`, `Farm & garden`, `Other`) | **the kind** → `subcategory` (`Pulses & dal`, `Dairy & eggs`…) | **the brand** → `brand` | product |
+| **Services** (`toServiceItem`) | services step | section from `SERVICE_SECTIONS` (`Repairs`, `Installation & fitting`, `Home services`, `Cleaning`, `Beauty & grooming`, `Health & wellness`, `Classes & coaching`, `Transport & moving`, `Events`, `Tailoring & alterations`, `Professional`, `Pet care`, `Farm & agri`, `Other`) | kind of work | folder (unlimited) | job |
+| **Rentals** (`toRentalItem`) | rent step | section from `RENTAL_SECTIONS` (`Flats & rooms`, `PG & hostel`, `Shops`, `Offices`, `Godown & storage`, `Halls & venues`, `Cars`, `Bikes`, `Furniture & appliances`, `Equipment & tools`, `Tent & event gear`, `Clothing & costumes`, `Other`) | folder | folder | rental |
+
+**Products are the only list with fixed middle levels** — level 2 is the *kind* and level 3 the *brand*
+(the shelf › kind › brand walk `GoodsEditor` does); anything deeper is appended to the subcategory path.
+Rentals read `per` / `basis` per item (`day` → daily, `month` → monthly), falling back to the wizard's default.
+
+Section names **snap onto the library's own spelling** (case-insensitive): `beverages` files under
+`Beverages`, `grocery & daily needs` under `Grocery & daily needs`. A name the library doesn't know is kept
+exactly as written and becomes a custom section — which is fine, but it won't line up with the library chips,
+so prefer the exact names above.
+
+### Spelling an item out
+
+A number or plain text after the colon is guessed at. When that isn't enough, use an object of **known keys** —
+an object whose keys are ALL known describes ONE item; a single unknown key turns it back into a folder:
+
+```json
+{ "Banana Shake": { "price": 120, "description": "Thick, no ice", "veg": true } }
+```
+
+| Meaning | Accepted keys |
+|---|---|
+| price | `price`, `cost`, `rate`, `amount`, `mrp` |
+| description | `description`, `desc`, `details`, `about` |
+| veg dot (menu) | `veg`, `isVeg` — `true/yes/y/veg/1` vs `false/no/n/non-veg/0` |
+| photo URL | `photo`, `image`, `imageUrl`, `img` |
+| brand (products) | `brand`, `make` — **wins over the brand folder** |
+| rental basis | `basis`, `per` — `day` / `month` |
+
+### What it forgives
+
+Unquoted names (`Virgin Mojito: 150`) · newlines instead of commas · trailing commas · a bare name with no
+value (`{ Fries, Samosa }` = two unpriced items) · bracket lists (`Snacks: [Fries, Samosa]`) · smart quotes
+from Word · `₹` / `Rs` / `Rs.` / `INR` / `$` / `1,250` · `null` / `nil` / `none` / `-` / `n/a` as "nothing here" ·
+an outer `{ … }` or none at all.
+
+### Gotchas that actually bite
+
+- **A comma or a brace ends an unquoted name.** `{` `}` `[` `]` `:` `,` are structural, so a name containing
+  one **must be quoted**: `"Sugar, salt & jaggery": { … }`, `"Chips, 100 g": 20`. Same for descriptions.
+- **A quoted number is a description, not a price** — `"price": "150"` still works (a known key), but
+  `"Toor Dal": "150"` files 150 as the description. Leave prices unquoted.
+- **Bare numbers are re-formatted** — `150` → `₹150`. Anything with words (`₹99/plate`, `From ₹200`) is kept
+  verbatim, so per-unit pricing survives.
+- **One unknown key demotes an item to a folder** — `{ "price": 120, "unit": "kg" }` becomes two folders.
+- **Limits:** 1000 items, 8 levels deep. Parse errors read `Line 7: …`.
+- Nothing is committed until **Add** / **Replace** is tapped, and everything stays editable afterwards.
+
+A full worked example lives at `docs/testing/sample-imports/b11-jai-kirana-store.json` — the catalog for
+test business **B11 Jai Kirana Store**: 162 products over 4 shelves (Grocery & daily needs, Home & cleaning,
+Beauty & personal care, Stationery & books), strict JSON, kind › brand throughout.
 
 ## Key features & where they live
 

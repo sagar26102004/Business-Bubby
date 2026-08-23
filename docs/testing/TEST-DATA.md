@@ -341,6 +341,9 @@ plus the Manage/Workspace setup to do afterwards.
 * **Hours:** Mon–Sun 07:00–22:00
 * **Sell products? YES**
   * Toor Dal 1 kg `150`, Sugar 1 kg `48`, Amul Milk 500 ml `28`, Atta 5 kg `260`, Detergent 1 kg `120`, Cooking Oil 1 L `140`
+  * *Or paste the lot:* the sell step's **📋 Paste the whole list instead** panel takes
+    `docs/testing/sample-imports/b11-jai-kirana-store.json` — 162 products including all six above at
+    these exact prices. Format reference: "Pasting a whole catalog" in `CLAUDE.md`.
 * **Modules:** Orders, Billing & invoices, Delivery, Customers
 * **Location:** **the closest one — pin ~800 m away** (it should sit at the top of Home)
 * **Team:** `jaikiranaemp1` Helper

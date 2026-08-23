@@ -27,6 +27,13 @@ import {
   usernameToEmail,
 } from '@/data/supabase/shared';
 import { createSupabaseAuth } from '@/data/supabase/auth';
+// Identity is Supabase on BOTH backends, so the one-device claim is the same
+// code here as in Path A — see the header of deviceLock.ts.
+import {
+  checkDeviceClaim,
+  claimThisDevice,
+  releaseThisDevice,
+} from '@/data/supabase/deviceLock';
 import { http, seg } from './client';
 
 /**
@@ -122,6 +129,9 @@ export function createApiAuth(): AuthRepository {
       // of the union, and the reassignment above widens it.
       const signedIn = data.user;
       if (!signedIn) throw new Error('Sign-in did not return an account. Please try again.');
+      // One account, one device: this handset takes the account, and whatever
+      // held it before is signed out. Best-effort — never fails a sign-in.
+      await claimThisDevice();
       return fetchProfileViaApi(signedIn.id, signedIn.user_metadata?.name);
     },
 
@@ -163,13 +173,18 @@ export function createApiAuth(): AuthRepository {
         userId = signedIn.data.user.id;
       }
       if (!userId) throw new Error('Sign-up did not return an account. Please try again.');
+      await claimThisDevice();
       return fetchProfileViaApi(userId, input.name);
     },
 
     async signOut(): Promise<void> {
+      // Before the session goes: RLS needs it to delete the row.
+      await releaseThisDevice();
       await sb.auth.signOut();
       await clearCache();
     },
+
+    checkDeviceClaim,
 
     async signInAs(userId: string): Promise<User> {
       // Real auth has no service-role impersonation on the client, so we do a
@@ -207,6 +222,7 @@ export function createApiAuth(): AuthRepository {
           `Can't switch to ${profile?.name ?? 'that account'} — this only works for seeded test accounts created with the shared dev password. Sign in manually instead.`,
         );
       }
+      await claimThisDevice();
       await clearCache();
       return fetchProfileViaApi(data.user.id, data.user.user_metadata?.name);
     },

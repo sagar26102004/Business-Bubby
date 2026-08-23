@@ -35,6 +35,7 @@ import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
 import { getSupabase } from '@/lib/supabase';
 import { clearCache } from '@/lib/queryCache';
+import { checkDeviceClaim, claimThisDevice, releaseThisDevice } from './deviceLock';
 import {
   TEST_PASSWORD,
   assertDevTool,
@@ -123,6 +124,10 @@ export function createSupabaseAuth(): AuthRepository {
       // branch of the union, and the reassignment above widens it.
       const signedIn = data.user;
       if (!signedIn) throw new Error('Sign-in did not return an account. Please try again.');
+      // One account, one device: this handset takes the account, and whatever
+      // held it before is signed out. Best-effort, so it can never turn a
+      // successful sign-in into a failed one — see deviceLock.ts.
+      await claimThisDevice();
       const profile = await fetchProfile(signedIn.id);
       return withAdminFlag(profile ?? fallbackUser(signedIn.id, signedIn.user_metadata?.name));
     },
@@ -168,14 +173,23 @@ export function createSupabaseAuth(): AuthRepository {
       }
       if (!userId) throw new Error('Sign-up did not return an account. Please try again.');
 
+      // A brand-new account has nothing to displace, but claiming here is what
+      // makes THIS device the holder — without it the first sign-in on a second
+      // phone would find no row and simply take over unannounced.
+      await claimThisDevice();
       const profile = await fetchProfile(userId);
       return withAdminFlag(profile ?? fallbackUser(userId, displayName));
     },
 
     async signOut(): Promise<void> {
+      // Before the session goes: RLS needs it to delete the row, and a claim
+      // left behind would name a device that is no longer signed in.
+      await releaseThisDevice();
       await sb.auth.signOut();
       await clearCache();
     },
+
+    checkDeviceClaim,
 
     async signInAs(userId: string): Promise<User> {
       // Real auth has no service-role impersonation on the client, so instead we
@@ -215,6 +229,7 @@ export function createSupabaseAuth(): AuthRepository {
           `Can't switch to ${profile?.name ?? 'that account'} — this only works for seeded test accounts created with the shared dev password. Sign in manually instead.`,
         );
       }
+      await claimThisDevice();
       await clearCache();
       const fresh = await fetchProfile(data.user.id);
       return withAdminFlag(fresh ?? fallbackUser(data.user.id, data.user.user_metadata?.name));
@@ -299,6 +314,7 @@ export function createSupabaseAuth(): AuthRepository {
       const user = exchanged.session?.user;
       if (!user) throw new Error('Google signed you in, but no session came back. Try again.');
 
+      await claimThisDevice();
       await clearCache();
       // The profile row is written by the `handle_new_user` trigger from
       // Google's metadata (it supplies `name` and a real, already-verified
@@ -321,6 +337,10 @@ export function createSupabaseAuth(): AuthRepository {
      * the verified JWT, so this can only ever delete the person holding it.
      */
     async deleteAccount(): Promise<DeleteAccountResult> {
+      // Done FIRST, while the session is certainly still valid: the profile row
+      // survives deletion as a tombstone, so the claim's foreign key would not
+      // cascade it away on its own.
+      await releaseThisDevice();
       const { data, error } = await sb.functions.invoke('delete-account', { body: {} });
 
       if (error) {

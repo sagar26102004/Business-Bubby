@@ -15,6 +15,7 @@ import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-cont
 import { Icon } from '@/components/ui';
 import { IS_EPHEMERAL_BACKEND } from '@/data/backend';
 import { DataProvider, useAuth } from '@/data/DataProvider';
+import { SingleDeviceGate } from '@/features/auth/SingleDeviceGate';
 import { CallSessionProvider } from '@/features/calls/CallSessionContext';
 import { IncomingCallGate } from '@/features/calls/IncomingCallGate';
 import { OngoingCallBar } from '@/features/calls/OngoingCallBar';
@@ -329,6 +330,9 @@ export default function RootLayout() {
         <IncomingCallGate />
         {/* Registers this device for push, so a CLOSED app still gets called. */}
         <PushRegistrar />
+        {/* One account, one device: signs this one out if the account is taken
+            over elsewhere. */}
+        <SingleDeviceGate />
         </CallSessionProvider>
         </CartProvider>
       </DataProvider>

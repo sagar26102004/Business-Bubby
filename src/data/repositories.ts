@@ -366,6 +366,18 @@ export type DeleteAccountResult =
   | { deleted: true; listingsRemoved: number }
   | { deleted: false; blockers: AccountDeletionBlocker[] };
 
+/**
+ * Whether this device still holds the account, under the one-account-one-device
+ * rule (migration 0022).
+ *
+ * `'unknown'` is a first-class answer and MUST NOT sign anyone out: an
+ * unreachable server, a project that hasn't run the migration, or a backend
+ * with no such concept all land here. Failing open is the only safe direction —
+ * the alternative is a flaky train tunnel logging people out of their own
+ * accounts.
+ */
+export type DeviceClaimState = 'active' | 'evicted' | 'unknown';
+
 export interface AuthRepository {
   /** The signed-in user, or null when browsing as a guest. */
   getCurrentUser(): Promise<User | null>;
@@ -430,6 +442,21 @@ export interface AuthRepository {
    * no password (Google) throw, because there is nothing to change.
    */
   changePassword(currentPassword: string, newPassword: string): Promise<void>;
+
+  /**
+   * Does this device still hold the account?
+   *
+   * An account may be signed in on ONE device at a time. Signing in elsewhere
+   * moves the claim, and the device that lost it finds out here — polled by
+   * `SingleDeviceGate`, which then signs this device out and says why.
+   *
+   * Claiming is NOT part of this interface: every sign-in path does it for
+   * itself, so no caller can forget to and quietly leave the rule unenforced.
+   *
+   * Never throws. See `DeviceClaimState` for why a failure is `'unknown'`
+   * rather than an eviction.
+   */
+  checkDeviceClaim(): Promise<DeviceClaimState>;
 }
 
 export interface PlacesRepository {

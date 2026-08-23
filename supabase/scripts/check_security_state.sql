@@ -188,6 +188,21 @@ begin
          then '⚠️ still on 0014 — views count but are not banded; run 0020_ad_view_bands.sql'
          else '❌ absent — run migrations/0014 then 0020' end::text;
 
+  -- The one-account-one-device rule is enforced in two halves, and only one of
+  -- them is visible here. `signOut({ scope: 'others' })` runs from the app on
+  -- every sign-in whether or not this table exists — but WITHOUT the table, the
+  -- displaced phone keeps working on its unexpired access token for up to an
+  -- hour, and the client cannot tell it has been displaced at all. The failure
+  -- is silent by design (deviceLock.ts fails open rather than logging people
+  -- out on a bad connection), so it has to be looked for.
+  return query select 'table · active_devices (one account, one device)'::text,
+    case when to_regclass('public.active_devices') is null
+         then '❌ missing — run migrations/0022_single_device_session.sql'
+         when not (select relrowsecurity from pg_class
+                    where oid = 'public.active_devices'::regclass)
+         then '❌ RLS OFF — anyone could read or rewrite another account''s claim'
+         else '✅ present, RLS on' end::text;
+
   -- ── Launch readiness (production-setup.md §2.3–2.4) ───────────────────────
   -- Not security bugs; things that must not still be true on launch day.
   select count(*) into n from auth.users
