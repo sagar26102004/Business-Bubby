@@ -30,8 +30,12 @@ import org.json.JSONObject
  * is inside a catch, and every outcome is written to CallLog so that a failure
  * on someone else's phone can be read back afterwards instead of guessed at.
  *
- * The cost is one extra row in the notification shade while the call screen is
- * up. That is a fair price for a path that cannot make things worse.
+ * Those upgrades post AT MOST ONE notification between them. The call screen is
+ * asked for first because its full-screen-intent route has to post a ringing
+ * notification of its own; only when it didn't do we post ours. Ringing twice
+ * for one call is not a cosmetic problem — the two rows are indistinguishable
+ * on the lock screen and did different things when tapped, so which one you hit
+ * decided whether the call was answered or merely opened.
  */
 class CallMessagingService : ExpoFirebaseMessagingService() {
   private companion object {
@@ -72,21 +76,49 @@ class CallMessagingService : ExpoFirebaseMessagingService() {
 
     CallLog.add(this, "call ${call.id} from ${call.callerName}")
 
-    // UPGRADE 1 — replace the transient alert with a notification that STAYS.
+    // UPGRADE 1 — the call screen itself: IncomingCallActivity, over the lock
+    // screen, the way a phone call looks everywhere else.
     //
-    // What expo-notifications drew above is an ordinary heads-up: it appears
-    // for a few seconds and then drops into the shade, which for a ringing call
-    // reads as the popup vanishing before you can answer it. This posts the
-    // same CallStyle notification the in-app "Ring this phone now" check uses —
-    // round caller avatar, coloured Answer/Decline pills, `ongoing` so it can't
-    // be swiped or time out on its own.
+    // It goes FIRST because of what its second route does. When it can only
+    // reach the display through a full-screen intent, that intent has to hang
+    // off a notification — and that notification is posted on the ring channel,
+    // so it rings by itself. Asking first means we know whether the phone is
+    // already ringing before posting anything, which is what keeps ONE call to
+    // ONE row in the shade. Two rows is what this looked like before, and the
+    // wrong one of them answered the call the moment it was touched.
+    val screen = try {
+      CallNotifications.showCallScreenResult(
+        this,
+        call.id,
+        call.callerName,
+        call.businessName,
+        RING_WINDOW_MS
+      )
+    } catch (t: Throwable) {
+      // Never let this decide whether the phone rings — that is what the
+      // fallback below is for.
+      CallNotifications.ScreenResult(
+        CallNotifications.ScreenRoute.NONE,
+        "call screen threw: ${t.javaClass.simpleName} ${t.message.orEmpty()}"
+      )
+    }
+    CallLog.add(this, screen.log)
+
+    // UPGRADE 2 — the ring, unless the call screen's own notification is
+    // already doing it.
     //
-    // The duplicate is only cleared once ours is confirmed posted. `show`
-    // returns false when it could not draw anything at all (notifications
-    // revoked, CallStyle refused AND the plain fallback refused), and in that
-    // case expo's alert is left exactly where it is — a transient notification
-    // is worth having when the alternative is silence, which is precisely the
-    // trap this service's ordering comment exists to avoid.
+    // This replaces the transient alert expo-notifications drew above with one
+    // that STAYS: round caller avatar, coloured Answer/Decline pills, `ongoing`
+    // so it can't be swiped or time out on its own. Expo's is only cleared once
+    // ours is confirmed posted — `show` returns false when it could not draw
+    // anything at all, and a transient notification is worth having when the
+    // alternative is silence, which is precisely the trap this service's
+    // ordering comment exists to avoid.
+    if (screen.route == CallNotifications.ScreenRoute.NOTIFICATION) {
+      CallNotifications.cancelOtherRingNotifications(this, call.id)
+      return
+    }
+
     val answerUri = CallNotifications.answerUriFor(this, call.id)
     val posted = CallNotifications.show(
       this,
@@ -95,24 +127,17 @@ class CallMessagingService : ExpoFirebaseMessagingService() {
       call.businessName,
       CallNotifications.RING_CHANNEL_ID,
       answerUri,
-      RING_WINDOW_MS
+      RING_WINDOW_MS,
+      // The call screen is already up; a full-screen intent here would open the
+      // app over the top of it.
+      allowFullScreen = screen.route != CallNotifications.ScreenRoute.ACTIVITY
     )
     if (posted) {
       CallNotifications.cancelOtherRingNotifications(this, call.id)
-      CallLog.add(this, "posted the CallStyle notification")
+      CallLog.add(this, "posted the ringing notification")
     } else {
-      CallLog.add(this, "could not draw CallStyle — keeping the plain alert")
+      CallLog.add(this, "could not draw the ringing notification — keeping the plain alert")
     }
-
-    // UPGRADE 2 — the full-screen call screen, on top of that.
-    val outcome = CallNotifications.showCallScreen(
-      this,
-      call.id,
-      call.callerName,
-      call.businessName,
-      RING_WINDOW_MS
-    )
-    CallLog.add(this, outcome)
   }
 
   private data class IncomingCall(val id: String, val callerName: String, val businessName: String)

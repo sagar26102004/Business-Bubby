@@ -62,12 +62,11 @@ object CallNotifications {
   const val RING_CHANNEL_ID = "calls_v2"
 
   /**
-   * A SILENT channel for the full-screen call.
-   *
-   * The full-screen notification exists only to make Android launch the call
-   * screen; the ringing is already being done by the notification Expo posted
-   * from the same push. Giving this one a sound too would ring the phone twice,
-   * slightly out of step, which sounds broken.
+   * RETIRED — a silent channel the full-screen notification used to have to
+   * itself, back when it was a second notification sitting beside the ringing
+   * one. It isn't posted on any more (the full-screen notification now REPLACES
+   * the ringing one on `calls_v2`), so the id survives only to clear anything
+   * left on it and to delete the channel from the user's settings.
    */
   private const val SCREEN_CHANNEL_ID = "call_screen_v1"
 
@@ -204,7 +203,7 @@ object CallNotifications {
    */
   fun notificationId(callId: String): Int = callId.hashCode() and 0x7fffffff
 
-  /** A second id, for the full-screen notification, which coexists with it. */
+  /** The id the full-screen notification used to have, cleared on the way past. */
   private fun screenNotificationId(callId: String): Int =
     "$callId#screen".hashCode() and 0x7fffffff
 
@@ -333,7 +332,32 @@ object CallNotifications {
     callerName: String,
     businessName: String,
     timeoutMs: Int
-  ): String {
+  ): String = showCallScreenResult(context, callId, callerName, businessName, timeoutMs).log
+
+  /**
+   * How the call screen got onto the display — the thing a caller has to know
+   * before deciding whether to ring separately.
+   */
+  enum class ScreenRoute {
+    /** IncomingCallActivity is up. Nothing was posted; ring elsewhere. */
+    ACTIVITY,
+    /** A full-screen-intent notification was posted, and it IS the ring. */
+    NOTIFICATION,
+    /** Nothing could be shown. A ringing notification is all there will be. */
+    NONE
+  }
+
+  /** The route taken, plus the sentence that goes in the ring log. */
+  data class ScreenResult(val route: ScreenRoute, val log: String)
+
+  /** As `showCallScreen`, but says which route it took. */
+  fun showCallScreenResult(
+    context: Context,
+    callId: String,
+    callerName: String,
+    businessName: String,
+    timeoutMs: Int
+  ): ScreenResult {
     val screen = IncomingCallActivity.intentFor(context, callId, callerName, businessName, timeoutMs)
 
     // Route 1 — launch it ourselves. Needs "display over other apps", which is
@@ -341,7 +365,7 @@ object CallNotifications {
     if (canDrawOverlays(context)) {
       try {
         context.startActivity(screen)
-        return "full call screen (display-over-other-apps)"
+        return ScreenResult(ScreenRoute.ACTIVITY, "full call screen (display-over-other-apps)")
       } catch (t: Throwable) {
         Log.w(TAG, "direct launch refused", t)
         // Fall through — the full-screen intent may still be allowed.
@@ -350,25 +374,43 @@ object CallNotifications {
 
     // Route 2 — ask the system to launch it, via a full-screen intent.
     if (!canUseFullScreenIntent(context)) {
-      return "no call screen: neither permission granted (ringing notification only)"
+      return ScreenResult(
+        ScreenRoute.NONE,
+        "no call screen: neither permission granted (ringing notification only)"
+      )
     }
 
     return try {
-      ensureSilentChannel(context)
+      ensureChannel(context, RING_CHANNEL_ID)
+      retireScreenChannel(context)
       val manager = NotificationManagerCompat.from(context)
-      if (!manager.areNotificationsEnabled()) return "no call screen: notifications are off"
+      if (!manager.areNotificationsEnabled()) {
+        return ScreenResult(ScreenRoute.NONE, "no call screen: notifications are off")
+      }
 
-      val id = screenNotificationId(callId)
+      // ⚠️ THE RINGING NOTIFICATION'S OWN ID AND CHANNEL, ON PURPOSE.
+      //
+      // This used to be a second, silent notification sitting beside the one
+      // `show` posts, and the lock screen showed the same caller twice: one row
+      // that rang and answered the call the moment it was touched, one that
+      // opened the call screen. Now there is one row per call and this is it —
+      // posted on the ring channel so it rings (calls_v2 owns the sound), with
+      // the tap that opens the call screen.
+      //
+      // The caller is told (ScreenRoute.NOTIFICATION) that the ring is covered,
+      // so nothing else posts on top of it. Anything that goes wrong below
+      // reports NONE instead and the plain ringing notification takes over.
+      val id = notificationId(callId)
       val caller = Person.Builder().setName(callerName).setImportant(true).build()
       val answer = PendingIntent.getActivity(
         context,
-        id,
+        id + 3,
         screen,
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
       )
       val decline = declineIntent(context, callId, id + 1)
 
-      val notification = NotificationCompat.Builder(context, SCREEN_CHANNEL_ID)
+      val notification = NotificationCompat.Builder(context, RING_CHANNEL_ID)
         .setSmallIcon(android.R.drawable.sym_call_incoming)
         .setContentTitle(callerName)
         .setContentText(if (businessName.isBlank()) "Incoming call" else "Incoming call for $businessName")
@@ -376,8 +418,6 @@ object CallNotifications {
         .setCategory(NotificationCompat.CATEGORY_CALL)
         .setOngoing(true)
         .setAutoCancel(false)
-        // Ringing belongs to the other notification; this one must be mute.
-        .setSilent(true)
         .setContentIntent(answer)
         .setTimeoutAfter(timeoutMs.toLong())
         .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, decline, answer))
@@ -388,9 +428,12 @@ object CallNotifications {
         .build()
 
       manager.notify(id, notification)
-      "full call screen (full-screen intent)"
+      ScreenResult(ScreenRoute.NOTIFICATION, "full call screen (full-screen intent)")
     } catch (t: Throwable) {
-      "no call screen: ${t.javaClass.simpleName} ${t.message.orEmpty()}"
+      // Including a CallStyle the platform refused. Saying NONE here is what
+      // sends the caller back to `show`, which rings with hand-added buttons —
+      // so a rejected style costs the call screen, never the ring.
+      ScreenResult(ScreenRoute.NONE, "no call screen: ${t.javaClass.simpleName} ${t.message.orEmpty()}")
     }
   }
 
@@ -450,26 +493,25 @@ object CallNotifications {
     manager.createNotificationChannel(channel)
   }
 
-  /** The mute channel the full-screen notification is posted on. */
-  private fun ensureSilentChannel(context: Context) {
+  /**
+   * Delete the retired call-screen channel.
+   *
+   * A phone that ran an older build has a second "Call screen" entry in the
+   * app's notification settings which now controls nothing. Same reasoning as
+   * the v1 `calls` channel in push.ts: a dead switch the user can toggle is
+   * worse than no switch.
+   */
+  private fun retireScreenChannel(context: Context) {
     if (Build.VERSION.SDK_INT < 26) return
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
       ?: return
-    if (manager.getNotificationChannel(SCREEN_CHANNEL_ID) != null) return
-    val channel = NotificationChannel(
-      SCREEN_CHANNEL_ID,
-      "Call screen",
-      // HIGH so it may take over the screen, but with nothing to hear: the
-      // ringing notification on the calls channel is doing that.
-      NotificationManager.IMPORTANCE_HIGH
-    ).apply {
-      description = "Shows the full-screen call when someone rings you."
-      setSound(null, null)
-      enableVibration(false)
-      setBypassDnd(true)
-      lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+    try {
+      if (manager.getNotificationChannel(SCREEN_CHANNEL_ID) != null) {
+        manager.deleteNotificationChannel(SCREEN_CHANNEL_ID)
+      }
+    } catch (t: Throwable) {
+      Log.w(TAG, "could not delete the retired call-screen channel", t)
     }
-    manager.createNotificationChannel(channel)
   }
 
   /** PendingIntent for Decline, handled in-process so the app never opens. */
@@ -518,6 +560,34 @@ object CallNotifications {
     )
   }
 
+  /**
+   * The same deep link, minus the "answer it" flag.
+   *
+   * `answerUrlFor` (push.ts) builds `…/call/session/<id>?answer=1`, and the
+   * session screen joins the call the moment it sees that. That is right for
+   * the Answer pill and wrong for everything else: a notification whose whole
+   * body is a hidden Accept button is a call answered by accident.
+   *
+   * Falls back to the URI it was given if it cannot be parsed — a body tap that
+   * answers is still better than one that does nothing.
+   */
+  private fun viewUriFor(answerUri: String?): String? {
+    if (answerUri.isNullOrBlank()) return answerUri
+    return try {
+      val src = Uri.parse(answerUri)
+      val names = src.queryParameterNames
+      if (!names.contains("answer")) return answerUri
+      val out = src.buildUpon().clearQuery()
+      for (name in names) {
+        if (name == "answer") continue
+        for (value in src.getQueryParameters(name)) out.appendQueryParameter(name, value)
+      }
+      out.build().toString()
+    } catch (t: Throwable) {
+      answerUri
+    }
+  }
+
   // ------------------------------------------------------- plain notification
 
   /**
@@ -535,7 +605,14 @@ object CallNotifications {
     businessName: String,
     channelId: String,
     answerUri: String?,
-    timeoutMs: Int
+    timeoutMs: Int,
+    /**
+     * Attach a full-screen intent? False when the call screen is ALREADY on the
+     * display — a second full-screen intent would fire on the locked phone and
+     * open the app over the top of it. CallStyle needs one, so turning it off
+     * means the plain variant, which is the same ring with the same two buttons.
+     */
+    allowFullScreen: Boolean = true
   ): Boolean {
     val id = notificationId(callId)
     // CallStyle renders this person as the caller: their name is the headline
@@ -546,6 +623,10 @@ object CallNotifications {
     // happen for us — but a null here would mean a notification you can't act
     // on, so say so rather than posting one.
     val answer = openAppIntent(context, answerUri, id) ?: return false
+    // The BODY gets a different intent to the Answer button — see viewUriFor.
+    // Tapping the notification used to send `?answer=1`, so brushing the lock
+    // screen picked the call up before the owner had decided to.
+    val open = openAppIntent(context, viewUriFor(answerUri), id + 2) ?: answer
     val decline = declineIntent(context, callId, id + 1)
 
     /** Everything both variants share. */
@@ -561,7 +642,7 @@ object CallNotifications {
       .setOngoing(true)
       .setAutoCancel(false)
       // Tapping the body (not a button) opens the call without answering it.
-      .setContentIntent(answer)
+      .setContentIntent(open)
       // Belt and braces against a phantom popup if every dismissal path fails.
       .setTimeoutAfter(timeoutMs.toLong())
       .addPerson(caller)
@@ -589,12 +670,16 @@ object CallNotifications {
       return false
     }
     return try {
-      if (canUseFullScreenIntent(context)) {
+      if (allowFullScreen && canUseFullScreenIntent(context)) {
         val styled = base()
           .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, decline, answer))
           // Lets it take over a locked screen. Also MANDATORY for CallStyle:
           // without it (or a foreground service) the platform rejects the post.
-          .setFullScreenIntent(answer, true)
+          //
+          // `open`, not `answer`: a full-screen intent fires BY ITSELF on a
+          // locked phone, so pointing it at the answering deep link picks the
+          // call up with nobody having touched anything.
+          .setFullScreenIntent(open, true)
           .build()
         manager.notify(id, styled)
       } else {
