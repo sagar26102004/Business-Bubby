@@ -4,9 +4,15 @@
 submission: what is done, what is decided, and what is next. The other files in this folder are
 *reference* (what to paste, what to record); this one is *status*.
 
-Last updated **16 August 2026** (fourth pass: the signed bundle now EXISTS and the super-admin
-password is rotated. What remains is almost entirely Play Console form-filling, gated on Google
-finishing identity verification).
+Last updated **23 August 2026** (fifth pass: a bundle has reached **internal testing**, so the
+Console is live and the form-filling era is over. The whole game is now the **closed-testing
+14-day clock** — see "Fifth pass record" below, which is the section to read first).
+
+> **Two facts in this file are inferred, not seen.** Nobody has driven the Play Console from this
+> repo — its state is read from the traces a run leaves behind (a workflow note saying a bundle was
+> uploaded, a `versionCode` default that was bumped). Anything marked 🔎 is an inference with the
+> evidence named; confirm it with one glance at the Console and strike the marker. Everything
+> marked ✅ was verified against a real system — the live database, the git history, this repo.
 
 ---
 
@@ -35,14 +41,14 @@ Play-only run:
 |---|---|---|---|
 | 1 | End-to-end testing | Phase 1 | ✅ **Full feature sweep done 16 Aug 2026** — every screen driven in the web preview, four real bugs found and fixed. See "Pre-publish QA sweep" below. Final on-device ring/vibration pass still deferred. |
 | 2 | Config + assets | Phase 2 | ✅ **Complete** — see "Phase 2 record" below. |
-| 3 | Play Console account ($25, ID verification) | A.1 | 🟡 **Paid for, ID documents submitted — awaiting Google's verification** (as of 16 Aug 2026). Nothing uploaded yet, no track live. **This is now the critical path**: every remaining step needs a verified Console, and nothing in the repo can make it go faster. |
-| 4 | Production build + keystore backup | A.2 / Phase 3 | ✅ **Done 16 Aug 2026 — a signed release `.aab` exists.** Built by GitHub Actions, not EAS (decision 5). Keystore backed up off-machine to Google Drive; local copies at `credentials/android/keystore.jks` + `credentials.json`, both gitignored and never committed. ⚠️ The artefact is **still sitting in the workflow run** — download it, retention is 14 days. |
-| 5 | Create app in Play Console | A.3 | ⬜ Not started — blocked on 3 |
-| 6 | Setup checklist: listing, content rating, target audience, data safety | A.4 / 6.2 | 🟡 **All assets and copy now exist** — nothing left to author, only to paste. Blocked on 3. See "Ready to upload" below. |
+| 3 | Play Console account ($25, ID verification) | A.1 | 🔎 **Cleared.** A bundle has since been uploaded to internal testing (`android-aab.yml` records "3 by the 16 Aug 2026 Actions run and the first internal-testing upload", written into the file on 20 Aug), which cannot happen without a working Console. No longer the critical path. Confirm no verification banner is still showing. |
+| 4 | Production build + keystore backup | A.2 / Phase 3 | ✅ **Repeatable.** Built by GitHub Actions, not EAS (decision 5). Keystore backed up off-machine to Google Drive; local copies at `credentials/android/keystore.jks` + `credentials.json`, both gitignored and never committed. The 16 Aug artefact's 14-day retention no longer matters — rebuilding is a button, and every rebuild is signed with the same secret-held keystore, so Play keeps seeing the same app. |
+| 5 | Create app in Play Console | A.3 | 🔎 **Done** — implied by the internal-testing upload (phase 3). |
+| 6 | Setup checklist: listing, content rating, target audience, data safety | A.4 / 6.2 | 🟡 **All assets and copy exist** — nothing left to author, only to paste. Unblocked now. See "Ready to upload" below. |
 | 7 | Play service account key | A.5 | ⬜ **Not needed for v1.0 and now doubly so** — the build no longer comes from EAS, so `eas submit` is not the upload path. Upload the `.aab` by hand. |
-| 8 | Upload the `.aab` + create release | A.6 / A.7 | ⬜ Not started. **Testing track, not production** — decision 4. Manual upload in the Console, **not** `eas submit` — see decision 5. |
+| 8 | Upload the `.aab` + create release | A.6 / A.7 | 🟡 **Internal testing has a build** (versionCode 3). **Closed testing does not** — and only closed counts for phase 10. Next upload goes to the *closed* track. Manual upload, **not** `eas submit` — decision 5. |
 | 9 | Review (1–3 days; up to 7 for a new account) | A.8 | ⬜ |
-| 10 | Closed test → apply for production access | — | ⬜ **Check whether this applies to you** — a personal account registered after 13 Nov 2023 needs 12 testers for 14 continuous days on a *closed* track first. Decision 4. |
+| 10 | Closed test → apply for production access | — | 🔴 **THE CRITICAL PATH — and the only thing on this list that cannot be hurried.** 12 testers, 14 *continuous* days, closed track only. The clock has not started. Decision 4, and "Fifth pass record" below. |
 
 ---
 
@@ -61,8 +67,12 @@ Play-only run:
 ## Open blockers
 
 **Nothing on this list needs more writing.** Every one of them needs an account, a dashboard, or a
-network connection this repo cannot reach. They are ordered by how long they take to clear, not by
-severity — 1 and 2 have waiting built into them, so start them first.
+network connection this repo cannot reach. Numbers are kept stable so older notes keep pointing at
+the right item — the resolved ones stay, struck through in spirit, rather than being renumbered.
+
+**As of 23 Aug three are still live:** 8 (auth toggles — sharp, do it before any tester sees the
+app), 4's leftovers (§2.5 is 8; §2.7 advisors is a five-minute re-run), and 3 (screenshots — soft,
+it can wait for the production promotion).
 
 1. ✅ **RESOLVED 15 Aug 2026 — the corrected legal pages are live.** Verified by loading the
    published URLs, not just by checking git: `privacy-policy.html` reads "Last updated 15 August
@@ -72,10 +82,11 @@ severity — 1 and 2 have waiting built into them, so start them first.
    **If you ever edit a page under `docs/legal/`, this is the check:** push, wait ~1 min for Pages,
    then load the URL in a private window and confirm the date changed. GitHub Pages deploys from
    `main`, so an unpushed commit means the app links to text you no longer stand behind.
-2. 🟡 **Play Console verification is pending, and it is now the only hard blocker** (phase 3). The
-   $25 is paid and the ID documents are in; Google takes days. Every remaining step — create the
-   app, paste the listing, upload the bundle, open a track — is downstream of it, and none of the
-   work left in this repo can shorten it. Check it daily; there is nothing else to wait on.
+2. ✅ **RESOLVED — Console verification is no longer a blocker** (phase 3). A bundle reached
+   internal testing, which settles it. **What replaced it is worse, because waiting is the whole
+   of it: the closed-testing 14-day clock has not started.** Nothing in this repo shortens it
+   either, but unlike verification it does not start on its own — somebody has to open the track
+   and get 12 people to opt in. See the fifth pass record.
 3. 🟡 **Screenshots still show obviously-fake names** — `Vehicles Stall #633`, `Abc's Stall`, `Fth`.
    Downgraded by decision 4: for a testing track these are seen by testers, not the public, and
    renaming those three listings is enough (one `update … jsonb_set` on `businesses.data`).
@@ -96,7 +107,10 @@ severity — 1 and 2 have waiting built into them, so start them first.
      by step in `docs/google-sign-in.md`; it is the only part that also needs a *second* console
      (Google Cloud), so do it from there rather than from memory.
    - **§2.7 advisors** — Dashboard → Advisors → Security. The one check that catches a table added
-     without a policy, which the SQL script cannot know to look for.
+     without a policy, which the SQL script cannot know to look for. **Worth re-running now:**
+     migration 0022 added a new table (`active_devices`) since the last green run. Its RLS and four
+     policies were verified by hand on 23 Aug, so this is confirmation rather than suspicion — but
+     a new table is exactly the case this check exists for.
 5. ✅ **Migration `0020_ad_view_bands.sql` is applied** (confirmed 15 Aug). It is idempotent — two
    `drop function if exists`, a `create`, a `comment` and a `grant`, with no data backfill — so
    re-running it is safe if ever in doubt. The one thing that can still go wrong is PostgREST
@@ -108,10 +122,100 @@ severity — 1 and 2 have waiting built into them, so start them first.
    manual one in the Console either way. Revisit only if automated uploads become worth the Google
    Cloud setup. Walkthrough if you ever want it: guide §A.5.
 
-7. 🟡 **The signed `.aab` is still inside its GitHub Actions run.** The workflow went green but the
-   `localo-aab` artifact was never downloaded, and `retention-days: 14` means it is deleted around
-   **30 Aug 2026**. Rebuilding is only ~30 minutes, but it also means a fresh `versionCode`, so
-   just download it: Actions → "Android AAB (Play)" → the green run → Artifacts → `localo-aab`.
+7. ✅ **Moot — stop worrying about artifact retention.** The 16 Aug bundle is superseded (a fresh
+   one was built 22 Aug, and another will be built on top of today's fixes), and a rebuild is a
+   button on a branch that is always releasable. Expiring artifacts cost nothing; only a lost
+   *keystore* would, and that lives in GitHub secrets plus an off-machine backup.
+
+8. 🟡 **Do blocker 4's §2.5 BEFORE the invite links go out — not before the upload, before the
+   *invites*.** The toggles themselves are listed in 4; what's new is the deadline. Two of them
+   decide whether a tester's first minute works at all: **Confirm email OFF** (synthetic
+   `<username>@localo.app` addresses have no inbox, so sign-in dies waiting for a mail that will
+   never arrive) and **Anonymous sign-ins ON** (guest browse and guest calls). Getting it wrong
+   burns the scarcest resource in this release — the goodwill of 12 volunteers — on day one of a
+   clock where re-recruiting costs days that cannot be recovered.
+
+## Fifth pass record — 23 August 2026
+
+**The shape of the release changed today, so read this before the older records.** For a month the
+blocker was always something Google had to do. It isn't any more. The Console works, a bundle has
+been through it, and the only thing between here and production access is **14 days that have not
+started counting**.
+
+### The one thing that matters
+
+The 14-day closed test runs *while you keep working*. A build uploaded to the closed track today
+does not stop you shipping five more this fortnight — **updating the app during a closed test does
+not reset the clock**. So the instinct to polish before starting is exactly backwards: every day
+spent perfecting the build before the track opens is a day added to the total, while a day spent
+perfecting it *after* is free.
+
+The corollary is the tester count. Twelve must be opted in **continuously**; drop below and the run
+is compromised, so invite ~18–20 to land 12 (decision 4). Recruiting is the part with human latency
+in it — people take days to tap a link — so it should start the same day the track does, not after.
+
+**Practical order:** open the closed track with the next build → send invites the same day →
+confirm 12 opted in → then go back to features.
+
+### What happened
+
+- **22 Aug** — an `.aab` was built (GitHub Actions). Never uploaded: new bugs were spotted first.
+- **23 Aug** — those fixes landed on `main` as two commits, and the branch is clean and pushed:
+  - `c133b15` **multi-shift opening hours** — a day now holds a *list* of shifts, so a gym open
+    5–10 AM and 5–10 PM can say so. Before this, entering the evening shift silently erased the
+    morning one, which is a data-loss bug in a form owners fill exactly once.
+  - `aeccd5a` **one account, one device** — sign-in claims the account for the install and revokes
+    other sessions. Relevant to testing: a tester signing in on a second handset now displaces the
+    first *by design*. Say so in the invite, or it reads as a bug report waiting to happen.
+- The 22 Aug bundle is superseded. Build a fresh one from `main`; nothing carries over from the
+  unused one.
+
+### versionCode — the one rule
+
+Must be **higher than any versionCode already uploaded to Play**, not higher than everything ever
+built. A bundle that never reached the Console burns nothing.
+
+| versionCode | Where it went |
+|---|---|
+| 1, 2 | `eas build` (superseded, decision 5) |
+| 3 | 16 Aug Actions run → **uploaded to internal testing** |
+| 4 (probable) | 22 Aug run — the workflow default had been bumped to `5` by then, so 4 was likely used earlier; **never uploaded** either way |
+| **6 or higher** | the next build — safely clear of both |
+
+Gaps are free; Play only requires the number to go up. Confirm the highest *uploaded* number under
+Releases before running, and bump the workflow's default input afterwards so a later click can't
+silently reuse one.
+
+### Verified against live systems today
+
+- ✅ **Migration `0022_single_device_session.sql` IS applied to the live project** (`mzxslzouzmiswnrolcaq`).
+  Checked directly, not assumed: table present, `PRIMARY KEY (user_id)`, FK to `profiles` with
+  `ON DELETE CASCADE`, RLS enabled, all four policies, and one live claim row. It had been reported
+  as not applied; it was applied all along — see the next point for why it looked otherwise.
+- ⚠️ **The Supabase MCP tools are signed into a DIFFERENT account** and cannot see this project at
+  all. Asked about `active_devices`, they answer about another database entirely and report it
+  missing — confidently and wrongly. **Never check Localo's DB state through them.** Use
+  `npx supabase db query "<sql>" --linked`, which runs against the live project and needs no DB
+  password.
+- ⚠️ **The remote migration-history table is empty.** `supabase migration list --linked` shows
+  every local migration 0001–0022 with a blank `remote`, because they were all applied by pasting
+  into the SQL editor rather than by `db push`. The schema is correct; the CLI just doesn't know
+  it. **Do not run `supabase db push`** — it would try to re-run all 21. Repair the history first
+  (`supabase migration repair --status applied <version>`, which only writes history rows).
+- ✅ The AAB workflow bakes in the right backend at build time (`EXPO_PUBLIC_BACKEND=supabase`,
+  the live URL and publishable key), and deliberately leaves `EXPO_PUBLIC_DEV_TOOLS` and
+  `EXPO_PUBLIC_SEED_PASSWORD` absent. Nothing to set by hand before a release build.
+
+### Still unconfirmed — one glance each
+
+These are the 🔎 items. None needs work, only looking:
+
+1. The verification banner is gone from the Console (phase 3).
+2. The exact versionCode of the 22 Aug run — Actions → the run → its `versionCode` input.
+3. `production-setup.md` §2.5 auth toggles, especially **Confirm email OFF** — blocker 8, and the
+   one that would break a tester's very first minute.
+
+---
 
 ## Pre-publish QA sweep — 16 Aug 2026
 
@@ -361,6 +465,11 @@ Verified with `npx tsc --noEmit` and `npx expo export --platform web`, both exit
 ---
 
 ## Still owed in Play Console (1.0)
+
+🔎 **Some of this may already be done.** The Console makes you clear the "App content"
+declarations before a release goes out to a track, and one already reached internal testing — so
+walk the list and tick off what the Console already shows as complete rather than redoing it. The
+copy to paste is all authored either way.
 
 - `USE_FULL_SCREEN_INTENT` declaration — `permission-declarations.md` §2
 - `FOREGROUND_SERVICE_MEDIA_PLAYBACK` service-type declaration — §6 (light form, no video)
