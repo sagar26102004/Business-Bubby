@@ -175,19 +175,25 @@ confirm 12 opted in → then go back to features.
 
 ### versionCode — the one rule
 
-Must be **higher than any versionCode already uploaded to Play**, not higher than everything ever
-built. A bundle that never reached the Console burns nothing.
+Must be **higher than every versionCode Play has ever accepted** — including from releases that
+were discarded or left as drafts. ⚠️ **This section said something weaker until 23 Aug** ("a bundle
+that never reached the Console burns nothing") and the table under it was wrong, which is what
+produced a rejected upload. A code can be burned without anything being live on a track.
 
 | versionCode | Where it went |
 |---|---|
 | 1, 2 | `eas build` (superseded, decision 5) |
 | 3 | 16 Aug Actions run → **uploaded to internal testing** |
-| 4 (probable) | 22 Aug run — the workflow default had been bumped to `5` by then, so 4 was likely used earlier; **never uploaded** either way |
-| **6 or higher** | the next build — safely clear of both |
+| 4 | 22 Aug run, probably. Status unknown — assume burned |
+| 5 | **Burned.** Play refused an upload on 23 Aug: *"Version code 5 has already been used."* The workflow default was `5`, so both the 22 Aug and 23 Aug runs built it and one of them reached the Console |
+| **10** | run 23 Aug, after the rejection — the media-playback fix (`c732872`) is the first build to carry it |
+| **11+** | the next build. The workflow default is now `11` |
 
-Gaps are free; Play only requires the number to go up. Confirm the highest *uploaded* number under
-Releases before running, and bump the workflow's default input afterwards so a later click can't
-silently reuse one.
+Gaps are free and you should leave them: Play only requires the number to go up, so overshooting
+costs nothing while a reused number fails at upload, after the whole build. **Confirm against
+Test and release → App bundle explorer**, which lists every code Play has accepted — not Internal
+testing → Releases, which shows only what is live on that track and is how 4 and 5 went missing
+from this table. Bump the workflow's default input after every run you upload.
 
 ### Verified against live systems today
 

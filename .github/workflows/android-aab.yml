@@ -53,16 +53,22 @@
 # `eas build` (which tracks it remotely via appVersionSource) a Gradle build
 # has no memory. So the number is an input below and YOU increment it.
 #
-# Used so far: 1 and 2 by `eas build`, 3 by the 16 Aug 2026 Actions run and
-# the first internal-testing upload. The default below is the next free number
+# Burned so far: 1 and 2 by `eas build`, 3 by the 16 Aug 2026 Actions run and
+# the first internal-testing upload, 5 by a later run — Play rejected a second
+# upload of 5 on 23 Aug 2026 with "Version code 5 has already been used". 10 was
+# run that day. The default below is deliberately clear of all of them
 # — BUMP IT after every run you actually upload, so a later click cannot
 # silently reuse one.
 #
-# GAPS ARE FINE. The only rule Play enforces is that the number goes UP, so
-# overshooting costs nothing and a failed run wastes nothing. Reusing a number
-# is the one thing that fails, and it fails at upload — after the 40 minutes.
-# CHECK THE CONSOLE FIRST: Internal testing → Releases shows the live build as
-# `1.1.0 (N)`; if N is not below the default here, type something higher.
+# GAPS ARE FINE, AND YOU SHOULD LEAVE THEM. The only rule Play enforces is that
+# the number goes UP, so overshooting costs nothing and a failed run wastes
+# nothing. Reusing a number is the one thing that fails, and it fails at upload
+# — after the 40 minutes. This list has been wrong twice; do not trust it over
+# the Console.
+# CHECK THE CONSOLE FIRST: **App bundle explorer** lists every version code Play
+# has ever accepted, including from discarded and draft releases. That is the
+# authoritative one. Internal testing → Releases shows only what is live on that
+# track as `1.1.0 (N)`, which is how codes went missing from this list before.
 #
 # HOW TO RUN IT
 # GitHub → Actions → "Android AAB (Play)" → Run workflow. ~25-40 minutes cold.
@@ -74,9 +80,9 @@ on:
   workflow_dispatch:
     inputs:
       versionCode:
-        description: 'versionCode — must be higher than every build already uploaded to Play (1 and 2 by eas build; 3 by the 16 Aug 2026 Actions run). Confirm against Internal testing → Releases before running.'
+        description: 'versionCode — must be higher than every code Play has ever accepted (known burned: 1, 2, 3, 5, 10). Confirm against Test and release → App bundle explorer, NOT the Releases list, before running. Gaps are free — overshoot rather than guess.'
         required: true
-        default: '5'
+        default: '11'
         type: string
       architectures:
         description: 'CPU architectures to compile'
