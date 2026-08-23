@@ -5,16 +5,33 @@
  * and easy to reformat for any locale. Days are indexed 0=Monday … 6=Sunday
  * (business-week order); map from JS `Date.getDay()` (0=Sunday) with `todayIndex`.
  *
- * One open→close interval per day covers the common case and stays simple to
- * edit; an overnight interval (close earlier than open, e.g. a 6 PM–2 AM bar) is
- * understood by `isOpenNow`. Everything downstream — the Open/Closed pill, the
+ * A day holds a LIST of shifts, because plenty of businesses open twice in one
+ * day — a gym running 5–10 AM and 5–10 PM, a restaurant that shuts between lunch
+ * and dinner. An overnight shift (close earlier than open, e.g. a 6 PM–2 AM bar)
+ * is understood by `isOpenNow`. Everything downstream — the Open/Closed pill, the
  * card's 🕒 label, the business page schedule — derives from this one shape.
+ *
+ * Back-compat: before shifts existed a day was a single `open`/`close` pair, and
+ * both stored listings and the other backend still carry that form. `dayShifts`
+ * reads either, and writers keep `open`/`close` in step with the FIRST shift so
+ * an older reader still shows something true rather than nothing.
  */
+
+/** One open→close interval within a day. 24h "HH:MM" both sides. */
+export interface Shift {
+  open: string;
+  close: string;
+}
 
 /** Hours for a single day. Closed all day when `closed` is true. */
 export interface DayHours {
   closed?: boolean;
-  /** 24h "HH:MM", e.g. "09:00". */
+  /**
+   * Every interval the business is open that day, in order. When absent, the
+   * legacy `open`/`close` pair below is the day's single shift.
+   */
+  shifts?: Shift[];
+  /** 24h "HH:MM", e.g. "09:00". Mirrors `shifts[0].open`. */
   open?: string;
   /** 24h "HH:MM", e.g. "18:00". Earlier than `open` = closes after midnight. */
   close?: string;
@@ -70,20 +87,62 @@ export function formatTime(t?: string): string {
   return min === 0 ? `${h12} ${period}` : `${h12}:${String(min).padStart(2, '0')} ${period}`;
 }
 
-/** True when a day has a usable open→close interval. */
-function isDayOpen(d?: DayHours): d is DayHours & { open: string; close: string } {
-  return (
-    !!d &&
-    !d.closed &&
-    timeToMinutes(d.open) !== null &&
-    timeToMinutes(d.close) !== null
-  );
+/**
+ * A day's usable shifts, earliest first — the ONE reader every helper goes
+ * through. Reads the new `shifts` list or the legacy single pair, drops
+ * anything that doesn't parse, and returns [] for a closed (or empty) day.
+ */
+export function dayShifts(d?: DayHours): Shift[] {
+  if (!d || d.closed) return [];
+  const raw = d.shifts?.length ? d.shifts : [{ open: d.open, close: d.close }];
+  return raw
+    .filter(
+      (s): s is Shift =>
+        !!s && timeToMinutes(s.open) !== null && timeToMinutes(s.close) !== null,
+    )
+    .sort((a, b) => timeToMinutes(a.open)! - timeToMinutes(b.open)!);
 }
 
-/** A day's hours as text, e.g. "9 AM – 6 PM" or "Closed". */
+/**
+ * Build a day from its shifts, keeping the legacy `open`/`close` pair pointed at
+ * the first one so older readers (and the other backend) still see real hours.
+ */
+export function dayFromShifts(shifts: Shift[]): DayHours {
+  const ordered = dayShifts({ shifts });
+  if (!ordered.length) return { closed: true };
+  return { shifts: ordered, open: ordered[0].open, close: ordered[0].close };
+}
+
+/** True when a day has at least one usable open→close interval. */
+function isDayOpen(d?: DayHours): boolean {
+  return dayShifts(d).length > 0;
+}
+
+/** One shift as text, e.g. "9 AM – 6 PM". */
+function formatShift(s: Shift): string {
+  return `${formatTime(s.open)} – ${formatTime(s.close)}`;
+}
+
+/** A day's hours as text, e.g. "5 AM – 10 AM, 5 PM – 10 PM" or "Closed". */
 export function formatDayHours(d?: DayHours): string {
-  if (!isDayOpen(d)) return 'Closed';
-  return `${formatTime(d.open)} – ${formatTime(d.close)}`;
+  const shifts = dayShifts(d);
+  if (!shifts.length) return 'Closed';
+  return shifts.map(formatShift).join(', ');
+}
+
+/** Is `nowMins` inside this shift on the shift's OWN day? */
+function coversToday(s: Shift, nowMins: number): boolean {
+  const open = timeToMinutes(s.open)!;
+  const close = timeToMinutes(s.close)!;
+  // Overnight (e.g. 18:00 → 02:00): open from `open` to the end of the day.
+  return close > open ? nowMins >= open && nowMins < close : nowMins >= open;
+}
+
+/** Does this shift spill past midnight and still cover `nowMins` the next day? */
+function spillsIntoNextDay(s: Shift, nowMins: number): boolean {
+  const open = timeToMinutes(s.open)!;
+  const close = timeToMinutes(s.close)!;
+  return close <= open && nowMins < close;
 }
 
 /** Is the business open at `now`? `undefined` when there are no usable hours. */
@@ -95,26 +154,12 @@ export function isOpenNow(hours?: OpeningHours, now: Date = new Date()): boolean
   const nowMins = now.getHours() * 60 + now.getMinutes();
   const today = todayIndex(now);
 
-  // Today's own interval.
-  const t = hours.days[today];
-  if (isDayOpen(t)) {
-    const open = timeToMinutes(t.open)!;
-    const close = timeToMinutes(t.close)!;
-    if (close > open) {
-      if (nowMins >= open && nowMins < close) return true;
-    } else {
-      // Overnight (e.g. 18:00 → 02:00): open from `open` to end of day.
-      if (nowMins >= open) return true;
-    }
-  }
+  // Any of today's own shifts.
+  if (dayShifts(hours.days[today]).some((s) => coversToday(s, nowMins))) return true;
 
-  // An overnight interval from YESTERDAY that spills into the early morning.
+  // An overnight shift from YESTERDAY that spills into the early morning.
   const prev = hours.days[(today + 6) % 7];
-  if (isDayOpen(prev)) {
-    const open = timeToMinutes(prev.open)!;
-    const close = timeToMinutes(prev.close)!;
-    if (close <= open && nowMins < close) return true;
-  }
+  if (dayShifts(prev).some((s) => spillsIntoNextDay(s, nowMins))) return true;
 
   return false;
 }
@@ -134,7 +179,11 @@ export function todayHoursLabel(hours?: OpeningHours, now: Date = new Date()): s
  */
 export function summarizeHours(hours?: OpeningHours): string | undefined {
   if (!hours || hours.days.length !== 7) return undefined;
-  const text = (d: DayHours) => (isDayOpen(d) ? `${formatTime(d.open)}–${formatTime(d.close)}` : 'closed');
+  const text = (d: DayHours) => {
+    const shifts = dayShifts(d);
+    if (!shifts.length) return 'closed';
+    return shifts.map((s) => `${formatTime(s.open)}–${formatTime(s.close)}`).join(', ');
+  };
   const parts: string[] = [];
   let i = 0;
   while (i < 7) {

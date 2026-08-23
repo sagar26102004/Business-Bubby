@@ -12,7 +12,7 @@
  */
 
 import type { OpeningHours } from './hours';
-export type { OpeningHours, DayHours } from './hours';
+export type { OpeningHours, DayHours, Shift } from './hours';
 
 /** A geographic coordinate. */
 export interface GeoPoint {

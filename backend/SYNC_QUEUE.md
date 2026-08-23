@@ -260,3 +260,34 @@ re-derivation from the Supabase diff is required:
 - **DB/migration:** none.
 - **Verify:** `npm run typecheck` + `npm run build` in `backend/`; save a service with an
   `imageUrl` and read it back unchanged.
+
+## [SYNC-042] Multi-shift opening hours (`DayHours.shifts`)
+
+- **Area:** BusinessRepository / businesses — `openingHours` document field only. No endpoint,
+  no authz, no migration: it rides inside the existing `data` jsonb document.
+- **Why:** a day could hold ONE open→close pair, so a business open twice a day (a gym at
+  5–10 AM and 5–10 PM, a restaurant closed between lunch and dinner) could not be entered —
+  picking Mon–Sat again for the evening timing silently replaced the morning one.
+- **Domain/interface (shared, already done):** `src/domain/hours.ts` — new
+  `Shift { open: string; close: string }`; `DayHours` gains `shifts?: Shift[]`, with the old
+  `open`/`close` pair KEPT and mirrored to `shifts[0]` on every write, so an older reader (or
+  Path B before this entry lands) still sees the first shift instead of nothing. New readers
+  `dayShifts(day)` (usable shifts, earliest first — reads `shifts` or the legacy pair, returns
+  `[]` when closed) and `dayFromShifts(shifts)` (build a day, keeping the legacy pair in step);
+  `isOpenNow`/`formatDayHours`/`summarizeHours`/`todayHoursLabel`/`weeklySchedule`/
+  `hasUsableHours` all loop over shifts, each shift keeping its own overnight handling.
+  `src/domain/types.ts` re-exports `Shift`. Editor:
+  `src/features/businesses/OpeningHoursField.tsx` — day chips are no longer exclusive between
+  timing blocks, so the same day in two blocks is two shifts.
+- **Supabase change:** none needed — `src/data/supabase/businesses.ts` writes `openingHours`
+  whole, so the new field persists as it is.
+- **Path B — backend/:** mirror the shape in `backend/src/domain/types.ts` — add
+  `export interface Shift { open: string; close: string }` and `shifts?: Shift[]` to
+  `DayHours` (keep `closed`/`open`/`close`). Confirm `backend/src/services/businesses.ts`
+  still copies `input.openingHours` whole (it does today, line ~133) rather than rebuilding
+  days field-by-field, which would drop `shifts`. Nothing else — the backend never evaluates
+  open/closed; only the app does.
+- **Path B — src/data/api/:** nothing; `openingHours` rides inside the business payload.
+- **DB/migration:** none.
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; save a listing whose Mon–Sat
+  carry two shifts (`05:00–10:00` and `17:00–22:00`) and read it back with both intact.

@@ -4,9 +4,10 @@
  * in, one block says "9 AM – 6 PM, Mon–Sat"; a shop whose Sunday differs adds a
  * SECOND block ("11 AM – 3 PM, Sun") rather than editing days one by one.
  *
- * A day belongs to exactly one block — picking it in a new block takes it off
- * the old one — and any day left unpicked is closed. So the blocks always
- * describe a complete, unambiguous week.
+ * A day can sit in SEVERAL blocks, because a business may open twice in one day
+ * — a gym running 5–10 AM and 5–10 PM picks Mon–Sat in both blocks and the day
+ * keeps both shifts. (Blocks used to be exclusive, so the second entry silently
+ * replaced the first.) A day no block claims is closed.
  *
  * The user types times however they like ("9", "9:30 am", "18:00", "6pm"); we
  * parse each to "HH:MM" for storage and echo it back nicely ("9 AM") on blur.
@@ -17,10 +18,13 @@ import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import {
   DAY_LABELS,
+  dayFromShifts,
+  dayShifts,
   formatTime,
   summarizeHours,
   type DayHours,
   type OpeningHours,
+  type Shift,
 } from '@/domain/hours';
 import { Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
@@ -75,31 +79,38 @@ export function parseTimeInput(raw: string): string | undefined {
 }
 
 /**
- * Fold an existing week back into blocks: days that share a timing group into
- * one. A fresh form starts as a single every-day block with empty times.
+ * Fold an existing week back into blocks: every SHIFT of every day is grouped by
+ * its timing, so a gym stored as 5–10 AM + 5–10 PM on Mon–Sat comes back as two
+ * blocks that both hold Mon–Sat. A fresh form starts as a single every-day block
+ * with empty times.
  */
 function blocksFromValue(value?: OpeningHours): Block[] {
   const groups = new Map<string, Block>();
   DAY_LABELS.forEach((_, i) => {
-    const d = value?.days?.[i];
-    if (!d || d.closed || !d.open || !d.close) return;
-    const key = `${d.open}-${d.close}`;
-    const existing = groups.get(key);
-    if (existing) {
-      existing.days[i] = true;
-      return;
-    }
-    const days = noDays();
-    days[i] = true;
-    groups.set(key, { key, open: formatTime(d.open), close: formatTime(d.close), days });
+    dayShifts(value?.days?.[i]).forEach((s) => {
+      const key = `${s.open}-${s.close}`;
+      const existing = groups.get(key);
+      if (existing) {
+        existing.days[i] = true;
+        return;
+      }
+      const days = noDays();
+      days[i] = true;
+      groups.set(key, { key, open: formatTime(s.open), close: formatTime(s.close), days });
+    });
   });
   const list = [...groups.values()];
   return list.length ? list : [{ key: 'b0', open: '', close: '', days: allDays() }];
 }
 
-/** Blocks → the 7-day week we store. Days no block claims are closed. */
+/**
+ * Blocks → the 7-day week we store. Each block ADDS a shift to every day it
+ * claims (identical timings collapse into one), so two blocks over the same days
+ * make a two-shift day instead of the second overwriting the first. Days no
+ * block claims are closed.
+ */
 function weekFromBlocks(blocks: Block[]): OpeningHours | undefined {
-  const days: DayHours[] = DAY_LABELS.map(() => ({ closed: true }));
+  const perDay: Shift[][] = DAY_LABELS.map(() => []);
   let any = false;
   blocks.forEach((b) => {
     const open = parseTimeInput(b.open);
@@ -107,10 +118,12 @@ function weekFromBlocks(blocks: Block[]): OpeningHours | undefined {
     if (!open || !close) return;
     b.days.forEach((on, i) => {
       if (!on) return;
-      days[i] = { open, close };
+      if (perDay[i].some((s) => s.open === open && s.close === close)) return;
+      perDay[i].push({ open, close });
       any = true;
     });
   });
+  const days: DayHours[] = perDay.map((shifts) => dayFromShifts(shifts));
   return any ? { days } : undefined;
 }
 
@@ -141,30 +154,28 @@ export function OpeningHoursField({ value, onChange }: OpeningHoursFieldProps) {
     setField(i, { [field]: formatTime(parsed) } as Partial<Block>);
   };
 
-  /** Give exactly `wanted` to block `bi` and take those days off the others. */
-  const assign = (bi: number, wanted: boolean[]) =>
-    apply(
-      blocks.map((b, idx) =>
-        idx === bi
-          ? { ...b, days: [...wanted] }
-          : { ...b, days: b.days.map((on, d) => on && !wanted[d]) },
-      ),
-    );
+  /** Give exactly `wanted` to block `bi`. Other blocks keep their own days. */
+  const assign = (bi: number, wanted: boolean[]) => setField(bi, { days: [...wanted] });
 
-  /** Tap a day chip: claim it for this block, or unclaim it (day = closed). */
-  const toggleDay = (bi: number, di: number) => {
-    const mine = blocks[bi].days[di];
-    apply(
-      blocks.map((b, idx) => ({
-        ...b,
-        days: b.days.map((on, d) => (d !== di ? on : idx === bi ? !mine : false)),
-      })),
-    );
-  };
+  /**
+   * Tap a day chip: add this block's timing to that day, or take it off. Other
+   * blocks are untouched — the same day in two blocks is two shifts, which is
+   * exactly how a morning + evening business is entered.
+   */
+  const toggleDay = (bi: number, di: number) =>
+    setField(bi, {
+      days: blocks[bi].days.map((on, d) => (d === di ? !on : on)),
+    });
 
+  /**
+   * A new block starts on the same days as the last one that has any — the
+   * common case is a second shift on the very same days, and days can now be
+   * shared. Unpick them for hours that only apply to other days.
+   */
   const addBlock = () => {
     const key = `b${nextKey.current++}`;
-    apply([...blocks, { key, open: '', close: '', days: noDays() }]);
+    const last = [...blocks].reverse().find((b) => b.days.some(Boolean));
+    apply([...blocks, { key, open: '', close: '', days: last ? [...last.days] : noDays() }]);
   };
 
   const removeBlock = (i: number) => apply(blocks.filter((_, idx) => idx !== i));
@@ -178,7 +189,7 @@ export function OpeningHoursField({ value, onChange }: OpeningHoursFieldProps) {
       <Text weight="medium">Opening hours (optional)</Text>
       <Text variant="caption" tone="muted" style={styles.hint}>
         Set the times you’re open and the days you keep them — we’ll show an Open / Closed badge
-        automatically.
+        automatically. Open twice a day? Add a second timing over the same days.
       </Text>
 
       {blocks.map((block, i) => {
@@ -192,7 +203,7 @@ export function OpeningHoursField({ value, onChange }: OpeningHoursFieldProps) {
             {i > 0 ? (
               <View style={styles.blockHead}>
                 <Text variant="caption" weight="semibold" tone="muted">
-                  Different hours
+                  Timing {i + 1}
                 </Text>
                 <Pressable onPress={() => removeBlock(i)} hitSlop={8}>
                   <Text variant="caption" weight="semibold" tone="danger">
@@ -243,7 +254,7 @@ export function OpeningHoursField({ value, onChange }: OpeningHoursFieldProps) {
             </View>
 
             <Text variant="caption" tone="muted" style={styles.daysLabel}>
-              {i === 0 ? 'On these days' : 'These days keep the hours above'}
+              {i === 0 ? 'On these days' : 'On these days (they can repeat from above)'}
             </Text>
 
             {i === 0 ? (
@@ -265,7 +276,6 @@ export function OpeningHoursField({ value, onChange }: OpeningHoursFieldProps) {
             <View style={styles.dayRow}>
               {DAY_LABELS.map((label, d) => {
                 const on = block.days[d];
-                const takenBy = blocks.findIndex((b, idx) => idx !== i && b.days[d]);
                 return (
                   <Pressable
                     key={label}
@@ -275,7 +285,6 @@ export function OpeningHoursField({ value, onChange }: OpeningHoursFieldProps) {
                       {
                         backgroundColor: on ? colors.brand : colors.surfaceAlt,
                         borderColor: on ? colors.brand : colors.border,
-                        opacity: !on && takenBy >= 0 ? 0.45 : 1,
                       },
                     ]}
                   >
@@ -305,8 +314,11 @@ export function OpeningHoursField({ value, onChange }: OpeningHoursFieldProps) {
       {blocks.every((b) => b.days.some(Boolean)) ? (
         <Pressable onPress={addBlock} style={styles.add} hitSlop={6}>
           <Text variant="caption" weight="semibold" tone="brand">
-            ＋ Different hours on{' '}
-            {closedDays.length > 0 ? closedDays.join(', ') : 'some days'}
+            ＋ Add another timing
+          </Text>
+          <Text variant="caption" tone="muted">
+            A second shift on the same days (5 PM – 10 PM), or different hours
+            {closedDays.length > 0 ? ` on ${closedDays.join(', ')}` : ' on some days'}.
           </Text>
         </Pressable>
       ) : null}
@@ -363,6 +375,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
   },
-  add: { paddingVertical: spacing.xs },
+  add: { paddingVertical: spacing.xs, gap: 2 },
   summary: { marginTop: 2 },
 });
