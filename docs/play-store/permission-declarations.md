@@ -198,14 +198,43 @@ selling."*
 Play requires every declared **foreground service type** to be declared in Console and matched to a
 use case. This is not a written justification, but it is a form you must complete.
 
-### `FOREGROUND_SERVICE_MEDIA_PLAYBACK` — the only one in the 1.0 manifest
+### `FOREGROUND_SERVICE_MICROPHONE` — the one to declare
 
-Added by `expo-audio`, which plays the incoming-call ringtone
-(`assets/call_ringtone.wav`). Declare it as **media playback**, tied to in-app voice calling:
-the service exists so a call keeps ringing audibly while the app is backgrounded, and it stops when
-the call is answered, declined or times out after 30 seconds.
+In the manifest twice on purpose: `app.json` → `android.permissions`, and
+`modules/call-notification/android/src/main/AndroidManifest.xml:23`. It backs `OngoingCallService`,
+which starts with `ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE` (`OngoingCallService.kt:77`) so a
+LiveKit voice call keeps capturing the user's voice when the app is backgrounded, the screen locks,
+or the app is swiped out of Recents. Without it Android kills the process mid-conversation.
 
-This is a light form — a short description, no video.
+Answer the Console's "What tasks require your app to use this permission?" with **Background audio
+input**, not Other. Suggested description:
+
+> One Place provides in-app voice calls between customers and businesses. While a call is active, a
+> microphone-type foreground service keeps the call's audio capture running when the app is in the
+> background or the screen is locked. The microphone is only used during a call the user started or
+> answered, and the service stops when the call ends.
+
+⚠️ **This form asks for a demo video link** (observed in the Console, 23 Aug 2026). Record one
+in-app call that is backgrounded mid-call and show the ongoing-call notification; the same recording
+should satisfy §2.
+
+### ~~`FOREGROUND_SERVICE_MEDIA_PLAYBACK`~~ — 🚫 removed from the manifest, 23 Aug 2026
+
+**No longer declared, and the older text here was wrong twice** — it called this the only foreground
+service type in the manifest (microphone is there too, above) and justified it as keeping the
+ringtone audible while backgrounded, which no code in the app does.
+
+It arrived from `expo-audio`'s config plugin, which defaults `enableBackgroundPlayback` to true and
+injected both the permission and `expo.modules.audio.service.AudioControlsService`
+(`foregroundServiceType="mediaPlayback"`). Nothing ever started that service: the sole `expo-audio`
+use is the ringtone player in `IncomingCallGate.tsx:15`. Turned off at the plugin rather than via
+`blockedPermissions`, which would have left the service declared:
+
+```json
+["expo-audio", { "enableBackgroundPlayback": false }]
+```
+
+Full reasoning and what to verify: `RELEASE-STATUS.md` decision 6.
 
 ### ~~`FOREGROUND_SERVICE_LOCATION`~~ — 🔁 deferred to v1.1 with §1
 

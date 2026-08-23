@@ -44,7 +44,12 @@
           "microphonePermission": "One Place uses your microphone for in-app voice calls with businesses."
         }
       ],
-      "expo-audio",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": false
+        }
+      ],
       [
         "expo-splash-screen",
         {

@@ -4,7 +4,7 @@
 submission: what is done, what is decided, and what is next. The other files in this folder are
 *reference* (what to paste, what to record); this one is *status*.
 
-Last updated **23 August 2026** (fifth pass: a bundle has reached **internal testing**, so the
+Last updated **23 August 2026** (fifth pass, amended late the same day by decision 6: a bundle has reached **internal testing**, so the
 Console is live and the form-filling era is over. The whole game is now the **closed-testing
 14-day clock** — see "Fifth pass record" below, which is the section to read first).
 
@@ -167,6 +167,9 @@ confirm 12 opted in → then go back to features.
   - `aeccd5a` **one account, one device** — sign-in claims the account for the install and revokes
     other sessions. Relevant to testing: a tester signing in on a second handset now displaces the
     first *by design*. Say so in the invite, or it reads as a bug report waiting to happen.
+- **23 Aug, later** — `app.json` drops `FOREGROUND_SERVICE_MEDIA_PLAYBACK` by turning off
+  `expo-audio`'s `enableBackgroundPlayback`. One permission fewer to declare, and one Console
+  form fewer to fill. See decision 6.
 - The 22 Aug bundle is superseded. Build a fresh one from `main`; nothing carries over from the
   unused one.
 
@@ -431,6 +434,50 @@ on a phone by hand, and Play will not accept an APK for a new app anyway.
 
 ---
 
+### 6. `FOREGROUND_SERVICE_MEDIA_PLAYBACK` is out of the manifest, not declared
+
+Decided 23 Aug 2026 while answering the Console's foreground-service form, which is the first time
+anyone read this permission against what the app actually does.
+
+**It was never ours.** It came from the `expo-audio` config plugin, whose `enableBackgroundPlayback`
+defaults to **true** (`node_modules/expo-audio/plugin/build/withAudio.js`). Listed bare as
+`"expo-audio"`, the plugin injected both the permission *and* a service —
+`expo.modules.audio.service.AudioControlsService`, `foregroundServiceType="mediaPlayback"`. The fix
+is the plugin option, not `blockedPermissions`: blocking the permission would have stripped the
+permission and left the service declared.
+
+```json
+["expo-audio", { "enableBackgroundPlayback": false }]
+```
+
+**Nothing in the app ever started that service.** The only `expo-audio` use in the codebase is the
+incoming-call ringtone in `src/features/calls/IncomingCallGate.tsx:15` (`useAudioPlayer` +
+`setAudioModeAsync`), which plays through the ordinary player. `expo-video` contributes nothing here
+— its plugin injects only on an explicit `supportsBackgroundPlayback`, and it is passed no options.
+
+⚠️ **This corrects `permission-declarations.md` §6 on two points**, both now fixed there. It called
+media-playback "the only one in the 1.0 manifest" — `FOREGROUND_SERVICE_MICROPHONE` is also in it,
+declared in `app.json` and again in `modules/call-notification/.../AndroidManifest.xml:23`. And it
+justified the permission as keeping the ringtone audible while backgrounded, which no code does.
+
+**What this changes:** the media-playback declaration is **no longer owed** — from the next bundle
+onward the Console should stop asking for it. The microphone one stays and is answered
+**"Background audio input"**: `OngoingCallService` starts with
+`FOREGROUND_SERVICE_TYPE_MICROPHONE` (`OngoingCallService.kt:77`) to hold a LiveKit call's mic
+capture open while the app is backgrounded or the screen is locked.
+
+🔎 **Verify on the next build, two ways.** Nothing here was checked against a merged manifest —
+there is no `android/` directory in the repo, so the plugin source is the only local evidence.
+Either `npx expo prebuild --platform android` and read
+`android/app/src/main/AndroidManifest.xml`, or upload the bundle and confirm the Console has
+dropped the question. **Also worth one device check in internal testing:** that an incoming call
+still rings audibly with the app backgrounded. Background audio playback does not itself require a
+foreground service, and the closed-app ring comes from the notification sound and
+`CallNotifications` rather than `expo-audio` — but that path has never been exercised on a real
+handset, and this is the change that would expose it.
+
+---
+
 ## Fourth pass record — 16 Aug 2026
 
 - **Super-admin password rotated** (`production-setup.md` §2.1), closing the last item that was
@@ -472,6 +519,13 @@ walk the list and tick off what the Console already shows as complete rather tha
 copy to paste is all authored either way.
 
 - `USE_FULL_SCREEN_INTENT` declaration — `permission-declarations.md` §2
-- `FOREGROUND_SERVICE_MEDIA_PLAYBACK` service-type declaration — §6 (light form, no video)
+- ~~`FOREGROUND_SERVICE_MEDIA_PLAYBACK` service-type declaration~~ — **dropped, decision 6.**
+  The permission is out of the manifest as of 23 Aug; from the next bundle the Console should
+  stop asking. Nothing to write.
+- `FOREGROUND_SERVICE_MICROPHONE` service-type declaration — answer **"Background audio input"**
+  (in-app voice calls). ⚠️ **This form wants a demo video link**, contrary to the "light form, no
+  video" note that used to sit here — the Console asked for one on 23 Aug. One recording of an
+  in-app call, backgrounded mid-call, covers it; it can likely double as the §2
+  `USE_FULL_SCREEN_INTENT` video.
 - Data safety, content rating (IARC), target audience — `data-safety.md`, `release-checklist.md`
 - **Not** the Location Permissions declaration. Not in 1.0.
