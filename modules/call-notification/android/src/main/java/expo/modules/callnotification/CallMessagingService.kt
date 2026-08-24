@@ -86,6 +86,11 @@ class CallMessagingService : ExpoFirebaseMessagingService() {
     // already ringing before posting anything, which is what keeps ONE call to
     // ONE row in the shade. Two rows is what this looked like before, and the
     // wrong one of them answered the call the moment it was touched.
+    //
+    // ⚠️ ONLY A POSTED NOTIFICATION COUNTS AS "HANDLED" BELOW. The other route
+    // — launching the activity ourselves over the lock screen — cannot report
+    // failure, so it is never allowed to switch anything off. See the long note
+    // in showCallScreenResult.
     val screen = try {
       CallNotifications.showCallScreenResult(
         this,
@@ -127,10 +132,7 @@ class CallMessagingService : ExpoFirebaseMessagingService() {
       call.businessName,
       CallNotifications.RING_CHANNEL_ID,
       answerUri,
-      RING_WINDOW_MS,
-      // The call screen is already up; a full-screen intent here would open the
-      // app over the top of it.
-      allowFullScreen = screen.route != CallNotifications.ScreenRoute.ACTIVITY
+      RING_WINDOW_MS
     )
     if (posted) {
       CallNotifications.cancelOtherRingNotifications(this, call.id)

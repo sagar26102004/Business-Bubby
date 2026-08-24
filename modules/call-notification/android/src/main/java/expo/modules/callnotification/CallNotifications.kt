@@ -339,7 +339,14 @@ object CallNotifications {
    * before deciding whether to ring separately.
    */
   enum class ScreenRoute {
-    /** IncomingCallActivity is up. Nothing was posted; ring elsewhere. */
+    /**
+     * The direct launch was ATTEMPTED and nothing was posted — so the ring has
+     * to come from somewhere else.
+     *
+     * Deliberately not "IncomingCallActivity is up": a background activity
+     * start that the framework refuses is silent, so this route can never
+     * promise more than that it asked.
+     */
     ACTIVITY,
     /** A full-screen-intent notification was posted, and it IS the ring. */
     NOTIFICATION,
@@ -362,22 +369,52 @@ object CallNotifications {
 
     // Route 1 — launch it ourselves. Needs "display over other apps", which is
     // what lifts the background-activity-start ban.
+    //
+    // ⚠️ IT CANNOT TELL YOU WHETHER IT WORKED, SO IT DOES NOT GET TO DECIDE
+    // ANYTHING. A background activity start the framework refuses is not an
+    // exception and not a return value: ActivityManager logs one line and drops
+    // it, which from in here is indistinguishable from success. Stock Android
+    // honours the overlay exemption, but a locked screen, a restricted
+    // app-standby bucket, or an OEM ROM with its own separate "background
+    // pop-up" switch (Xiaomi, Oppo, Vivo, Realme — off by default) all swallow
+    // it in silence.
+    //
+    // So this is a BONUS: attempted, then forgotten. Route 2 runs either way.
+    // Returning early here and suppressing the full-screen intent on the
+    // strength of an unverifiable "success" is exactly what stopped calls
+    // reaching the lock screen in versionCode 11.
+    var launched = false
     if (canDrawOverlays(context)) {
       try {
         context.startActivity(screen)
-        return ScreenResult(ScreenRoute.ACTIVITY, "full call screen (display-over-other-apps)")
+        launched = true
       } catch (t: Throwable) {
         Log.w(TAG, "direct launch refused", t)
-        // Fall through — the full-screen intent may still be allowed.
       }
     }
 
-    // Route 2 — ask the system to launch it, via a full-screen intent.
+    /**
+     * What to report when the full-screen intent can't be had. `why` describes
+     * that route only — whether the direct launch was even tried is the
+     * difference between ACTIVITY and NONE, and both mean the same thing to the
+     * caller: ring separately.
+     */
+    fun fallback(why: String): ScreenResult =
+      if (launched) {
+        ScreenResult(
+          ScreenRoute.ACTIVITY,
+          "call screen asked for via display-over-other-apps, unverified; no full-screen backup ($why)"
+        )
+      } else {
+        ScreenResult(ScreenRoute.NONE, "no call screen: $why")
+      }
+
+    // Route 2 — ask the SYSTEM to launch it, via a full-screen intent. Run even
+    // when route 1 claimed success, because that claim is worth nothing. The
+    // two cannot fight: IncomingCallActivity is singleTop with CLEAR_TOP, so a
+    // second arrival re-binds the screen that is already there.
     if (!canUseFullScreenIntent(context)) {
-      return ScreenResult(
-        ScreenRoute.NONE,
-        "no call screen: neither permission granted (ringing notification only)"
-      )
+      return fallback("full-screen intent not permitted")
     }
 
     return try {
@@ -385,7 +422,7 @@ object CallNotifications {
       retireScreenChannel(context)
       val manager = NotificationManagerCompat.from(context)
       if (!manager.areNotificationsEnabled()) {
-        return ScreenResult(ScreenRoute.NONE, "no call screen: notifications are off")
+        return fallback("notifications are off")
       }
 
       // ⚠️ THE RINGING NOTIFICATION'S OWN ID AND CHANNEL, ON PURPOSE.
@@ -399,7 +436,8 @@ object CallNotifications {
       //
       // The caller is told (ScreenRoute.NOTIFICATION) that the ring is covered,
       // so nothing else posts on top of it. Anything that goes wrong below
-      // reports NONE instead and the plain ringing notification takes over.
+      // reports through `fallback` instead, and the plain ringing notification
+      // takes over — which is also the ONLY thing that ever suppresses it.
       val id = notificationId(callId)
       val caller = Person.Builder().setName(callerName).setImportant(true).build()
       val answer = PendingIntent.getActivity(
@@ -428,12 +466,16 @@ object CallNotifications {
         .build()
 
       manager.notify(id, notification)
-      ScreenResult(ScreenRoute.NOTIFICATION, "full call screen (full-screen intent)")
+      ScreenResult(
+        ScreenRoute.NOTIFICATION,
+        if (launched) "full call screen (full-screen intent; direct launch also tried)"
+        else "full call screen (full-screen intent)"
+      )
     } catch (t: Throwable) {
-      // Including a CallStyle the platform refused. Saying NONE here is what
-      // sends the caller back to `show`, which rings with hand-added buttons —
+      // Including a CallStyle the platform refused. Falling back here is what
+      // sends the caller on to `show`, which rings with hand-added buttons —
       // so a rejected style costs the call screen, never the ring.
-      ScreenResult(ScreenRoute.NONE, "no call screen: ${t.javaClass.simpleName} ${t.message.orEmpty()}")
+      fallback("${t.javaClass.simpleName} ${t.message.orEmpty()}")
     }
   }
 
@@ -605,14 +647,7 @@ object CallNotifications {
     businessName: String,
     channelId: String,
     answerUri: String?,
-    timeoutMs: Int,
-    /**
-     * Attach a full-screen intent? False when the call screen is ALREADY on the
-     * display — a second full-screen intent would fire on the locked phone and
-     * open the app over the top of it. CallStyle needs one, so turning it off
-     * means the plain variant, which is the same ring with the same two buttons.
-     */
-    allowFullScreen: Boolean = true
+    timeoutMs: Int
   ): Boolean {
     val id = notificationId(callId)
     // CallStyle renders this person as the caller: their name is the headline
@@ -670,7 +705,7 @@ object CallNotifications {
       return false
     }
     return try {
-      if (allowFullScreen && canUseFullScreenIntent(context)) {
+      if (canUseFullScreenIntent(context)) {
         val styled = base()
           .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, decline, answer))
           // Lets it take over a locked screen. Also MANDATORY for CallStyle:
