@@ -1,9 +1,8 @@
 /**
  * A single employee listed under a business.
  *
- * Tappable only when the employee has an app account *and* has made their
- * profile public — otherwise it's a plain, non-interactive row (a name the
- * owner added, or a registered user who kept their profile private).
+ * Tappable only when the employee has an app account — otherwise it's a plain,
+ * non-interactive row (a name the owner typed in, with no profile behind it).
  */
 import { StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -13,13 +12,11 @@ import { spacing } from '@/theme/theme';
 
 export interface EmployeeRowProps {
   employee: Employee;
-  /** Whether the linked user account exists and is public. */
-  isPublic: boolean;
 }
 
-export function EmployeeRow({ employee, isPublic }: EmployeeRowProps) {
+export function EmployeeRow({ employee }: EmployeeRowProps) {
   const router = useRouter();
-  const tappable = isPublic && !!employee.userId;
+  const tappable = !!employee.userId;
 
   return (
     <Card

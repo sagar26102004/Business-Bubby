@@ -273,6 +273,10 @@ export default function RootLayout() {
           <Stack.Screen name="manage/[businessId]/availability" options={{ title: 'Availability' }} />
           <Stack.Screen name="manage/[businessId]/menu" options={{ title: 'Menu' }} />
           <Stack.Screen name="manage/[businessId]/products" options={{ title: 'Products' }} />
+          <Stack.Screen
+            name="manage/[businessId]/plans"
+            options={{ title: 'Plans & memberships' }}
+          />
           <Stack.Screen name="manage/[businessId]/services" options={{ title: 'Services' }} />
           <Stack.Screen name="manage/[businessId]/rentals" options={{ title: 'For rent' }} />
           <Stack.Screen name="manage/[businessId]/tables" options={{ title: 'Tables' }} />

@@ -160,14 +160,14 @@ function DevToolsScreen() {
         </Card>
 
         <Text variant="caption" tone="muted" style={styles.hint}>
-          Switch identity to test owner-only screens, private profiles, and chat as different people.
+          Switch identity to test owner-only screens and chat as different people.
         </Text>
         <View style={styles.pillRow}>
           <Tag label="🚪 Guest (sign out)" selected={isGuest} onPress={() => signOut()} />
           {(users ?? []).map((u) => (
             <Tag
               key={u.id}
-              label={`${u.name}${u.isProfilePublic ? '' : ' 🔒'}`}
+              label={u.name}
               selected={currentUser?.id === u.id}
               onPress={() => signInAs(u.id)}
             />

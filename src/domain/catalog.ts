@@ -4,7 +4,7 @@
  * Plain data so the taxonomy grows by editing this file only — no screen or
  * type changes required. A real backend can later serve this exact shape.
  */
-import type { ListingType, ListingTypeDef, RentalBasis, VehicleKind } from './types';
+import type { ListingType, ListingTypeDef, PlanBasis, RentalBasis, VehicleKind } from './types';
 
 export const LISTING_TYPES: ListingTypeDef[] = [
   {
@@ -117,8 +117,8 @@ export function offersDineIn(business: {
 
 /**
  * Businesses you JOIN rather than buy a one-off from — a gym you enrol at, a
- * class you take a seat in. The order plumbing is identical underneath; only
- * the words on top change (see `commerceVocab`).
+ * class you take a seat in. Joining is its OWN flow (`app/enroll`, landing as a
+ * pending Membership), NOT a relabelled order — see `commerceVocab`.
  */
 const ENROLL_TAGS = [
   'gym', 'fitness', 'yoga', 'zumba', 'personal trainer', 'dietician',
@@ -139,9 +139,17 @@ export type CommerceMode = 'order' | 'enroll' | 'subscribe' | 'rent';
 /**
  * The words a business uses for taking custom — most sell, so they "Order";
  * gyms/classes "Enroll"; recurring services (school bus, tiffin) "Subscribe".
- * Same order flow underneath, so requests still route through OrderRepository;
- * only the labels differ. Derived from tags, like `offersDineIn` — data, not
- * a category the owner has to pick.
+ * Derived from tags, like `offersDineIn` — data, not a category the owner has
+ * to pick.
+ *
+ * ⚠️ `mode` picks the JOIN button and its flow; it does NOT rename ordering.
+ * Enrol/Subscribe was once the order button under another name, which left a
+ * school-bus page offering both "🔁 Subscribe" and "🛒 Order" over the very
+ * same list of monthly seats, landing in two different workspace sections. Now
+ * joining goes through `app/enroll` → a pending Membership, and the order desk
+ * stays the order desk — which is why `requestsTitle`/`requestNoun` say
+ * "Orders" for EVERY mode but rent. A membership business only shows an Order
+ * button when it has something genuinely one-off to sell.
  */
 export interface CommerceVocab {
   mode: CommerceMode;
@@ -182,8 +190,8 @@ export function commerceVocab(business: {
         mode: 'subscribe',
         customerAction: '🔁 Subscribe',
         verb: 'Subscribe',
-        requestsTitle: 'Membership requests',
-        requestNoun: 'subscription',
+        requestsTitle: 'Orders',
+        requestNoun: 'order',
       };
     }
     if (tags.some((t) => ENROLL_TAGS.includes(t))) {
@@ -191,8 +199,8 @@ export function commerceVocab(business: {
         mode: 'enroll',
         customerAction: '🎟️ Enroll',
         verb: 'Enroll',
-        requestsTitle: 'Membership requests',
-        requestNoun: 'enrollment',
+        requestsTitle: 'Orders',
+        requestNoun: 'order',
       };
     }
   }
@@ -243,6 +251,30 @@ export function rentalBasisSticker(id?: RentalBasis): string | undefined {
   if (id === 'monthly') return 'per month';
   if (id === 'both') return 'per day / month';
   return undefined;
+}
+
+/**
+ * How often a renewing plan comes up again — asked per plan, the way a rental
+ * carries its own per-day / per-month basis, because one gym sells a monthly
+ * membership and an annual one off the same list.
+ */
+export const PLAN_BASES: { id: PlanBasis; label: string; icon: string }[] = [
+  { id: 'monthly', label: 'Every month', icon: '🗓️' },
+  { id: 'quarterly', label: 'Every 3 months', icon: '📆' },
+  { id: 'half_yearly', label: 'Every 6 months', icon: '🈺' },
+  { id: 'yearly', label: 'Every year', icon: '🎂' },
+];
+
+/**
+ * The sticker beside a plan's price — "per month", "per year". Same job as
+ * `rentalBasisSticker`: a plan price with no period can't be compared with the
+ * one under it. Unset reads as monthly, the overwhelming default.
+ */
+export function planBasisSticker(id?: PlanBasis): string {
+  if (id === 'quarterly') return 'per 3 months';
+  if (id === 'half_yearly') return 'per 6 months';
+  if (id === 'yearly') return 'per year';
+  return 'per month';
 }
 
 /** The kinds of vehicle a business can add to its fleet, as data. */

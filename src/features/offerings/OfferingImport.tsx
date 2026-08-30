@@ -30,6 +30,7 @@ export const INLINE_EXAMPLES = {
   menu: 'Beverages: { Cold: { Shake: { Banana: 120 } } }',
   goods: 'Home electronics: { Fan: { Havells: { 1200mm: 1650 } } }',
   services: 'Repairs: { AC: { Gas refill: 2400 } }',
+  plans: 'Gym & fitness: { Membership: { Monthly: 1200 } }',
   rentals: 'Cars: { Hatchback: { Swift: 1800 } }',
 } as const;
 
@@ -60,6 +61,14 @@ export const SERVICE_EXAMPLE = `Repairs: {
   Washing machine: { Front load: { Drum repair: 1200 } }
 },
 Installation: { Split AC installation: 1600 }`;
+
+export const PLAN_EXAMPLE = `Gym & fitness: {
+  Membership: {
+    Monthly: 1200,
+    Annual: { price: 10000, per: year }
+  },
+  Personal training: { 12 sessions: { price: 6000, per: quarter } }
+}`;
 
 export const RENTAL_EXAMPLE = `Cars: {
   Hatchback: { Swift: { price: 1800, per: day } },

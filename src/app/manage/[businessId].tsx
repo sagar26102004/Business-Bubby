@@ -23,6 +23,7 @@ import { canAccessService } from '@/domain/access';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { offersDineIn } from '@/domain/catalog';
 import { AVAILABLE_MODULES, enabledModules } from '@/domain/modules';
+import { planOfferings, usesServicesAsPlans } from '@/domain/offerings';
 import { isFoodShop } from '@/domain/tags';
 import { summarizeHours } from '@/domain/hours';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -156,9 +157,22 @@ export default function ManageScreen() {
           sub: count(products.length, isStall ? 'item' : 'product', isStall ? 'items' : 'products'),
           href: `${base}/products` as Href,
         },
+        // Renewing plans and one-off services are two lists because they are
+        // taken two ways — enrolled in vs requested — so they are edited apart.
         !isStall && {
+          icon: '🎟️',
+          label: 'Plans & memberships',
+          sub: count(planOfferings(business).length, 'plan', 'plans'),
+          href: `${base}/plans` as Href,
+        },
+        !isStall && {
+          icon: '🛠️',
           label: 'Services offered',
-          sub: count((business.services ?? []).length, 'service', 'services'),
+          sub: count(
+            usesServicesAsPlans(business) ? 0 : (business.services ?? []).length,
+            'service',
+            'services',
+          ),
           href: `${base}/services` as Href,
         },
         // A rental listing always; anyone else only once they rent something.

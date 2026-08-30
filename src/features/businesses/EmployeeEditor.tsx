@@ -178,14 +178,11 @@ export function EmployeeEditor({ value, onChange }: EmployeeEditorProps) {
                 <Avatar name={user.name} size={36} />
                 <View style={styles.resultInfo}>
                   <Text weight="medium">{user.name}</Text>
-                  <Text variant="caption" tone="muted">
-                    {[
-                      user.username ? `@${user.username}` : null,
-                      user.isProfilePublic ? 'Public profile' : 'Private profile',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </Text>
+                  {user.username ? (
+                    <Text variant="caption" tone="muted">
+                      @{user.username}
+                    </Text>
+                  ) : null}
                 </View>
                 <Text tone="brand" variant="label" weight="medium">
                   Add

@@ -20,7 +20,6 @@ Legend for who to be signed in as:
 - [ ] Wrong password → inline error, not a popup
 - [ ] Sign out returns you to guest browsing
 - [ ] Edit profile: change display name, add email + phone (bad email / 9-digit phone are refused)
-- [ ] Toggle **profile public/private** → check the employee page is tappable / not tappable from a business page
 - [ ] Change password, then sign in with the new one
 - [ ] Google sign-in button — expect "not configured" (known state, just confirm it fails cleanly)
 - [ ] Delete account with no listings → works; delete an owner with a staffed business → **blocked** with the reason listed

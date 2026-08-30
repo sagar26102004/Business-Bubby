@@ -19,11 +19,12 @@
  * and "Repairs › Washing machine › Front load" and "Home electronics › Air
  * conditioner › Samsung" all fold open identically.
  */
-import type { Business, OfferingKind } from './types';
-import { rentalBasisSticker } from './catalog';
+import type { Business, OfferingKind, PlanItem } from './types';
+import { commerceVocab, planBasisSticker, rentalBasisSticker } from './catalog';
 import { foodSectionOrder } from './foodMenu';
 import { PRODUCT_SECTIONS } from './goods';
 import {
+  PLAN_SECTIONS,
   RENTAL_SECTIONS,
   SERVICE_SECTIONS,
   rentalCategory,
@@ -32,8 +33,14 @@ import {
 } from './offeringSections';
 import { subcategoryPath } from './subcategoryPath';
 
-/** Which of a business's four lists an item came out of. */
-export type OfferingBucket = 'menu' | 'products' | 'services' | 'rentals';
+/**
+ * Which of a business's lists an item came out of.
+ *
+ * `services` and `plans` are the same shape and are shown identically — they
+ * are two lists because they are AVAILED differently: a service is requested
+ * one-off, a plan is enrolled in and renews. See `BUCKET_META.action`.
+ */
+export type OfferingBucket = 'menu' | 'products' | 'services' | 'plans' | 'rentals';
 
 /** One offering, whichever list it came from. */
 export interface CatalogItem {
@@ -74,21 +81,79 @@ export interface OfferingBucketView {
   icon: string;
   /** The "see the whole thing" link's wording — "Full menu", "Everything for rent". */
   seeAllLabel: string;
+  /** The customer's button for this list — "🛒 Order", "🛠️ Request", "🎟️ Enroll". */
+  actionLabel: string;
+  /** The same action at the foot of the full catalog — "Place order". */
+  ctaLabel: string;
+  /** The workspace module that has to be on, or the action lands nowhere. */
+  module: 'orders' | 'memberships';
   items: CatalogItem[];
 }
 
+/**
+ * Everything that differs between the buckets, in one table.
+ *
+ * `action` is the point of the whole split: lists that LOOK identical and are
+ * filled identically, each with the one word that says how you take it — a
+ * dish is ordered, a product is bought, a service is requested, a plan is
+ * enrolled in. Same room, several doors, each labelled.
+ */
 const BUCKET_META: Record<
   OfferingBucket,
-  { title: string; icon: string; noun: string; seeAll: string; kind: OfferingKind }
+  {
+    title: string;
+    icon: string;
+    noun: string;
+    seeAll: string;
+    kind: OfferingKind;
+    action: string;
+    cta: string;
+    module: 'orders' | 'memberships';
+  }
 > = {
-  menu: { title: 'Menu', icon: '🍽️', noun: 'dish', seeAll: 'Full menu', kind: 'product' },
-  products: { title: 'Products', icon: '📦', noun: 'item', seeAll: 'All products', kind: 'product' },
+  menu: {
+    title: 'Menu',
+    icon: '🍽️',
+    noun: 'dish',
+    seeAll: 'Full menu',
+    kind: 'product',
+    action: '🛒 Order',
+    cta: 'Place order',
+    module: 'orders',
+  },
+  products: {
+    title: 'Products',
+    icon: '📦',
+    noun: 'item',
+    seeAll: 'All products',
+    kind: 'product',
+    action: '🛍️ Buy',
+    cta: 'Place order',
+    module: 'orders',
+  },
   services: {
     title: 'Services',
     icon: '🛠️',
     noun: 'service',
     seeAll: 'All services',
     kind: 'service',
+    // Nothing changes hands until the business agrees a time and a price, so a
+    // one-off service is REQUESTED, not bought off a shelf.
+    action: '🛠️ Request',
+    cta: 'Send request',
+    module: 'orders',
+  },
+  plans: {
+    title: 'Plans & memberships',
+    icon: '🎟️',
+    noun: 'plan',
+    seeAll: 'All plans',
+    kind: 'service',
+    // A plan never becomes an order: enrolling lands as a pending Membership in
+    // the workspace's Members section (app/enroll).
+    action: '🎟️ Enroll',
+    cta: 'Enroll',
+    module: 'memberships',
   },
   // A rental is PROVIDED rather than handed over, so an order line calls it a
   // service — the same way the order screen has always filed them.
@@ -98,6 +163,9 @@ const BUCKET_META: Record<
     noun: 'item',
     seeAll: 'Everything for rent',
     kind: 'service',
+    action: '🔑 Request to rent',
+    cta: 'Send request',
+    module: 'orders',
   },
 };
 
@@ -171,8 +239,58 @@ function productItems(business: Business): CatalogItem[] {
   });
 }
 
-/** The services — "Repairs › Washing machine › Front load". */
+/**
+ * The plans a business is offering, wherever they are kept.
+ *
+ * Membership businesses (gyms, classes, tiffin, bus) listed their plans as
+ * `services` before plans had a list of their own — the whole app treated a
+ * joinable business's services AS its plans. That reading is kept here, so
+ * every listing made before the split still enrols exactly as it did and
+ * nothing had to be migrated. The moment a business fills in a real `plans`
+ * list, its services go back to being services.
+ */
+export function planOfferings(business: Business): PlanItem[] {
+  if ((business.plans?.length ?? 0) > 0) return business.plans!;
+  return usesServicesAsPlans(business) ? (business.services as PlanItem[]) : [];
+}
+
+/**
+ * Is this listing's `services` list standing in for its plans? True only for a
+ * legacy membership business — one whose tags make it joinable, that never
+ * filled in `plans`. When true the services bucket is EMPTY: the same list
+ * must not appear twice under two different buttons, which is the exact
+ * confusion the split exists to end.
+ */
+export function usesServicesAsPlans(business: Business): boolean {
+  if ((business.plans?.length ?? 0) > 0) return false;
+  if ((business.services?.length ?? 0) === 0) return false;
+  const mode = commerceVocab(business).mode;
+  return mode === 'enroll' || mode === 'subscribe';
+}
+
+/** The plans — "Gym & fitness › Membership › Annual", each with its period. */
+function planItems(business: Business): CatalogItem[] {
+  return sortBySection(planOfferings(business), PLAN_SECTIONS).map((p, i) => {
+    const path = subcategoryPath(p.subcategory);
+    return {
+      key: itemKey('plans', i, p.category, path, p.name),
+      bucket: 'plans' as const,
+      kind: 'service' as const,
+      name: p.name,
+      price: p.price,
+      description: p.description,
+      category: p.category,
+      path,
+      imageUrl: p.imageUrl,
+      badge: planBasisSticker(p.basis),
+    };
+  });
+}
+
+/** The one-off services — "Repairs › Washing machine › Front load". */
 function serviceItems(business: Business): CatalogItem[] {
+  // A legacy membership listing keeps its plans here; they read as plans.
+  if (usesServicesAsPlans(business)) return [];
   return sortBySection(business.services ?? [], SERVICE_SECTIONS).map((s, i) => {
     const path = subcategoryPath(s.subcategory);
     return {
@@ -219,6 +337,7 @@ const READERS: Record<OfferingBucket, (b: Business) => CatalogItem[]> = {
   menu: menuItems,
   products: productItems,
   services: serviceItems,
+  plans: planItems,
   rentals: rentalItems,
 };
 
@@ -236,13 +355,16 @@ export function offeringBucket(
     subtitle: countLabel(items.length, meta.noun),
     icon: meta.icon,
     seeAllLabel: meta.seeAll,
+    actionLabel: meta.action,
+    ctaLabel: meta.cta,
+    module: meta.module,
     items,
   };
 }
 
 /** Every non-empty bucket, in the order the business page lays them out. */
 export function offeringBuckets(business: Business): OfferingBucketView[] {
-  const order: OfferingBucket[] = ['menu', 'services', 'rentals', 'products'];
+  const order: OfferingBucket[] = ['menu', 'plans', 'services', 'rentals', 'products'];
   return order
     .map((bucket) => offeringBucket(business, bucket))
     .filter((view): view is OfferingBucketView => view !== null);
@@ -250,5 +372,11 @@ export function offeringBuckets(business: Business): OfferingBucketView[] {
 
 /** Is this a real bucket name? Guards the `bucket` route param. */
 export function isOfferingBucket(value: unknown): value is OfferingBucket {
-  return value === 'menu' || value === 'products' || value === 'services' || value === 'rentals';
+  return (
+    value === 'menu' ||
+    value === 'products' ||
+    value === 'services' ||
+    value === 'plans' ||
+    value === 'rentals'
+  );
 }

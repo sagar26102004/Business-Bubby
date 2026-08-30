@@ -343,7 +343,10 @@ export default function DealsScreen() {
   );
 }
 
-/** Is there anything on this business a customer could put in an order? */
+/**
+ * Is there anything on this business a customer could put in an order?
+ * Plans are excluded on purpose — they are enrolled in, not ordered.
+ */
 function canOrderFrom(business: Business): boolean {
   return (
     (business.menu?.length ?? 0) +

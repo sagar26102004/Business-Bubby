@@ -10,9 +10,9 @@
  *    emoji tiles → tap opens /browse/[intent]?sub=Tag), and filters the nearby
  *    business list below.
  *
- * The list below is bounded: only listings within HOME_RADIUS_KM of the active
- * place, nearest first. Search and the category pages stay unbounded — see the
- * constant's note for why.
+ * The list below is bounded by COUNT, not distance: the HOME_NEARBY_COUNT
+ * listings closest to the active place, nearest first. Search and the category
+ * pages stay unbounded — see the constant's note for why.
  *
  * The ad slot is the platform's revenue line (domain/ads.ts): sponsored cards
  * from businesses that bought a campaign, then any live offer from a shop close
@@ -34,7 +34,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import type { PlaceKind, SavedPlace } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
 import { INTENT_CATEGORIES, intentMatches, tagEmoji, type IntentCategory } from '@/domain/intents';
@@ -50,15 +50,14 @@ import { ModePills } from '@/features/shell/ModePills';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 /**
- * How far Home looks. Everything inside this ring is listed, nearest first;
- * anything beyond it is not on Home at all.
+ * How much Home shows: the N nearest listings, nearest first.
  *
- * Home is the "what's around me" screen, so an unbounded list was wrong in both
- * directions: a shop 60 km away padded the bottom of every scroll, and the
- * fetch grew with the whole database rather than with the neighborhood. 20 km
- * is a city, not a street — wide enough that a thin area still fills the screen
- * and a business on the far side of town is reachable, tight enough that the
- * list stays about places you could actually go.
+ * This used to be a 20 km ring, and a ring is the wrong shape for the job. It
+ * asks "how far is too far?" when the question people actually have is "what is
+ * around me?" — so the same number that keeps a dense market from padding the
+ * scroll leaves a thin town staring at "No results" with a perfectly good shop
+ * 22 km up the road. A COUNT adapts on its own: it fills the screen wherever
+ * you stand, and quietly reaches further where things are sparse.
  *
  * Deliberately NOT applied to search or the category pages: someone who typed
  * "bullet rental" or opened Rentals is looking for a specific thing and would
@@ -66,11 +65,10 @@ import { radius, spacing, useColors } from '@/theme/theme';
  * own reach rules (domain/ads.ts) and the deals feed lets the customer pick a
  * range up to Anywhere — this constant governs the Home list only.
  *
- * The cap only applies once we know where "here" is: with no `near` point the
- * repository ignores it and lists everything, so a device still waiting on GPS
- * sees a full screen instead of an empty one.
+ * With no `near` point yet (a device still waiting on GPS) there is no distance
+ * to rank by, so this is simply the newest 100 rather than an empty screen.
  */
-const HOME_RADIUS_KM = 20;
+const HOME_NEARBY_COUNT = 100;
 
 const placeIcon = (kind: PlaceKind) =>
   kind === 'current' ? '📍' : kind === 'home' ? '🏠' : kind === 'work' ? '💼' : '⭐';
@@ -98,21 +96,13 @@ export default function BrowseScreen() {
   const near = activePlace?.point;
 
   const { data, loading, error, reload } = useAsync(
-    () => repos.businesses.list({ near, sortByDistance: true, maxDistanceKm: HOME_RADIUS_KM }),
+    () => repos.businesses.list({ near, sortByDistance: true, limit: HOME_NEARBY_COUNT }),
     [near?.latitude, near?.longitude],
   );
 
-  // Home stays mounted across tab switches and account changes, so its initial
-  // fetch goes stale: a business registered afterwards — even by another
-  // account in the same session — wouldn't appear. Refetch on focus (skipping
-  // the first, already covered by useAsync) so the nearby list stays current.
-  const focusedOnce = useRef(false);
-  useFocusEffect(
-    useCallback(() => {
-      if (focusedOnce.current) reload();
-      else focusedOnce.current = true;
-    }, [reload]),
-  );
+  // (Home stays mounted across tab switches and account changes, so its initial
+  // fetch would go stale — `useAsync` now refetches on focus for every screen,
+  // quietly, so a business registered since is already in the list.)
 
   const selectPlace = (place: SavedPlace) => {
     setPlacesOpen(false);
@@ -474,13 +464,13 @@ export default function BrowseScreen() {
           ) : (
             <EmptyView
               title="No results"
-              // Home only looks HOME_RADIUS_KM out, so say so — otherwise an
-              // empty screen reads as "nothing exists" when the answer is
-              // "nothing this close". Search has no such limit.
+              // Nothing is filtered out by distance any more, so an empty Home
+              // really does mean "nothing listed" — except when a category chip
+              // is narrowing it, which is worth saying.
               subtitle={
                 selected
-                  ? `Nothing under ${selected.label} within ${HOME_RADIUS_KM} km of this location yet.`
-                  : `Nothing listed within ${HOME_RADIUS_KM} km of this location yet. Try another location, or search — search looks further.`
+                  ? `Nothing under ${selected.label} near this location yet.`
+                  : 'Nothing listed near this location yet. Try another location, or search — search looks everywhere.'
               }
             />
           )

@@ -156,6 +156,8 @@ export function suggestModules(input: {
   hasProducts?: boolean;
   hasServices?: boolean;
   hasMenu?: boolean;
+  /** Renewing plans were listed — the business runs memberships whatever its tags say. */
+  hasPlans?: boolean;
 }): ModuleId[] {
   const picked = new Set<ModuleId>(['billing', 'customers']);
   if (input.type === 'shop' || input.type === 'item' || input.hasProducts || input.hasMenu) {
@@ -169,16 +171,17 @@ export function suggestModules(input: {
     'bus service', 'packers & movers', 'courier', 'logistics',
   ];
   if (fleetTags.some((t) => tagSet.has(t))) picked.add('tracking');
-  // A gym/class "Enroll" and a recurring "Subscribe" both ride on the order
-  // flow (see commerceVocab). Derive the mode from the SAME classifier that
-  // draws the button label, so the two never diverge: any tag that makes the
-  // page say "Enroll"/"Subscribe" must also pre-tick Orders, otherwise that
-  // button is gated out (needs the orders module) and vanishes.
+  // A gym/class "Enroll" and a recurring "Subscribe" have their OWN flow now
+  // (app/enroll → a pending Membership), gated on the memberships module. This
+  // used to pre-tick Orders as well, because Enroll WAS the order button under
+  // another name and vanished without it — but that left every school-bus and
+  // gym page offering "Order" over the same monthly plans people subscribe to.
+  // Ordering is now suggested only by what the business actually sells one-off
+  // (the products/menu branch above), which is what an owner would expect.
+  // Listing a renewing plan says it outright; the tags are the fallback guess
+  // for a business that hasn't listed one yet.
   const mode = commerceVocab({ type: input.type, tags: input.tags }).mode;
-  if (mode === 'enroll' || mode === 'subscribe') {
-    picked.add('memberships');
-    picked.add('orders');
-  }
+  if (input.hasPlans || mode === 'enroll' || mode === 'subscribe') picked.add('memberships');
 
   return AVAILABLE_MODULES.filter((m) => picked.has(m.id)).map((m) => m.id);
 }

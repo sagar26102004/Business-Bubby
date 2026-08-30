@@ -51,7 +51,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
   return {
     async list(query: BusinessQuery = {}): Promise<Business[]> {
       const term = query.search?.trim().toLowerCase();
-      const { near, maxDistanceKm, sortByDistance } = query;
+      const { near, maxDistanceKm, sortByDistance, limit } = query;
       const { data, error } = await sb().from('businesses').select('data');
       if (error) throw error;
       let results = (data ?? []).map((r) => r.data as Business);
@@ -76,6 +76,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
             ...(b.products ?? []).map((p) => p.name),
             ...(b.menu ?? []).map((m) => m.name),
             ...(b.services ?? []).map((s) => s.name),
+            ...(b.plans ?? []).map((p) => p.name),
             ...(b.rentals ?? []).map((r) => r.name),
           ]
             .filter(Boolean)
@@ -96,7 +97,12 @@ export function createSupabaseBusinesses(): BusinessRepository {
           ? (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)
           : b.createdAt.localeCompare(a.createdAt),
       );
-      return results;
+      // After the sort, so `limit` with `sortByDistance` means "the N nearest".
+      // Distance lives inside the `data` jsonb document, so it can only be
+      // computed here — the trim has to happen after that, not as a PostgREST
+      // `.limit()`, which would cut an arbitrary 100 rows before we know which
+      // are close.
+      return typeof limit === 'number' ? results.slice(0, limit) : results;
     },
 
     async getById(id: string): Promise<Business | null> {
@@ -163,6 +169,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
         priceLabel: input.priceLabel,
         menu: input.menu,
         services: input.services,
+        plans: input.plans,
         products: withProductIds(input.products),
         hours: input.hours,
         openingHours: input.openingHours,
@@ -277,7 +284,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
       const { error } = await sb().from('businesses').update({ data: next }).eq('id', id);
       if (error) throw error;
       // Manage edits add new tags/menu/services/products — capture those too.
-      if (patch.tags || patch.menu || patch.services || patch.products) {
+      if (patch.tags || patch.menu || patch.services || patch.plans || patch.products) {
         await captureBusinessOfferings(next);
       }
       return this.getById(id) as Promise<Business>;

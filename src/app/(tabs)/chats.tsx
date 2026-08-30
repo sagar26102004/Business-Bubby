@@ -9,12 +9,14 @@ import { Tabs, useFocusEffect, useRouter } from 'expo-router';
 import type { AppNotification } from '@/domain/types';
 import type { CustomerThreadSummary } from '@/data/repositories';
 import { useAuth, useRepositories } from '@/data/DataProvider';
+import { CHAT_REFRESH_MS } from '@/lib/useAsync';
 import { Avatar, Card, EmptyView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 function kindIcon(kind: AppNotification['kind']): string {
   switch (kind) {
     case 'chat_reply':
+    case 'chat_message':
       return '💬';
     case 'missed_call':
       return '📞';
@@ -71,8 +73,16 @@ export default function ChatsScreen() {
       .then((list) => setItems(list.filter((n) => !n.read)));
   }, [repos, participantId]);
 
-  // Refresh whenever the tab regains focus.
-  useFocusEffect(useCallback(() => load(), [load]));
+  // Refresh whenever the tab regains focus, and keep re-reading while it IS
+  // focused — a reply or a new alert has to show up on the list you're looking
+  // at, not only after you leave the tab and come back.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      const timer = setInterval(load, CHAT_REFRESH_MS);
+      return () => clearInterval(timer);
+    }, [load]),
+  );
 
   const openNotification = async (n: AppNotification) => {
     await repos.notifications.markRead(n.id);
@@ -118,6 +128,14 @@ export default function ChatsScreen() {
       return;
     }
     if (!n.businessId) return;
+    // A customer wrote to a business I'm on: open THEIR side of the thread,
+    // not my own chat with the business.
+    if (n.kind === 'chat_message') {
+      router.push(
+        n.participantId ? `/inbox/${n.businessId}/${n.participantId}` : `/inbox/${n.businessId}`,
+      );
+      return;
+    }
     if (n.kind === 'booking_requested') router.push(`/workspace/${n.businessId}`);
     else if (n.kind === 'booking_update') router.push(`/business/${n.businessId}`);
     else if (n.kind === 'missed_call') router.push(`/inbox/${n.businessId}`);

@@ -9,6 +9,7 @@ import { StyleSheet, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import type { Order } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
+import { LIVE_REFRESH_MS } from '@/lib/useAsync';
 import { Card, EmptyView, LoadingView, Screen, Tag, Text } from '@/components/ui';
 import { FULFILLMENT_META, ORDER_STATUS_META, includedLines, isOrderOpen, totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { spacing } from '@/theme/theme';
@@ -31,8 +32,16 @@ export default function MyOrdersScreen() {
     });
   }, [repos, currentUser?.id]);
 
-  // Refresh whenever the tab regains focus (e.g. right after placing an order).
-  useFocusEffect(useCallback(() => load(), [load]));
+  // Refresh whenever the tab regains focus (e.g. right after placing an order),
+  // and keep re-reading while it is focused so the business accepting, pricing
+  // or billing an order shows up here on its own.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      const timer = setInterval(load, LIVE_REFRESH_MS);
+      return () => clearInterval(timer);
+    }, [load]),
+  );
 
   if (orders === null) return <LoadingView label="Loading your orders…" />;
 

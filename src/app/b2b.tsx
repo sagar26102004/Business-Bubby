@@ -4,12 +4,12 @@
  * Threads span every business the user owns or works at. Start a new one by
  * choosing which of your businesses speaks, then searching the other side.
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import type { Business } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
-import { useAsync } from '@/lib/useAsync';
+import { LIVE_REFRESH_MS, useAsync } from '@/lib/useAsync';
 import {
   Button,
   Card,
@@ -43,16 +43,9 @@ export default function B2BInboxScreen() {
     all.filter((b) => b.ownerId === currentUser.id && b.type !== 'item').forEach((b) => byId.set(b.id, b));
     memberOf.filter((b) => b.type !== 'item').forEach((b) => byId.set(b.id, b));
     return { threads, all, mine: Array.from(byId.values()) };
-  }, [currentUser?.id]);
-
-  // New messages may have arrived while we were inside a thread.
-  const reloadRef = useRef(reload);
-  reloadRef.current = reload;
-  useFocusEffect(
-    useCallback(() => {
-      reloadRef.current();
-    }, []),
-  );
+    // A chat list: keep re-reading it so a message from another business shows
+    // up here while you're looking at it.
+  }, [currentUser?.id], { refreshMs: LIVE_REFRESH_MS });
 
   const mine = data?.mine ?? [];
   const asBusiness = mine.find((b) => b.id === asBusinessId) ?? mine[0];

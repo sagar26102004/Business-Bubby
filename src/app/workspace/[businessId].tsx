@@ -246,7 +246,9 @@ export default function WorkspaceScreen() {
       title: 'Sales & orders',
       tiles: [
         mods.has('orders') && canUse('orders') && {
-          icon: vocab.mode === 'rent' ? undefined : vocab.mode === 'order' ? '🛒' : '🎫',
+          // Always the order desk now — a membership business's joins live in
+          // Members, not here, so this never wears the 🎫 ticket again.
+          icon: vocab.mode === 'rent' ? undefined : '🛒',
           label: vocab.requestsTitle,
           sub:
             pendingOrders > 0

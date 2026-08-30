@@ -110,7 +110,7 @@ child is on. Drivers switch it on and off themselves, and it is off by default.
 
 BUILT HONESTLY
 
-• Only verified customers can leave a rating, so scores mean something
+• One rating per person, and nobody can rate their own business
 • Your phone number is never shown to a business unless you become their customer
 • No advertising trackers, and no selling your data to anyone
 • Browse the whole directory without an account

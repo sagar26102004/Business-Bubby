@@ -10,7 +10,7 @@
  * customer only has to send it.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { OrderFulfillment } from '@/domain/types';
 import type { NewOrderLineInput } from '@/data/repositories';
@@ -43,8 +43,6 @@ export default function NewOrderScreen() {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [offers, setOffers] = useState<Record<string, string>>({});
   const [fulfillment, setFulfillment] = useState<OrderFulfillment | null>(null);
-  // Enroll/subscribe: who the plan is for — starts with the customer themselves.
-  const [enrollees, setEnrollees] = useState<string[]>([currentUser?.name ?? '']);
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   // Member-on-behalf: who the order is for and which table to seat them at.
@@ -147,11 +145,10 @@ export default function NewOrderScreen() {
   const isStall = business.type === 'item';
   const vocab = commerceVocab(business);
   const isRent = vocab.mode === 'rent';
-  // Gyms/classes enrol PEOPLE — the customer names everyone the plan covers
-  // (themselves and/or their children), so the business knows who's signed up.
-  const asksEnrollees = (vocab.mode === 'enroll' || vocab.mode === 'subscribe') && !openOrder;
-  const namedEnrollees = enrollees.map((n) => n.trim()).filter(Boolean);
-  const enrolleesReady = !asksEnrollees || namedEnrollees.length > 0;
+  // NB: this screen is plain ORDERING for every mode. Joining a gym/class or
+  // subscribing to a school bus is its own flow (`app/enroll` → a pending
+  // Membership); this used to double as that, which is how one business ended
+  // up with two buttons for the same monthly seat.
 
   const picked = pickable
     .map((o) => ({
@@ -171,12 +168,6 @@ export default function NewOrderScreen() {
       return { ...prev, [keyOf(o)]: next };
     });
 
-  const setEnrollee = (i: number, value: string) =>
-    setEnrollees((prev) => prev.map((n, idx) => (idx === i ? value : n)));
-  const addEnrollee = () => setEnrollees((prev) => [...prev, '']);
-  const removeEnrollee = (i: number) =>
-    setEnrollees((prev) => (prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev));
-
   const submit = async () => {
     if (picked.length === 0) return;
     // `submitting` is state, so two taps in the same frame both read the stale
@@ -192,10 +183,6 @@ export default function NewOrderScreen() {
         'Dine in or take away?',
         'Choose how you want this order before sending it — the kitchen needs to know.',
       );
-      return;
-    }
-    if (asksEnrollees && !enrolleesReady) {
-      showAlert('Who is this for?', 'Add at least one name so the business knows who’s signed up.');
       return;
     }
 
@@ -227,7 +214,6 @@ export default function NewOrderScreen() {
         lines,
         fulfillment: asksFulfillment ? (fulfillment ?? undefined) : undefined,
         tableNumber: showTables && tableChoice !== 'auto' ? tableChoice : undefined,
-        enrollees: asksEnrollees ? namedEnrollees : undefined,
         note: note.trim() || undefined,
       });
       router.replace(`/order/${order.id}`);
@@ -259,11 +245,9 @@ export default function NewOrderScreen() {
         options={{
           title: openOrder
             ? 'Add to your order'
-            : vocab.mode === 'order'
-              ? 'Place an order'
-              : isRent
-                ? 'Request to rent'
-                : vocab.verb,
+            : isRent
+              ? 'Request to rent'
+              : 'Place an order',
         }}
       />
 
@@ -271,14 +255,10 @@ export default function NewOrderScreen() {
         {onBehalf
           ? `New order · ${business.name}`
           : openOrder
-          ? `Your tab at ${business.name}`
-          : vocab.mode === 'enroll'
-            ? `Enroll at ${business.name}`
-            : vocab.mode === 'subscribe'
-              ? `Subscribe to ${business.name}`
-              : vocab.mode === 'rent'
-                ? `Rent from ${business.name}`
-                : `Order from ${business.name}`}
+            ? `Your tab at ${business.name}`
+            : isRent
+              ? `Rent from ${business.name}`
+              : `Order from ${business.name}`}
       </Text>
 
       {onBehalf ? (
@@ -297,54 +277,6 @@ export default function NewOrderScreen() {
             onChangeText={setOnBehalfName}
           />
         </Card>
-      ) : null}
-
-      {asksEnrollees ? (
-        <View style={styles.group}>
-          <Text variant="subheading" weight="bold" style={styles.groupTitle}>
-            {vocab.mode === 'enroll' ? '🎟️ Who are you enrolling?' : '🔁 Who is this for?'}
-          </Text>
-          <Text variant="caption" tone="muted" style={styles.enrolleeHelper}>
-            Add everyone this plan covers — yourself and/or your children. The business sees each name.
-          </Text>
-          {enrollees.map((name, i) => (
-            <View key={i} style={styles.enrolleeRow}>
-              <TextInput
-                value={name}
-                onChangeText={(v) => setEnrollee(i, v)}
-                placeholder={i === 0 ? 'Your name' : 'Family member’s name'}
-                placeholderTextColor={colors.textMuted}
-                style={[
-                  styles.enrolleeInput,
-                  { color: colors.text, backgroundColor: colors.surface, borderColor: colors.border },
-                ]}
-              />
-              {enrollees.length > 1 ? (
-                <Pressable
-                  onPress={() => removeEnrollee(i)}
-                  hitSlop={8}
-                  style={styles.enrolleeRemove}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${name.trim() || 'person'}`}
-                >
-                  <Text weight="bold" tone="muted">
-                    ✕
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ))}
-          <Pressable
-            onPress={addEnrollee}
-            style={styles.addPerson}
-            accessibilityRole="button"
-            accessibilityLabel="Add another person"
-          >
-            <Text weight="semibold" tone="brand">
-              ＋ Add another person
-            </Text>
-          </Pressable>
-        </View>
       ) : null}
 
       {asksFulfillment ? (
@@ -477,11 +409,6 @@ export default function NewOrderScreen() {
             Choose dine-in or takeaway to send your order.
           </Text>
         ) : null}
-        {asksEnrollees && !enrolleesReady && picked.length > 0 ? (
-          <Text variant="caption" tone="muted">
-            Add at least one name for who this plan is for.
-          </Text>
-        ) : null}
       </Card>
 
       <Button
@@ -566,19 +493,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  enrolleeHelper: { marginBottom: spacing.md },
-  enrolleeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  enrolleeInput: {
-    flex: 1,
-    minHeight: 46,
-    borderWidth: 1,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: 16,
-  },
-  enrolleeRemove: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  addPerson: { paddingVertical: spacing.sm, marginTop: spacing.xs, alignSelf: 'flex-start' },
   note: { minHeight: 72, textAlignVertical: 'top' },
   summary: { marginTop: spacing.md },
   summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

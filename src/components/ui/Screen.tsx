@@ -7,7 +7,7 @@
  * the whole viewport; only the content column is capped. On native this is a
  * no-op — the window is phone-sized, so nothing changes.
  */
-import { ReactNode } from 'react';
+import { ReactNode, RefObject } from 'react';
 import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useResponsive } from '@/lib/useResponsive';
@@ -20,9 +20,21 @@ export interface ScreenProps {
   contentStyle?: ViewStyle;
   /** Override the centered content width (defaults to the readable width). */
   maxWidth?: number;
+  /**
+   * Handle on the underlying ScrollView (`scroll` only) — for screens that have
+   * to drive it themselves, e.g. scrolling a composer above the keyboard.
+   */
+  scrollRef?: RefObject<ScrollView | null>;
 }
 
-export function Screen({ children, scroll, padded = true, contentStyle, maxWidth }: ScreenProps) {
+export function Screen({
+  children,
+  scroll,
+  padded = true,
+  contentStyle,
+  maxWidth,
+  scrollRef,
+}: ScreenProps) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { centered, readableMaxWidth } = useResponsive();
@@ -36,6 +48,7 @@ export function Screen({ children, scroll, padded = true, contentStyle, maxWidth
   if (scroll) {
     return (
       <ScrollView
+        ref={scrollRef}
         style={[styles.flex, { backgroundColor: colors.background }]}
         contentContainerStyle={[padding, bottomPad, center, contentStyle]}
         keyboardShouldPersistTaps="handled"

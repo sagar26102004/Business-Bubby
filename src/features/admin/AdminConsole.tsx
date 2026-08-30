@@ -9,9 +9,8 @@
  * Rendered inside whatever screen mounts it (no Screen wrapper of its own), so
  * both `/admin` and the My Business tab can show exactly the same thing.
  */
-import { useCallback, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import type { Business } from '@/domain/types';
 import { isCampaignRunning } from '@/domain/ads';
@@ -61,17 +60,6 @@ export function AdminConsole() {
       entries,
     };
   }, [currentUser?.id]);
-
-  // Counts go stale the moment you approve an ad or hand a listing over, so
-  // refresh on the way back — but not on the very first focus, which would
-  // double-fetch what the hook has already started.
-  const focusedOnce = useRef(false);
-  useFocusEffect(
-    useCallback(() => {
-      if (focusedOnce.current) reload();
-      else focusedOnce.current = true;
-    }, [reload]),
-  );
 
   if (loading && !data) return <LoadingView />;
 

@@ -14,6 +14,12 @@
  * The two test buttons are the important half: together they separate "this
  * phone cannot draw a call" from "the push never arrived", which is otherwise a
  * two-device experiment. The ring log settles it outright.
+ *
+ * ⚠️ TESTING ONLY — the whole card is hidden unless `CALL_DIAGNOSTICS_ENABLED`
+ * (see `lib/callDiagnostics.ts`): it is a debugging panel for the call-popup
+ * problem, not something a customer should meet in Settings. Both mount points
+ * (customer notification settings and the workspace alerts screen) are covered
+ * by the check inside this component, so there is one gate, not two.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Linking, Platform, StyleSheet, View } from 'react-native';
@@ -22,6 +28,7 @@ import type * as Notifications from 'expo-notifications';
 import { getNotifications } from './notificationsModule';
 import * as ExpoLinking from 'expo-linking';
 import { Button, Card, Text } from '@/components/ui';
+import { CALL_DIAGNOSTICS_ENABLED } from '@/lib/callDiagnostics';
 import { spacing, useColors } from '@/theme/theme';
 import {
   canDrawOverlays,
@@ -99,7 +106,7 @@ export function CallAlertsCheck() {
   const [, setTick] = useState(0);
 
   const run = useCallback(() => {
-    if (Platform.OS === 'web') return;
+    if (!CALL_DIAGNOSTICS_ENABLED || Platform.OS === 'web') return;
     // Expo Go on Android can't load the notifications module at all, so there
     // is nothing here to report on.
     const N = getNotifications();
@@ -316,6 +323,10 @@ export function CallAlertsCheck() {
           : '')
       : (lastPush.reason ?? 'the server rang nobody and said nothing')
     : null;
+
+  // Production hides the whole panel. Placed after every hook so the rules of
+  // hooks hold — the flag is a build-time constant, so the branch folds away.
+  if (!CALL_DIAGNOSTICS_ENABLED) return null;
 
   /**
    * A browser tab can place calls but never receives them, so none of the

@@ -110,8 +110,7 @@ export function ReviewsSection({
         </View>
 
         <Text variant="caption" tone="muted" style={styles.note}>
-          🛡️ Ratings come only from verified customers — people with an order,
-          booking, or bill from this business.
+          🛡️ One rating per person, and nobody can rate their own business.
         </Text>
       </Card>
 
@@ -160,7 +159,7 @@ export function ReviewsSection({
         <Text variant="label" tone="muted" style={styles.empty}>
           {filter
             ? `No ${filter}★ reviews yet.`
-            : 'No written reviews yet — be the first verified customer to rate.'}
+            : 'No written reviews yet — be the first to rate this business.'}
         </Text>
       )}
 

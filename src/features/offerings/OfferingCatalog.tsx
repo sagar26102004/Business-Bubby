@@ -1,8 +1,13 @@
 /**
  * The full catalog of ONE of a business's offering lists — its menu, its
- * products, its services or what it rents out — shown the way a food app shows
- * a menu, because all four are the same kind of thing and there is no reason a
- * customer should have to learn two ways of reading a price list.
+ * products, its one-off services, its renewing plans or what it rents out —
+ * shown the way a food app shows a menu, because they are all the same kind of
+ * thing and there is no reason a customer should have to learn several ways of
+ * reading a price list.
+ *
+ * What differs between them is only the DOOR at the bottom: a dish is ordered,
+ * a product bought, a service requested, a plan enrolled in. The wording comes
+ * from the bucket (`domain/offerings.ts` → `ctaLabel`), never from this file.
  *
  * So every bucket gets exactly this: sections you can collapse, the nested
  * folders inside them ("Repairs › Washing machine › Front load") folded shut
@@ -130,6 +135,7 @@ const EMPTY_NOUN: Record<OfferingBucket, string> = {
   menu: 'menu',
   products: 'products',
   services: 'services',
+  plans: 'plans',
   rentals: 'rentals',
 };
 
@@ -146,6 +152,17 @@ function CatalogBody({
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const cart = useCart(businessId);
+
+  // Plans are JOINED, not bought: they never enter the cart, so their rows
+  // carry an Enrol pill instead of a quantity stepper and the bar below is
+  // always there (there is no "3 items" to wait for).
+  const enrolling = view.bucket === 'plans';
+  const enroll = (planName?: string) =>
+    router.push(
+      planName
+        ? `/enroll/${businessId}?plan=${encodeURIComponent(planName)}`
+        : `/enroll/${businessId}`,
+    );
 
   const tree = useMemo(() => buildTree(view.items), [view.items]);
   // A node's key sits in `toggled` when its state differs from the default —
@@ -171,7 +188,7 @@ function CatalogBody({
         contentContainerStyle={[
           styles.scroll,
           // Clear the sticky bar so the last item is never trapped under it.
-          { paddingBottom: cart.itemCount > 0 ? 120 : spacing.xl },
+          { paddingBottom: enrolling || cart.itemCount > 0 ? 120 : spacing.xl },
         ]}
       >
         {tree.map((root) => (
@@ -183,12 +200,47 @@ function CatalogBody({
             toggled={toggled}
             onToggle={toggle}
             cart={cart}
+            onEnroll={enrolling ? (item) => enroll(item.name) : undefined}
           />
         ))}
       </ScrollView>
 
+      {/* Sticky enrol bar — a plan list has no running total, so the way in is
+          always on screen rather than appearing once something is picked. */}
+      {enrolling ? (
+        <View
+          style={[
+            styles.bar,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+              paddingBottom: insets.bottom + spacing.md,
+            },
+          ]}
+        >
+          <View style={styles.barInfo}>
+            <Text weight="semibold">Joining is a request</Text>
+            <Text variant="caption" tone="muted">
+              {businessName} confirms your plan and price
+            </Text>
+          </View>
+          <Pressable
+            onPress={() => enroll()}
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.barBtn,
+              { backgroundColor: colors.brand, opacity: pressed ? 0.85 : 1 },
+            ]}
+          >
+            <Text weight="bold" tone="inverse">
+              {view.ctaLabel} ›
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {/* Sticky order bar — the whole point: never scroll to order. */}
-      {cart.itemCount > 0 ? (
+      {!enrolling && cart.itemCount > 0 ? (
         <View
           style={[
             styles.bar,
@@ -216,7 +268,7 @@ function CatalogBody({
             ]}
           >
             <Text weight="bold" tone="inverse">
-              Place order ›
+              {view.ctaLabel} ›
             </Text>
           </Pressable>
         </View>
@@ -238,6 +290,7 @@ function CatalogGroup({
   toggled,
   onToggle,
   cart,
+  onEnroll,
 }: {
   node: CatalogNode;
   depth: number;
@@ -245,6 +298,8 @@ function CatalogGroup({
   toggled: Set<string>;
   onToggle: (key: string) => void;
   cart: ReturnType<typeof useCart>;
+  /** Set for the plans bucket: rows offer Enrol instead of a cart stepper. */
+  onEnroll?: (item: CatalogItem) => void;
 }) {
   const colors = useColors();
   const hasHeader = node.name !== '';
@@ -291,6 +346,7 @@ function CatalogGroup({
               toggled={toggled}
               onToggle={onToggle}
               cart={cart}
+              onEnroll={onEnroll}
             />
           ))}
           {node.items.map((item, i) => (
@@ -300,6 +356,7 @@ function CatalogGroup({
               icon={icon}
               quantity={cart.quantityOf(item)}
               onBump={(d) => cart.bump(item, d)}
+              onEnroll={onEnroll ? () => onEnroll(item) : undefined}
               divider={i < node.items.length - 1}
             />
           ))}
@@ -315,12 +372,15 @@ function ItemCard({
   icon,
   quantity,
   onBump,
+  onEnroll,
   divider,
 }: {
   item: CatalogItem;
   icon: string;
   quantity: number;
   onBump: (delta: number) => void;
+  /** Plans only — taking one is a request, not a quantity. */
+  onEnroll?: () => void;
   divider: boolean;
 }) {
   const colors = useColors();
@@ -370,8 +430,27 @@ function ItemCard({
           </View>
         )}
 
-        {/* The ADD button overlaps the photo's bottom edge, delivery-app style. */}
-        {quantity === 0 ? (
+        {/* The ADD button overlaps the photo's bottom edge, delivery-app style.
+            A plan sits in the same spot but says what taking it means. */}
+        {onEnroll ? (
+          <Pressable
+            onPress={onEnroll}
+            accessibilityRole="button"
+            accessibilityLabel={`Enroll in ${item.name}`}
+            style={({ pressed }) => [
+              styles.addBtn,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.brand,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <Text weight="bold" tone="brand">
+              ENROLL ›
+            </Text>
+          </Pressable>
+        ) : quantity === 0 ? (
           <Pressable
             onPress={() => onBump(1)}
             accessibilityRole="button"

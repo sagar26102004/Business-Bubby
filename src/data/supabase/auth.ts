@@ -59,7 +59,7 @@ export function createSupabaseAuth(): AuthRepository {
       // Anonymous sessions (guest voice calls) carry `is_anonymous` — keep the
       // app treating them as a guest, but with a real uid for identity-scoped work.
       if (session.user.is_anonymous) {
-        return { id: session.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+        return { id: session.user.id, name: 'Guest', isAnonymous: true };
       }
       const profile = await fetchProfile(session.user.id);
       // `isSuperAdmin` is derived from platform_admins, never from the profile
@@ -242,7 +242,7 @@ export function createSupabaseAuth(): AuthRepository {
       const existing = sessionData.session?.user;
       if (existing) {
         if (existing.is_anonymous) {
-          return { id: existing.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+          return { id: existing.id, name: 'Guest', isAnonymous: true };
         }
         const profile = await fetchProfile(existing.id);
         return withAdminFlag(profile ?? fallbackUser(existing.id, existing.user_metadata?.name));
@@ -258,7 +258,7 @@ export function createSupabaseAuth(): AuthRepository {
           ),
         );
       }
-      return { id: data.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+      return { id: data.user.id, name: 'Guest', isAnonymous: true };
     },
 
     /**

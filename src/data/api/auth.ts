@@ -73,7 +73,7 @@ export function createApiAuth(): AuthRepository {
       const session = data.session;
       if (!session) return null;
       if (session.user.is_anonymous) {
-        return { id: session.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+        return { id: session.user.id, name: 'Guest', isAnonymous: true };
       }
       return fetchProfileViaApi(session.user.id, session.user.user_metadata?.name);
     },
@@ -234,7 +234,7 @@ export function createApiAuth(): AuthRepository {
       const existing = sessionData.session?.user;
       if (existing) {
         if (existing.is_anonymous) {
-          return { id: existing.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+          return { id: existing.id, name: 'Guest', isAnonymous: true };
         }
         return fetchProfileViaApi(existing.id, existing.user_metadata?.name);
       }
@@ -247,7 +247,7 @@ export function createApiAuth(): AuthRepository {
           ),
         );
       }
-      return { id: data.user.id, name: 'Guest', isProfilePublic: false, isAnonymous: true };
+      return { id: data.user.id, name: 'Guest', isAnonymous: true };
     },
 
     /**

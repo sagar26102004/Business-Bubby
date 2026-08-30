@@ -1,8 +1,7 @@
 /**
- * Rate a business. Ratings are verified-customer only — the repository gates
- * new reviews behind a real transaction (accepted order, accepted/completed
- * booking, or a bill), so strangers can't post fraud ratings. A 1 or 2 star
- * rating requires a written reason. Resubmitting edits the existing review.
+ * Rate a business. Anyone signed in can rate a listing they don't own — the
+ * repository gates only on that. A 1 or 2 star rating requires a written
+ * reason. Resubmitting edits the existing review.
  */
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -71,22 +70,22 @@ export default function ReviewScreen() {
         <GateMessage
           icon="⭐"
           title="Sign in to rate"
-          body={`Ratings on One Place come from real customers, so you need an account to rate ${business.name}.`}
+          body={`Ratings show the name behind them, so you need an account to rate ${business.name}.`}
         />
         <Button title="Sign in" onPress={() => router.push('/sign-in')} />
       </Screen>
     );
   }
 
-  // Not a verified customer (and no existing review to edit) — explain why.
+  // Can't rate this one (your own listing) and no existing review to edit.
   if (!mine && gate && !gate.eligible) {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Rate' }} />
         <GateMessage
           icon="🛡️"
-          title="Only customers can rate"
-          body={gate.reason ?? 'Do business with this listing first, then rate your experience.'}
+          title="You can’t rate this business"
+          body={gate.reason ?? 'This listing can’t be rated from this account.'}
         />
         <Button title="Back to the business" variant="secondary" onPress={dismiss} />
       </Screen>
@@ -126,7 +125,7 @@ export default function ReviewScreen() {
       <Text tone="muted" style={styles.hint}>
         {mine
           ? 'You’ve rated this business before — update your rating below.'
-          : 'You’re rating as a verified customer. Your name shows with the review.'}
+          : 'Your name shows with the review.'}
       </Text>
 
       {/* Star picker */}

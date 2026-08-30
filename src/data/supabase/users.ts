@@ -48,9 +48,8 @@ export function createSupabaseUsers(): UserRepository {
       if (!term.trim()) return [];
       // Small directory — fetch and filter in JS. Every named account is
       // findable (matching the mock): search is how a business links a
-      // teammate or bills a customer, so a private profile — which only hides
-      // someone's tappable employee page — must still be reachable here.
-      // Anonymous guests have no name and no username, so they never match.
+      // teammate or bills a customer. Anonymous guests have no name and no
+      // username, so they never match.
       const { data, error } = await sb.from('profiles').select('data');
       if (error) throw error;
       const all = (data ?? []).map((r) => r.data as User).filter((u) => !!u.name || !!u.username);

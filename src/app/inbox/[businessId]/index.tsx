@@ -12,7 +12,7 @@ import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { isManagerOrOwner } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
-import { useAsync } from '@/lib/useAsync';
+import { LIVE_REFRESH_MS, useAsync } from '@/lib/useAsync';
 import { Avatar, Card, EmptyView, ErrorView, LoadingView, Screen, Tag, Text } from '@/components/ui';
 import { spacing } from '@/theme/theme';
 
@@ -30,7 +30,7 @@ export default function BusinessInboxScreen() {
       repos.employees.listByBusiness(business.id),
     ]);
     return { business, threads, employees };
-  }, [businessId]);
+  }, [businessId], { refreshMs: LIVE_REFRESH_MS });
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;

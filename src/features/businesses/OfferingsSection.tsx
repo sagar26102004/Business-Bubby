@@ -14,10 +14,17 @@
  *
  * A long category cuts off with a "+ N more" that expands it, or hands over to
  * the block's own full-catalog screen when it has one.
+ *
+ * Every block also ends with ITS OWN action button — Order the menu, Buy the
+ * products, Request a service, Enroll in a plan. The blocks look identical on
+ * purpose; the button is the one place they differ, so a customer reading a
+ * page never has to work out how to take the thing they are looking at. (The
+ * "Full menu ›" link at the top stays: it is the same destination, found by
+ * people who scan headings rather than scroll to the end.)
  */
 import { useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Card, Text } from '@/components/ui';
+import { Button, Card, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 /** Normalised offering row — menu items, services, rentals and products all map to this. */
@@ -62,6 +69,11 @@ export interface OfferingGroup {
   icon?: string;
   /** Link out to the block's own full-catalog screen. */
   seeAll?: { label: string; onPress: () => void };
+  /**
+   * How a customer takes what's in this block — "🛒 Order", "🛍️ Buy",
+   * "🛠️ Request", "🎟️ Enroll". Shown as a button at the foot of the block.
+   */
+  action?: { label: string; onPress: () => void };
 }
 
 export function OfferingsSection({ groups }: { groups: OfferingGroup[] }) {
@@ -134,6 +146,11 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
     </View>
   );
 
+  // The way in, at the end of what it applies to.
+  const foot = group.action ? (
+    <Button title={group.action.label} onPress={group.action.onPress} style={styles.action} />
+  ) : null;
+
   // No categories worth folding — one flat list, still cut off at the preview
   // limit so a hundred items can't swallow the page.
   if (!hasCategories) {
@@ -147,6 +164,7 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
           icon={icon}
           seeAll={group.seeAll}
         />
+        {foot}
       </Card>
     );
   }
@@ -184,6 +202,7 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
           );
         })}
       </View>
+      {foot}
     </Card>
   );
 }
@@ -390,6 +409,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  action: { marginTop: spacing.md },
   list: { marginTop: spacing.xs },
   row: {
     flexDirection: 'row',

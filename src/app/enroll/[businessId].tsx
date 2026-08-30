@@ -3,19 +3,26 @@
  * workspace Members section: tapping "🎟️ Enroll" / "🔁 Subscribe" on a
  * membership business (gym, classes, tiffin, bus) lands here.
  *
+ * The list it offers is the business's PLANS — its renewing services, kept
+ * apart from the one-off ones precisely so that this screen and the order desk
+ * stop competing over the same list (`domain/offerings.ts` → `planOfferings`,
+ * which still reads a legacy membership listing's `services` as its plans).
+ *
  * It supports enrolling more than one person in one go: the customer picks a
- * service (or types one), taps "＋ Add", and names who it's for — a parent can
+ * plan (or types one), taps "＋ Add", and names who it's for — a parent can
  * add the same swimming class twice, one per child. Each staged entry becomes
  * its OWN `pending` request the business accepts (setting the plan + price) or
  * declines in Members. Names are optional — a blank one falls back to
  * "Member 1", "Member 2"… so the business can still tell the requests apart.
  * It is NOT the order flow.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import type { PlanItem } from '@/domain/types';
 import { useDismiss } from '@/lib/navigation';
-import { commerceVocab } from '@/domain/catalog';
+import { commerceVocab, planBasisSticker } from '@/domain/catalog';
+import { planOfferings } from '@/domain/offerings';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice } from '@/lib/money';
@@ -37,8 +44,30 @@ interface Enrollee {
 let entryCounter = 0;
 const nextKey = () => `e${++entryCounter}`;
 
+/**
+ * How a LISTED plan becomes a staged entry.
+ *
+ * A `Membership` is priced per month (`pricePerMonth`), and the whole
+ * billing-cycle maths downstream is monthly — so only a monthly plan's price
+ * can be handed over as a one-tap accept. A quarterly or yearly one carries
+ * its period in the NAME instead ("Annual membership · per year") and leaves
+ * the figure to the business, rather than filing ₹12,000 as a monthly fee.
+ */
+function stageFrom(plan: PlanItem): { planName: string; price?: number } {
+  const monthly = !plan.basis || plan.basis === 'monthly';
+  return {
+    planName: monthly ? plan.name : `${plan.name} · ${planBasisSticker(plan.basis)}`,
+    price: monthly ? parsePrice(plan.price) : undefined,
+  };
+}
+
 export default function EnrollScreen() {
-  const { businessId } = useLocalSearchParams<{ businessId: string }>();
+  // `plan` arrives when the customer tapped one row's ENROLL on the plans
+  // catalog rather than the general button — that plan starts staged.
+  const { businessId, plan: pickedPlan } = useLocalSearchParams<{
+    businessId: string;
+    plan?: string;
+  }>();
   const repos = useRepositories();
   const router = useRouter();
   const dismiss = useDismiss(`/business/${businessId}`);
@@ -56,6 +85,18 @@ export default function EnrollScreen() {
     () => repos.businesses.getById(businessId),
     [businessId],
   );
+
+  // Stage the plan they tapped, once — re-staging on every render would put a
+  // removed entry straight back.
+  const staged = useRef(false);
+  useEffect(() => {
+    if (staged.current || !pickedPlan || !business) return;
+    staged.current = true;
+    const match = planOfferings(business).find((p) => p.name === pickedPlan);
+    if (!match) return;
+    const { planName, price } = stageFrom(match);
+    setEntries((list) => [...list, { key: nextKey(), planName, price, name: '' }]);
+  }, [pickedPlan, business]);
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
@@ -76,7 +117,7 @@ export default function EnrollScreen() {
 
   const vocab = commerceVocab(business);
   const verb = vocab.verb; // "Enroll" / "Subscribe"
-  const services = business.services ?? [];
+  const plans = planOfferings(business);
 
   const addEntry = (planName?: string, price?: number) =>
     setEntries((list) => [...list, { key: nextKey(), planName, price, name: '' }]);
@@ -155,23 +196,30 @@ export default function EnrollScreen() {
         </View>
       ) : null}
 
-      {services.length > 0 ? (
+      {plans.length > 0 ? (
         <>
           <Text variant="label" weight="semibold" style={styles.label}>
             What would you like to join?
           </Text>
-          {services.map((s) => (
+          {plans.map((s) => (
             <Card key={s.name} style={styles.serviceRow}>
               <View style={styles.serviceInfo}>
                 <Text weight="medium">{s.name}</Text>
                 {s.price ? (
                   <Text variant="caption" tone="brand">
-                    {s.price}
+                    {s.price} · {planBasisSticker(s.basis)}
                   </Text>
-                ) : null}
+                ) : (
+                  <Text variant="caption" tone="muted">
+                    {planBasisSticker(s.basis)}
+                  </Text>
+                )}
               </View>
               <Pressable
-                onPress={() => addEntry(s.name, parsePrice(s.price))}
+                onPress={() => {
+                  const { planName, price } = stageFrom(s);
+                  addEntry(planName, price);
+                }}
                 hitSlop={8}
                 style={[styles.addBtn, { backgroundColor: colors.brandSoft, borderColor: colors.brand }]}
                 accessibilityRole="button"

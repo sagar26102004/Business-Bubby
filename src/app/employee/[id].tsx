@@ -1,9 +1,7 @@
 /**
- * Employee public profile. An employee is also a kind of service provider, so
- * this page shows who they are and every business they're publicly listed on.
- *
- * Access is gated: if the person has no account, or kept their profile private,
- * we show a respectful notice instead of their details.
+ * Employee profile. An employee is also a kind of service provider, so this
+ * page shows who they are and every business they're listed on. A team member
+ * with no app account has nothing to show, so that case gets a notice instead.
  */
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -33,9 +31,7 @@ export default function EmployeeProfileScreen() {
     if (!employee.userId) return { status: 'no_account' as const, employee };
 
     const user = await repos.users.getById(employee.userId);
-    if (!user || !user.isProfilePublic) {
-      return { status: 'private' as const, employee };
-    }
+    if (!user) return { status: 'no_account' as const, employee };
     const businesses = await repos.employees.listBusinessesForUser(user.id);
     return { status: 'public' as const, employee, user, businesses };
   }, [id]);
@@ -46,17 +42,13 @@ export default function EmployeeProfileScreen() {
     return <EmptyView title="Not found" subtitle="This profile isn't available." />;
   }
 
-  if (data.status === 'no_account' || data.status === 'private') {
+  if (data.status === 'no_account') {
     return (
       <Screen>
         <Stack.Screen options={{ title: data.employee.displayName }} />
         <EmptyView
           title={data.employee.displayName}
-          subtitle={
-            data.status === 'private'
-              ? 'This person has kept their profile private.'
-              : 'This team member doesn’t have a public profile.'
-          }
+          subtitle="This team member doesn’t have an app account yet."
         />
       </Screen>
     );

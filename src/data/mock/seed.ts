@@ -137,7 +137,6 @@ const memberUsers = (members: Member[], workplace: string): User[] =>
     name: m.name,
     email: `${m.slug}@localo.app`,
     bio: `${m.role} at ${workplace}.`,
-    isProfilePublic: true,
   }));
 
 const memberEmployees = (businessId: string, members: Member[]): Employee[] =>
@@ -164,7 +163,6 @@ export const seedUsers: User[] = [
     email: 'rathoretrayamb@gmail.com',
     phone: '+91 98260 10001',
     bio: 'Testing One Place. Parent of Aarav (Class 4, on the school bus).',
-    isProfilePublic: true,
   },
 
   // Business owners
@@ -174,7 +172,6 @@ export const seedUsers: User[] = [
     email: 'bhupendra@localo.app',
     phone: '+91 98260 20001',
     bio: 'LIC & Star Health insurance advisor since 2001.',
-    isProfilePublic: true,
   },
   {
     id: 'u_arvind',
@@ -182,7 +179,6 @@ export const seedUsers: User[] = [
     email: 'arvind@localo.app',
     phone: '+91 98260 20002',
     bio: 'Runs Arvind School Bus — safe school transport with live tracking.',
-    isProfilePublic: true,
   },
   {
     id: 'u_gayatri',
@@ -190,7 +186,6 @@ export const seedUsers: User[] = [
     email: 'gayatri@localo.app',
     phone: '+91 98260 20003',
     bio: 'Wedding designer and owner of Gayatri Tent House.',
-    isProfilePublic: true,
   },
   {
     id: 'u_aditya',
@@ -198,7 +193,6 @@ export const seedUsers: User[] = [
     email: 'aditya@localo.app',
     phone: '+91 98260 20004',
     bio: 'Owner, Aditya Electronica — ACs to light bulbs, sales and installation.',
-    isProfilePublic: true,
   },
   {
     id: 'u_mira',
@@ -206,7 +200,6 @@ export const seedUsers: User[] = [
     email: 'mira@localo.app',
     phone: '+91 98260 20005',
     bio: 'I make and sell handcrafts — jute, terracotta, macramé and crochet.',
-    isProfilePublic: true,
   },
   {
     id: 'u_shraddha',
@@ -214,7 +207,6 @@ export const seedUsers: User[] = [
     email: 'shraddha@localo.app',
     phone: '+91 98260 20006',
     bio: 'Owner, Shraddha Rentals — two-wheelers and cars on daily rent.',
-    isProfilePublic: true,
   },
   {
     id: 'u_rohan',
@@ -222,7 +214,6 @@ export const seedUsers: User[] = [
     email: 'rohan@localo.app',
     phone: '+91 98260 20007',
     bio: 'Owner, Cafe Neighborhood.',
-    isProfilePublic: true,
   },
   {
     id: 'u_vikram',
@@ -230,7 +221,6 @@ export const seedUsers: User[] = [
     email: 'vikram@localo.app',
     phone: '+91 98260 20008',
     bio: 'Owner, Shreemaya Restaurant.',
-    isProfilePublic: true,
   },
   {
     id: 'u_mahendra',
@@ -238,7 +228,6 @@ export const seedUsers: User[] = [
     email: 'mahendra@localo.app',
     phone: '+91 98260 20009',
     bio: 'Owner & head trainer, FitZone Gym — strength, yoga and zumba batches.',
-    isProfilePublic: true,
   },
 
   // Parents whose children ride Arvind School Bus (customers for tracking)
@@ -247,21 +236,18 @@ export const seedUsers: User[] = [
     name: 'Pooja Singh',
     email: 'pooja@localo.app',
     bio: 'Parent of Diya (Class 2).',
-    isProfilePublic: true,
   },
   {
     id: 'u_neha',
     name: 'Neha Kulkarni',
     email: 'neha@localo.app',
     bio: 'Parent of Kabir (Class 5).',
-    isProfilePublic: true,
   },
   {
     id: 'u_rakesh',
     name: 'Rakesh Jain',
     email: 'rakesh@localo.app',
     bio: 'Parent of Ananya (Class 1).',
-    isProfilePublic: true,
   },
 
   // Every employee of every business, as registered users

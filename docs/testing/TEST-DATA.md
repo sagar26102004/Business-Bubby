@@ -364,7 +364,7 @@ plus the Manage/Workspace setup to do afterwards.
 
 ---
 
-### B13 — Mahakal Dhaba · *far away (~15 km), food* — `mahakalown`
+### B13 — Mahakal Dhaba · *far away (~15 km), food* — `/`
 
 * **Tags:** `Dhaba`, `North Indian`, `Pure Veg`, `Family Dining`, `Restaurant`
 * **Name:** Mahakal Dhaba · **Tagline:** Dal bafla on the highway
@@ -423,7 +423,7 @@ Reviews, customer lists and the Subs tab need real history. Do these in order:
 6. **Manual bill:** `lifecareown` bills a **walk-in** named "Ramu Kaka" (a `walkin:` customer key), and bills `custaarav` in-app → sends it into his chat.
 7. **Chat:** `custvikas` messages CoolAir; `coolairemp1` replies → Vikas gets a notification.
 8. **Call:** `custaarav` calls Corner Cafe (rings the owner + `cornercafeemp1`); once as a **guest** (anonymous sign-in); once with **nobody answering** → missed-call alert + a call-log row.
-9. **Reviews (only now — they need a verified customer):** `custaarav` 5★ Corner Cafe with a comment; `custpriya` 4★ Glow Salon; `custneha` **2★** CoolAir → must **force a written reason**; `custvikas` tries to review Ujjain Tent House with no history → gate screen. Then `custaarav` **edits** his rating.
+9. **Reviews:** `custaarav` 5★ Corner Cafe with a comment; `custpriya` 4★ Glow Salon; `custneha` **2★** CoolAir → must **force a written reason**; `custvikas` rates Ujjain Tent House with **no order history** → the star picker, not a gate. An **owner** opening their own listing gets no Rate button at all. Then `custaarav` **edits** his rating.
 10. **Ads:** approve Mahakal Dhaba's campaign as super-admin, mark it paid, then view/tap the card from different distances and read the "Who saw it" band report.
 11. **Tracking:** `sunbusdrv1` toggles "Share my live location" → `custaarav` opens "Track my child"; `sunbusemp1` sees both buses.
 12. **Notifications:** `custpriya` **mutes** the orders family for Corner Cafe, places an order, and confirms no alert arrives but the order is still in her Orders tab.

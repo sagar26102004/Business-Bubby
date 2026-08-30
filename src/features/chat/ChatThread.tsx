@@ -8,19 +8,14 @@
  * the small label shown above a bubble (e.g. "Sagar from Arvind Transport").
  */
 import { useEffect, useRef, useState } from 'react';
-import {
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import type { ChatMessage } from '@/domain/types';
 import type { ChatAuthor } from '@/data/repositories';
 import { useRepositories } from '@/data/DataProvider';
+import { CHAT_REFRESH_MS, useAsync } from '@/lib/useAsync';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
@@ -52,6 +47,8 @@ export function ChatThread({
   const repos = useRepositories();
   const colors = useColors();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardInset();
 
   const [thread, setThread] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -59,22 +56,36 @@ export function ChatThread({
   const [sendError, setSendError] = useState<string | null>(null);
   const listRef = useRef<FlatList<ChatMessage>>(null);
 
+  // The thread re-reads itself every few seconds while it's on screen, so the
+  // other side's replies land here as they're written instead of only on the
+  // next visit to the screen.
+  const threadKey = `${businessId}:${participantId}`;
+  const { data: fetched } = useAsync(
+    () =>
+      // A thread you can't read yet (e.g. a guest before their first message)
+      // is simply an empty one — never an error screen.
+      repos.chat.listThread(businessId, participantId).catch(() => [] as ChatMessage[]),
+    [repos, businessId, participantId],
+    { refreshMs: CHAT_REFRESH_MS },
+  );
+
+  // A poll that raced the message I just sent must not swallow it again: within
+  // one conversation, only take the fetched thread once it has caught up with
+  // what's already on screen. A different conversation always replaces it.
+  const shownKey = useRef(threadKey);
   useEffect(() => {
-    let active = true;
-    repos.chat
-      .listThread(businessId, participantId)
-      .then((msgs) => {
-        if (active) setThread(msgs);
-      })
-      .catch(() => {
-        // A thread you can't read yet (e.g. a guest before their first message)
-        // is simply an empty one — never an error screen.
-        if (active) setThread([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [repos, businessId, participantId]);
+    if (!fetched) return;
+    setThread((prev) => (shownKey.current === threadKey && fetched.length < prev.length ? prev : fetched));
+    shownKey.current = threadKey;
+  }, [fetched, threadKey]);
+
+  // The composer lifting shrinks the list — follow it down so the message you
+  // are replying to stays in view instead of sliding under the keyboard.
+  useEffect(() => {
+    if (keyboard > 0) {
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    }
+  }, [keyboard]);
 
   const send = async () => {
     const body = draft.trim();
@@ -99,15 +110,13 @@ export function ChatThread({
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={[styles.flex, { paddingBottom: keyboard }]}>
       <FlatList
         ref={listRef}
         data={thread}
         keyExtractor={(m) => m.id}
         contentContainerStyle={styles.messages}
+        keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={
           <Text tone="muted" style={styles.empty}>
@@ -177,7 +186,18 @@ export function ChatThread({
         </View>
       ) : null}
 
-      <View style={[styles.inputBar, { borderTopColor: colors.border, backgroundColor: colors.surface }]}>
+      <View
+        style={[
+          styles.inputBar,
+          {
+            borderTopColor: colors.border,
+            backgroundColor: colors.surface,
+            // Clear of the gesture bar when the keyboard is down; the keyboard
+            // inset already covers that strip when it is up.
+            paddingBottom: spacing.md + (keyboard > 0 ? 0 : insets.bottom),
+          },
+        ]}
+      >
         <TextInput
           value={draft}
           onChangeText={setDraft}
@@ -197,7 +217,7 @@ export function ChatThread({
           </Text>
         </Pressable>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

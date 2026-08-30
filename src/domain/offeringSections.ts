@@ -152,6 +152,75 @@ export const SERVICE_SECTIONS: OfferingSection[] = [
 ];
 
 /**
+ * PLANS — the renewing half of what a business does for people.
+ *
+ * A gym's membership, a coaching class's batch, a tiffin service's monthly
+ * meals and a school bus's seat are all the same shape: you join, you stay on,
+ * it comes up for renewal. They were once filed under `SERVICE_SECTIONS`
+ * alongside "AC gas refill", which read as one list and behaved as two — one
+ * half orderable, the other half not.
+ *
+ * The folders are the shapes people actually sell: a gym sells by DURATION, a
+ * class by BATCH, a delivery service by WHAT ARRIVES. Nothing here is a
+ * discovery category — that stays with tags.
+ */
+export const PLAN_SECTIONS: OfferingSection[] = [
+  {
+    id: 'gym_fitness',
+    name: 'Gym & fitness',
+    icon: '💪',
+    subcategories: ['Membership', 'Personal training', 'Group class', 'Diet plan'],
+  },
+  {
+    id: 'classes',
+    name: 'Classes & coaching',
+    icon: '📚',
+    subcategories: ['Batch', 'One-to-one', 'Weekend batch', 'Exam course'],
+  },
+  {
+    id: 'meals',
+    name: 'Tiffin & meals',
+    icon: '🍱',
+    subcategories: ['Lunch', 'Dinner', 'Lunch & dinner', 'Weekend only'],
+  },
+  {
+    id: 'transport_plan',
+    name: 'Transport & pickup',
+    icon: '🚌',
+    subcategories: ['School bus seat', 'Office pickup', 'One way', 'Both ways'],
+  },
+  {
+    id: 'delivery_plan',
+    name: 'Home delivery',
+    icon: '🥛',
+    subcategories: ['Milk', 'Newspaper', 'Water can', 'Groceries'],
+  },
+  {
+    id: 'salon_plan',
+    name: 'Salon & spa packages',
+    icon: '💇',
+    subcategories: ['Membership', 'Package of sittings', 'Bridal package'],
+  },
+  {
+    id: 'health_plan',
+    name: 'Health & care plans',
+    icon: '🩺',
+    subcategories: ['Check-up plan', 'Physiotherapy', 'Home nursing', 'Dental plan'],
+  },
+  {
+    id: 'maintenance_plan',
+    name: 'Maintenance contracts',
+    icon: '🧰',
+    subcategories: ['AMC', 'Housekeeping', 'Pest control', 'Security'],
+  },
+  {
+    id: 'other_plan',
+    name: 'Other plans',
+    icon: '🎟️',
+  },
+];
+
+/**
  * Rentals — the shape a property page actually needs.
  *
  * Every section still files under one of the six browse chips

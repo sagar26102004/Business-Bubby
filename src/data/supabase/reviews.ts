@@ -1,8 +1,9 @@
 /**
  * Supabase-backed ReviewRepository over the `reviews` table (public read;
- * author writes own). The rating aggregate is NOT written back to the business
- * (a customer can't update a business under RLS) — `businesses` computes
- * ratingAvg/ratingCount live from this table instead.
+ * author writes own). Any signed-in user may rate a listing they don't own.
+ * The rating aggregate is NOT written back to the business (a customer can't
+ * update a business under RLS) — `businesses` computes ratingAvg/ratingCount
+ * live from this table instead.
  */
 import type { Business, Review } from '@/domain/types';
 import type {
@@ -22,23 +23,7 @@ async function eligibilityFor(businessId: string, customerId: string): Promise<R
   if (business?.ownerId === customerId) {
     return { eligible: false, reason: 'You can’t rate your own business.' };
   }
-  const [ordersR, bookingsR, billsR] = await Promise.all([
-    sb().from('orders').select('data').eq('business_id', businessId).eq('customer_id', customerId),
-    sb().from('bookings').select('data').eq('business_id', businessId).eq('customer_id', customerId),
-    sb().from('bills').select('id').eq('business_id', businessId).eq('customer_id', customerId).limit(1),
-  ]);
-  const hasOrder = (ordersR.data ?? []).some((r) => (r.data as { status: string }).status === 'accepted');
-  const hasBooking = (bookingsR.data ?? []).some((r) => {
-    const s = (r.data as { status: string }).status;
-    return s === 'accepted' || s === 'completed';
-  });
-  const hasBill = (billsR.data ?? []).length > 0;
-  if (hasOrder || hasBooking || hasBill) return { eligible: true };
-  return {
-    eligible: false,
-    reason:
-      'Ratings come only from verified customers. Place an order, book a service, or get billed by this business first — then you can rate your experience.',
-  };
+  return { eligible: true };
 }
 
 export function createSupabaseReviews(): ReviewRepository {
@@ -81,7 +66,7 @@ export function createSupabaseReviews(): ReviewRepository {
       const existing = await this.getMine(input.businessId, input.customerId);
       if (!existing) {
         const gate = await eligibilityFor(input.businessId, input.customerId);
-        if (!gate.eligible) throw new Error(gate.reason ?? 'Only customers can rate this business.');
+        if (!gate.eligible) throw new Error(gate.reason ?? 'You can’t rate this business.');
       }
 
       if (existing) {

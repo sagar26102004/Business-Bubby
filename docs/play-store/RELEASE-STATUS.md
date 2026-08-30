@@ -525,6 +525,32 @@ documented way around that. A tester who forgets their password needs a manual r
 Supabase dashboard. **Say so in the tester invite.** Configuring the provider properly is the fix
 and should not wait long.
 
+### 8. The call-alerts diagnostic panel ships hidden
+
+Decided 30 Aug 2026. "📞 Call alerts on this phone" (`features/notifications/CallAlertsCheck.tsx`,
+mounted on the customer Notifications screen and the workspace alerts screen) was built to chase
+down why an incoming call sometimes failed to pop up. It is a debugger's panel — eight ring-chain
+rows, a test ring, a "show the call screen" button, shortcuts into three system permission screens
+and a dump of the native ring log — and none of it belongs in front of a customer.
+
+Gated behind `CALL_DIAGNOSTICS_ENABLED` (`src/lib/callDiagnostics.ts`), checked inside the
+component so both mount points are covered by one gate.
+
+**Why it is not the `DEV_TOOLS_ENABLED` pattern:** dev tools fold away on `__DEV__` alone, but a
+`preview` APK is a **release** variant — `__DEV__` is false there — and a preview build is exactly
+where the call screen can be tested at all (Expo Go has no native module). So this flag can be
+turned ON in a built app: `EXPO_PUBLIC_CALL_DIAGNOSTICS=true`, set on the `development` and
+`preview` profiles in `eas.json`.
+
+⛔ **Never add `EXPO_PUBLIC_CALL_DIAGNOSTICS` to the `production` profile.** Its ABSENCE there is
+the only thing hiding the panel from customers — the code will happily honour it in a release
+build.
+
+**The cost:** a real user whose notification permission is off, or whose battery saver is killing
+the push, now has nothing in the app that tells them so. If call delivery becomes a support
+theme, the answer is a small customer-facing version (the failing rows and the "Open app
+settings" button, without the test rings or the log), not un-gating this one.
+
 ---
 
 ## Fourth pass record — 16 Aug 2026

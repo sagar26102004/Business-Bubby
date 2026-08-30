@@ -116,10 +116,7 @@ export function OwnerPicker({ value, onChange, selfLabel, hideSelf }: OwnerPicke
                   and handing a business to the wrong Sagar is not undoable by
                   anyone but a super-admin. */}
               <Text variant="caption" tone="muted">
-                {[
-                  user.username ? `@${user.username}` : null,
-                  user.phone ?? (user.isProfilePublic ? 'Public profile' : 'Private profile'),
-                ]
+                {[user.username ? `@${user.username}` : null, user.phone]
                   .filter(Boolean)
                   .join(' · ')}
               </Text>

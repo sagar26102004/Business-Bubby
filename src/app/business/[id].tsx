@@ -15,9 +15,9 @@
  * three things you always want are one tap away wherever you've scrolled to.
  * The page closes with the owner and the member-only tools.
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Business, TrackedItem, User } from '@/domain/types';
 import { commerceVocab, getSubcategory, offersDineIn, rentalBasisLabel } from '@/domain/catalog';
 import { offeringBuckets } from '@/domain/offerings';
@@ -107,16 +107,6 @@ export default function BusinessDetailScreen() {
     }
   }, [newOwner, data, repos, reload]);
 
-  // Refetch when coming back from rate/order/chat screens so fresh reviews and
-  // counts show — but keep the current content on screen while it reloads.
-  const focusedOnce = useRef(false);
-  useFocusEffect(
-    useCallback(() => {
-      if (focusedOnce.current) reload();
-      else focusedOnce.current = true;
-    }, [reload]),
-  );
-
   if (loading && data === undefined) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (!data) return <EmptyView title="Not found" subtitle="This listing may have been removed." />;
@@ -137,19 +127,14 @@ export default function BusinessDetailScreen() {
   const offers = liveOffers(business);
 
   const hasMenu = (business.menu?.length ?? 0) > 0;
-  // Enrol/Subscribe and Order are two distinct buttons on two distinct modules.
-  // The commerce vocab tells us which mode this business is by its tags: enrol
-  // (gym/classes) or subscribe (tiffin/bus/milk) get the membership button; its
-  // label is the vocab's action. The Order button then always reads plainly
-  // "Order"/"Buy" — never relabelled to Enrol.
+  // Every offering list now carries its OWN button (see the blocks below), so
+  // there is no single "what do I call taking custom here" question left to
+  // answer. The vocab survives for the request counts, and for one fallback:
+  // a business people JOIN (gym, classes, tiffin, bus) that hasn't listed any
+  // plans yet still needs a way in.
   const vocab = commerceVocab(business);
   const isMembershipMode = vocab.mode === 'enroll' || vocab.mode === 'subscribe';
   const membershipAction = vocab.customerAction; // "🎟️ Enroll" / "🔁 Subscribe"
-  const orderAction = hasMenu
-    ? '📖 Menu'
-    : isMembershipMode
-      ? '🛒 Order'
-      : vocab.customerAction;
   // A confirmed-but-unbilled dine-in order — the customer can still add rounds.
   const openTab = myOrders.find(
     (o) => o.fulfillment === 'dine_in' && !o.billId && (o.status === 'requested' || o.status === 'accepted'),
@@ -193,7 +178,30 @@ export default function BusinessDetailScreen() {
         label: view.seeAllLabel,
         onPress: () => router.push(catalogLink(business.id, view.bucket)),
       },
+      // Each block's own way in: Order a menu, Buy a product, Request a
+      // service, Enroll in a plan. Shown only when the workspace module that
+      // RECEIVES it is switched on — otherwise the request lands nowhere.
+      // Ordering opens the same full catalog the "Full menu ›" link does; the
+      // button exists because that link is a heading nobody reads as a way to
+      // buy. Enrolling is its own flow and never becomes an order.
+      action: hasModule(business, view.module)
+        ? {
+            label: view.actionLabel,
+            onPress: () => {
+              if (view.bucket !== 'plans') {
+                router.push(catalogLink(business.id, view.bucket));
+              } else if (isGuest) {
+                router.push('/sign-in');
+              } else {
+                router.push(`/enroll/${business.id}`);
+              }
+            },
+          }
+        : undefined,
     }));
+  // The Plans block carries the Enrol button itself when there is one.
+  const hasPlansBlock = groups.some((g) => g.key === 'plans');
+
   if ((business.partyPackages?.length ?? 0) > 0) {
     groups.push({
       key: 'party',
@@ -321,28 +329,16 @@ export default function BusinessDetailScreen() {
             style={styles.actionBtn}
           />
         ) : null}
-        {/* Enrol/Subscribe — its OWN button and flow, separate from ordering.
-            A membership-type business (gym, classes, tiffin, bus) running the
-            memberships module lets customers request to join; the request lands
-            in the workspace Members section to accept and set the plan + price. */}
-        {isMembershipMode && hasModule(business, 'memberships') ? (
+        {/* Enrol/Subscribe for a joinable business that has listed no plans:
+            the Plans block would normally carry this button, and does the
+            moment there is one. Without it the page would have no way in at
+            all — the request still lands in the workspace Members section for
+            the business to accept and set the plan + price. */}
+        {isMembershipMode && hasModule(business, 'memberships') && !hasPlansBlock ? (
           <Button
             title={membershipAction}
             onPress={() =>
               isGuest ? router.push('/sign-in') : router.push(`/enroll/${business.id}`)
-            }
-            style={styles.actionBtn}
-          />
-        ) : null}
-        {/* Ordering, parties and appointments only show when the business runs
-            that workspace module — otherwise requests would land nowhere. With
-            a menu, ordering starts on the menu screen; everything else keeps the
-            pick-from-a-list order form. */}
-        {hasCatalog(business) && hasModule(business, 'orders') ? (
-          <Button
-            title={orderAction}
-            onPress={() =>
-              router.push(hasMenu ? `/menu/${business.id}` : `/order/new/${business.id}`)
             }
             style={styles.actionBtn}
           />
@@ -554,16 +550,6 @@ function HeaderAction({
  * Rentals count: a flat or a bike is requested through the same flow, which is
  * why a rental listing had no action button at all before.
  */
-function hasCatalog(b: Business): boolean {
-  return (
-    (b.products?.length ?? 0) +
-      (b.menu?.length ?? 0) +
-      (b.services?.length ?? 0) +
-      (b.rentals?.length ?? 0) >
-    0
-  );
-}
-
 /** "Track my child" / "Track my children" / "Track my goods" / mixed. */
 function trackLabel(items: TrackedItem[]): string {
   const kinds = new Set(items.map((i) => i.kind));

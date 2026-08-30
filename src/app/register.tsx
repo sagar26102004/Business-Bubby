@@ -5,11 +5,19 @@
  * There are NO business categories to pick. The only fork is the first
  * question — "a business" vs "selling my own stuff" (personal stall).
  * Businesses describe themselves with TAGS and answer plain capability
- * questions (sell things? offer services? rent anything out?); the internal
- * `ListingType` is DERIVED from those answers (rents only → rental,
- * sells/food-tagged → shop, services only → service) — owners never see it.
+ * questions (sell things? renewing plans? one-off services? rent anything
+ * out?); the internal `ListingType` is DERIVED from those answers (rents only
+ * → rental, sells/food-tagged → shop, services only → service) — owners never
+ * see it.
  *
- *   business: kind → tags → basics → sell? → services? → rent? → modules → location → team → review
+ * PLANS and SERVICES are asked separately on purpose. They are the same shape
+ * and are shown to customers identically, but they are taken differently: a
+ * plan is ENROLLED in and renews (a gym membership, a tuition batch, a tiffin
+ * plan), landing in the workspace's Members section; a service is REQUESTED
+ * once (an electrician at the house), landing on the orders desk. One list
+ * asked once could only ever be half right.
+ *
+ *   business: kind → tags → basics → sell? → plans? → services? → rent? → modules → location → team → review
  *   stall:    kind → category → basics → location (first item only) → review
  *
  * "?" steps are Yes/No questions — answering "No" skips ahead, "Yes" reveals
@@ -31,6 +39,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  PLAN_BASES,
   RENTAL_BASES,
   VEHICLE_KINDS,
   defaultStallName,
@@ -41,7 +50,12 @@ import {
 } from '@/domain/catalog';
 import { COUNTRIES, STATE_NAMES, citiesForState, stateForCity } from '@/domain/geoCatalog';
 import { SUGGESTED_BUSINESS_TAGS, hasTag, isFoodShop } from '@/domain/tags';
-import { RENTAL_SECTIONS, SERVICE_SECTIONS, serviceJobs } from '@/domain/offeringSections';
+import {
+  PLAN_SECTIONS,
+  RENTAL_SECTIONS,
+  SERVICE_SECTIONS,
+  serviceJobs,
+} from '@/domain/offeringSections';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import {
   AVAILABLE_MODULES,
@@ -55,6 +69,8 @@ import type {
   ListingType,
   LocationKind,
   MenuItem,
+  PlanBasis,
+  PlanItem,
   RentalBasis,
   RentalItem,
   ServiceItem,
@@ -77,11 +93,13 @@ import {
   INLINE_EXAMPLES,
   MENU_EXAMPLE,
   OfferingImport,
+  PLAN_EXAMPLE,
   RENTAL_EXAMPLE,
   SERVICE_EXAMPLE,
 } from '@/features/offerings/OfferingImport';
 import {
   toMenuItem,
+  toPlanItem,
   toProductItem,
   toRentalItem,
   toServiceItem,
@@ -117,6 +135,7 @@ type StepId =
   | 'category'
   | 'basics'
   | 'sell'
+  | 'plans'
   | 'services'
   | 'rent'
   | 'modules'
@@ -153,12 +172,15 @@ interface RegisterDraft {
   priceLabel: string;
   images: string[];
   sellItems: MenuItem[];
+  plans: PlanItem[];
+  planBasis?: PlanBasis;
   services: ServiceItem[];
   rentalBasis?: RentalBasis;
   rentalItems: RentalItem[];
   vehicleDrafts: VehicleDraft[];
   modules: ModuleId[] | null;
   sellChoice: Choice;
+  plansChoice: Choice;
   servicesChoice: Choice;
   rentChoice: Choice;
   teamChoice: Choice;
@@ -199,6 +221,11 @@ export default function RegisterScreen() {
   // One "what do you sell" list — publishes as a MENU for food-tagged
   // businesses and as a PRODUCT catalog for everyone else.
   const [sellItems, setSellItems] = useState<MenuItem[]>([]);
+  // Renewing plans (enrolled in) and one-off services (requested) — two lists
+  // because they are two different things to a customer, never one.
+  const [plans, setPlans] = useState<PlanItem[]>([]);
+  // The starting point for new plans; each one still carries its own period.
+  const [planBasis, setPlanBasis] = useState<PlanBasis>('monthly');
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [rentalBasis, setRentalBasis] = useState<RentalBasis | undefined>();
   const [rentalItems, setRentalItems] = useState<RentalItem[]>([]);
@@ -211,6 +238,7 @@ export default function RegisterScreen() {
   const [modules, setModules] = useState<ModuleId[] | null>(null);
 
   const [sellChoice, setSellChoice] = useState<Choice>(null);
+  const [plansChoice, setPlansChoice] = useState<Choice>(null);
   const [servicesChoice, setServicesChoice] = useState<Choice>(null);
   const [rentChoice, setRentChoice] = useState<Choice>(null);
   const [teamChoice, setTeamChoice] = useState<Choice>(null);
@@ -257,7 +285,7 @@ export default function RegisterScreen() {
         ? ['kind', 'category', 'basics', 'review']
         : ['kind', 'category', 'basics', 'location', 'review'];
     }
-    const base: StepId[] = ['kind', 'category', 'basics', 'sell', 'services', 'rent', 'modules', 'location', 'team', 'review'];
+    const base: StepId[] = ['kind', 'category', 'basics', 'sell', 'plans', 'services', 'rent', 'modules', 'location', 'team', 'review'];
     return isSuper ? (['kind', 'owner', ...base.slice(1)] as StepId[]) : base;
   }, [isItem, addingToStall, isSuper]);
 
@@ -269,7 +297,10 @@ export default function RegisterScreen() {
   // questions decide it: rents only → rental; sells or food-tagged → shop;
   // services only → service; a bare page defaults to shop (a storefront).
   const sells = sellChoice === 'yes' && sellItems.length > 0;
-  const serves = servicesChoice === 'yes' && services.length > 0;
+  const enrols = plansChoice === 'yes' && plans.length > 0;
+  // A gym is a service business whether what it lists is a monthly membership
+  // or a one-off session, so both lists count toward the derived type.
+  const serves = (servicesChoice === 'yes' && services.length > 0) || enrols;
   const rents = rentChoice === 'yes';
   const derivedType: ListingType = isItem
     ? 'item'
@@ -310,12 +341,15 @@ export default function RegisterScreen() {
     priceLabel,
     images,
     sellItems,
+    plans,
+    planBasis,
     services,
     rentalBasis,
     rentalItems,
     vehicleDrafts,
     modules,
     sellChoice,
+    plansChoice,
     servicesChoice,
     rentChoice,
     teamChoice,
@@ -342,12 +376,15 @@ export default function RegisterScreen() {
     setPriceLabel(d.priceLabel ?? '');
     setImages(d.images ?? []);
     setSellItems(d.sellItems ?? []);
+    setPlans(d.plans ?? []);
+    setPlanBasis(d.planBasis ?? 'monthly');
     setServices(d.services ?? []);
     setRentalBasis(d.rentalBasis);
     setRentalItems(d.rentalItems ?? []);
     setVehicleDrafts(d.vehicleDrafts ?? []);
     setModules(d.modules ?? null);
     setSellChoice(d.sellChoice ?? null);
+    setPlansChoice(d.plansChoice ?? null);
     setServicesChoice(d.servicesChoice ?? null);
     setRentChoice(d.rentChoice ?? null);
     setTeamChoice(d.teamChoice ?? null);
@@ -405,12 +442,15 @@ export default function RegisterScreen() {
     priceLabel,
     images,
     sellItems,
+    plans,
+    planBasis,
     services,
     rentalBasis,
     rentalItems,
     vehicleDrafts,
     modules,
     sellChoice,
+    plansChoice,
     servicesChoice,
     rentChoice,
     teamChoice,
@@ -434,6 +474,8 @@ export default function RegisterScreen() {
         return name.trim().length > 1;
       case 'sell':
         return sellChoice !== null;
+      case 'plans':
+        return plansChoice !== null;
       case 'services':
         return servicesChoice !== null;
       case 'rent':
@@ -472,6 +514,7 @@ export default function RegisterScreen() {
       case 'location':
         return 'Tell us if you have an office to continue.';
       case 'sell':
+      case 'plans':
       case 'services':
         return 'Choose Yes or No to continue.';
       default:
@@ -528,8 +571,9 @@ export default function RegisterScreen() {
         hasProducts: sells && !isFoodShop(tags),
         hasServices: serves,
         hasMenu: sells && isFoodShop(tags),
+        hasPlans: enrols,
       }),
-    [derivedType, tags, sells, serves],
+    [derivedType, tags, sells, serves, enrols],
   );
   const chosenModules = modules ?? suggestedModules;
   const toggleModule = (id: ModuleId) => {
@@ -619,6 +663,7 @@ export default function RegisterScreen() {
             hours: summarizeHours(openingHours),
             services:
               servicesChoice !== 'no' && services.length > 0 ? services : undefined,
+            plans: plansChoice !== 'no' && plans.length > 0 ? plans : undefined,
             rentalBasis: rentChoice === 'yes' ? rentalBasis : undefined,
             rentals:
               rentChoice === 'yes' && rentalItems.length > 0 ? rentalItems : undefined,
@@ -732,11 +777,17 @@ export default function RegisterScreen() {
               title: 'Do you sell any products?',
               subtitle: 'Everything you stock — customers pick from this list when they order.',
             };
+      case 'plans':
+        return {
+          title: 'Do you offer anything that renews?',
+          subtitle:
+            'A gym membership, a class batch, a tiffin or bus plan — anything a customer stays on and pays for again. They ENROL in these; you confirm the plan and the price in Members.',
+        };
       case 'services':
         return {
-          title: 'Do you offer services?',
+          title: 'Do you offer one-off services?',
           subtitle:
-            'Pick a ready-made section — Repairs, Cleaning, Classes — and list what you do under it with a price, so customers browse instead of scrolling.',
+            'Work done once and paid for once — a repair, a home visit, a haircut. Pick a ready-made section and list what you do under it with a price. Customers REQUEST these; they land on your orders desk.',
         };
       case 'rent':
         return {
@@ -945,12 +996,76 @@ export default function RegisterScreen() {
         );
       }
 
+      case 'plans':
+        return (
+          <>
+            <YesNoRow
+              value={plansChoice}
+              yesLabel="Yes, I have plans"
+              noLabel="Nothing renews"
+              onPick={answer(setPlansChoice)}
+            />
+            {plansChoice === 'yes' ? (
+              <>
+                <Text variant="label" weight="semibold" style={styles.sectionLabel}>
+                  How often do most of them renew?
+                </Text>
+                <Text variant="caption" tone="muted" style={styles.hint}>
+                  Just the starting point — each plan you add below carries its own
+                  “per month” / “per year” sticker, so a monthly membership and an
+                  annual one can sit side by side.
+                </Text>
+                <View style={styles.pillRow}>
+                  {PLAN_BASES.map((b) => (
+                    <Tag
+                      key={b.id}
+                      label={b.label}
+                      icon={b.icon}
+                      selected={planBasis === b.id}
+                      onPress={() => setPlanBasis(b.id)}
+                      style={styles.pill}
+                    />
+                  ))}
+                </View>
+
+                <Text variant="label" weight="semibold" style={styles.sectionLabel}>
+                  What can people join?
+                </Text>
+                <OfferingImport
+                  value={plans}
+                  onChange={setPlans}
+                  map={(row) => toPlanItem(row, planBasis)}
+                  noun="plan"
+                  example={PLAN_EXAMPLE}
+                  inlineExample={INLINE_EXAMPLES.plans}
+                />
+                {/* Built exactly like the services list — same editor, same
+                    folders. Only the library and the period chips differ. */}
+                <OfferingFolderEditor
+                  value={plans}
+                  onChange={setPlans}
+                  sections={PLAN_SECTIONS}
+                  noun="plan"
+                  hint="Tap what people can join — a membership, a batch, a monthly delivery."
+                  newSectionPlaceholder="Section name — e.g. Swimming, Library"
+                  customIcon="🎟️"
+                  withDescription
+                  descriptionPlaceholder="What’s included (optional)"
+                  basisOptions={PLAN_BASES}
+                  basisDefault={planBasis}
+                  basisLabel="Renews…"
+                />
+              </>
+            ) : null}
+          </>
+        );
+
       case 'services':
         return (
           <>
             <YesNoRow
               value={servicesChoice}
-              yesLabel="Yes, I offer services"
+              yesLabel="Yes, one-off services"
               noLabel="No services"
               onPick={answer(setServicesChoice)}
             />
@@ -1233,6 +1348,13 @@ export default function RegisterScreen() {
               sellChoice !== 'no' && sellItems.length > 0
                 ? `${sellItems.length} item${sellItems.length === 1 ? '' : 's'}`
                 : 'None',
+          });
+        }
+        if (stepIds.includes('plans')) {
+          rows.push({
+            id: 'plans',
+            label: 'Plans',
+            value: plansChoice !== 'no' && plans.length > 0 ? `${plans.length} listed` : 'None',
           });
         }
         if (stepIds.includes('services')) {

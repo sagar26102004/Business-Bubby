@@ -53,9 +53,9 @@ export interface BusinessLocation {
  *
  * STORED IN TWO HALVES (supabase/migrations/0007_profiles_private.sql), because
  * Localo is a public directory and row-level security cannot hide a field:
- *  - `profiles`         — the PUBLIC card: name, isProfilePublic, avatarUrl,
- *                         bio. World-readable, so owner names and employee
- *                         cards render for guests.
+ *  - `profiles`         — the PUBLIC card: name, avatarUrl, bio.
+ *                         World-readable, so owner names and employee cards
+ *                         render for guests.
  *  - `profiles_private` — `email`, `phone`, `mutedNotifications`. Readable only
  *                         by the account itself and platform super-admins.
  * The repositories merge both into this one object, so `phone`/`email` are
@@ -79,8 +79,6 @@ export interface User {
   phone?: string;
   avatarUrl?: string;
   bio?: string;
-  /** When true this person is discoverable as an employee across the app. */
-  isProfilePublic: boolean;
   /**
    * Platform super-admin: a privileged operator who can register businesses on
    * behalf of anyone and hand ownership to another user.
@@ -189,7 +187,10 @@ export interface AppNotification {
   /** Who receives it: a user id, or 'guest'. */
   recipientId: string;
   kind:
+    /** A business answered the customer — the customer is told. */
     | 'chat_reply'
+    /** A customer wrote in — the business's chat handlers are told. */
+    | 'chat_message'
     | 'booking_requested'
     | 'booking_update'
     | 'missed_call'
@@ -211,6 +212,12 @@ export interface AppNotification {
   body: string;
   /** Business this relates to, for deep-linking to the chat. */
   businessId?: string;
+  /**
+   * The customer whose chat thread this is — set on `chat_message` so the
+   * business side can deep-link into `/inbox/<businessId>/<participantId>`
+   * rather than the thread list.
+   */
+  participantId?: string;
   /** Order this relates to, for deep-linking to the order. */
   orderId?: string;
   /** Bill this relates to, for deep-linking to the bill. */
@@ -519,6 +526,32 @@ export interface ServiceItem {
 }
 
 /**
+ * How often a plan comes up for renewal. A plan is a service you stay ON
+ * rather than buy once, so the period is part of the price — "₹1,200" means
+ * nothing until you know whether that is a month or a year.
+ */
+export type PlanBasis = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+
+/**
+ * A RENEWING service — a gym membership, a yoga batch, a tuition seat, a
+ * tiffin plan, a school-bus seat. Shaped exactly like a `ServiceItem` (it is
+ * one, plus a period) because to a customer a plan list reads like any other
+ * price list; what differs is how you take one.
+ *
+ * The split from `services` is the whole point: you REQUEST a one-off service
+ * (an electrician at home) through the order desk, and you ENROL in a plan
+ * (`app/enroll` → a pending `Membership`). Two lists, two buttons, two places
+ * the request lands — instead of one list that meant both.
+ */
+export interface PlanItem extends ServiceItem {
+  /**
+   * Renewal period. Named `basis` to match `RentalItem.basis`, so the shared
+   * folder editor writes both with the same field. Unset = monthly.
+   */
+  basis?: PlanBasis;
+}
+
+/**
  * A party/event package a dine-in business offers (birthdays, kitty parties,
  * family functions…). Price is a free-text label — "₹499 / person" or
  * "₹35,000 flat"; guest limits and inclusions go in the description.
@@ -820,11 +853,9 @@ export interface LogEntry {
 }
 
 /**
- * A customer's rating of a business. Only verified customers can leave one —
- * someone with an accepted order, an accepted/completed booking, or a bill
- * from the business — so ratings can't be faked by strangers. One review per
- * customer per business (resubmitting edits it). Low ratings (1–2 stars)
- * must carry a written reason.
+ * A customer's rating of a business. Any signed-in user can leave one for a
+ * listing they don't own. One review per customer per business (resubmitting
+ * edits it). Low ratings (1–2 stars) must carry a written reason.
  */
 export interface Review {
   id: string;
@@ -969,8 +1000,22 @@ export interface Business {
   portfolio?: PortfolioItem[];
   /** Where the REST of the work lives — Drive folder, Instagram, YouTube. */
   showcaseLinks?: ShowcaseLink[];
-  /** Services offered with prices, for service providers. */
+  /**
+   * One-off services offered with prices — a repair, a home visit, a haircut.
+   * Customers REQUEST these through the order desk. Anything that renews on a
+   * cycle belongs in `plans` instead.
+   */
   services?: ServiceItem[];
+  /**
+   * Renewing plans — gym memberships, class batches, tiffin and bus seats.
+   * Customers ENROL in these (`app/enroll`), which lands as a pending
+   * `Membership` in the workspace's Members section, never as an order.
+   *
+   * Membership businesses listed before this existed kept their plans in
+   * `services`; `domain/offerings.ts` reads those as plans so nothing had to
+   * be migrated — see `planOfferings`.
+   */
+  plans?: PlanItem[];
   /**
    * Products for sale, for businesses that stock goods (a tyre showroom's
    * tyre range, a hardware shop's stock). A business can have products only,

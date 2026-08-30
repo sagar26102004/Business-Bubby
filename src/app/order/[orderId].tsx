@@ -23,7 +23,7 @@ import {
   usesQrHandover,
 } from '@/features/fulfillment/fulfillment';
 import { useAuth, useRepositories } from '@/data/DataProvider';
-import { useAsync } from '@/lib/useAsync';
+import { LIVE_REFRESH_MS, useAsync } from '@/lib/useAsync';
 import {
   Button,
   Card,
@@ -68,14 +68,18 @@ export default function OrderDetailScreen() {
       order.billId ? repos.bills.getById(order.billId) : Promise.resolve(null),
     ]);
     return { order, business, employees, bill };
-  }, [orderId]);
+  }, [orderId], { refreshMs: LIVE_REFRESH_MS });
 
   // Review mode starts with every line ticked ("I can provide all of this").
+  // Keyed on WHICH order and what state it's in, not on the fetched object: the
+  // screen re-reads itself in the background, and re-seeding on every one of
+  // those would untick the lines the business is in the middle of unticking.
   useEffect(() => {
     if (data?.order.status === 'requested') {
       setKeptIds(new Set(data.order.lines.map((l) => l.id)));
     }
-  }, [data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.order.id, data?.order.status]);
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;

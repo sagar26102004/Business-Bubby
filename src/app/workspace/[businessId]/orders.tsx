@@ -9,7 +9,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Order } from '@/domain/types';
 import type { TableSeat } from '@/data/repositories';
 import { useAuth, useRepositories } from '@/data/DataProvider';
-import { useAsync } from '@/lib/useAsync';
+import { LIVE_REFRESH_MS, useAsync } from '@/lib/useAsync';
 import { commerceVocab } from '@/domain/catalog';
 import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import {
@@ -49,7 +49,7 @@ export default function WorkspaceOrdersScreen() {
     const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
     const canAccess = canAccessService(business, meEmployee, currentUser, 'orders');
     return { business, isMember, canAccess, orders, seats };
-  }, [businessId, currentUser?.id]);
+  }, [businessId, currentUser?.id], { refreshMs: LIVE_REFRESH_MS });
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;

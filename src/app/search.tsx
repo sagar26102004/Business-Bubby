@@ -55,6 +55,7 @@ export default function SearchScreen() {
       (b.products ?? []).forEach((p) => add(p.name));
       (b.menu ?? []).forEach((m) => add(m.name));
       (b.services ?? []).forEach((s) => add(s.name));
+      (b.plans ?? []).forEach((p) => add(p.name));
     });
     return Array.from(terms);
   }, []);

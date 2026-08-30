@@ -41,7 +41,10 @@ export default function WorkspaceAccessScreen() {
     if (!business) return null;
     const employees = await repos.employees.listByBusiness(business.id);
     return { business, employees };
-  }, [businessId]);
+    // No refetch on focus: the tick boxes below are seeded from this data and
+    // aren't saved until "Save", so a refetch mid-edit would discard the
+    // changes the owner is in the middle of making.
+  }, [businessId], { refetchOnFocus: false });
 
   // grants[employeeId] = set of granted OFFERED service ids.
   const [grants, setGrants] = useState<Record<string, Set<string>>>({});

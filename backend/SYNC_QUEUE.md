@@ -291,3 +291,178 @@ re-derivation from the Supabase diff is required:
 - **DB/migration:** none.
 - **Verify:** `npm run typecheck` + `npm run build` in `backend/`; save a listing whose Mon–Sat
   carry two shifts (`05:00–10:00` and `17:00–22:00`) and read it back with both intact.
+
+## [SYNC-043] Notify the business when a CUSTOMER sends a chat message
+
+- **Area:** ChatRepository / chat (`send`), NotificationRepository (new kind)
+- **Supabase change:** `src/data/supabase/chat.ts` — `send()` only notified when
+  `author.type === 'business'` (the customer got a `chat_reply`); the other direction was
+  silent, so a customer's message landed in the business inbox and nothing told the team.
+  It now reads the business document once (reused for both branches) and, for
+  `author.type === 'customer'`, emits one `chat_message` notification per business-side
+  recipient. New module-level helper `chatHandlerIds(business)`: the owner, plus every
+  employee whose `Employee.id` is in `business.chatRecipientIds` AND has a `userId`
+  (deduped). This mirrors the call ring targets in `calls.ts` — reading the inbox is the
+  wider right (managers can too), but being PINGED follows the routing the owner set.
+  The employees read is best-effort: under RLS a customer usually cannot list a business's
+  employees, so `data` comes back empty and the notification correctly falls back to the
+  owner alone. Notification shape:
+  `{ kind: 'chat_message', title: '<customer name> · <business name>', body: <message>,
+  businessId, participantId }`.
+- **Domain/interface:** already shared, done — `src/domain/types.ts`:
+  `AppNotification.kind` gained `'chat_message'`, and `AppNotification` gained
+  `participantId?: string` (the customer whose thread it is, so the business side can
+  deep-link to `/inbox/<businessId>/<participantId>`).
+  `src/domain/notifications.ts`: `categoryOfKind` maps `'chat_message'` → `'chats'`, so the
+  existing Chats mute toggle silences it with no new category.
+  Frontend (shared, no Path B work): `src/app/(tabs)/chats.tsx` renders 💬 for it and routes
+  it to `/inbox/<businessId>/<participantId>` (falling back to `/inbox/<businessId>`).
+- **Path B — backend/:** mirror the same in `backend/src/services/chat.ts` `send()`. Port
+  `chatHandlerIds` there — Path B runs privileged (RLS bypassed), so its employees read
+  always succeeds and routed handlers WILL be notified; that is the intended behaviour, the
+  Supabase fallback-to-owner is only an RLS artefact. Also add `'chat_message'` to the kind
+  union in `backend/src/domain/types.ts` (+ `participantId?: string` on the notification)
+  and the `'chat_message' → 'chats'` case in `backend/src/domain/notifications.ts`.
+- **Path B — src/data/api/:** none — `POST /chat/:businessId/:participantId` already returns
+  the thread and notifications are read through the existing notifications endpoints.
+- **DB/migration:** none — `notifications.data` is jsonb and the new kind/field ride inside it.
+- **Verify:** `npm run typecheck` in `backend/`; sign in as a customer, message a business,
+  then sign in as that business's owner — the Chat tab shows an Alerts badge and the alert
+  opens that customer's inbox thread.
+
+## [SYNC-044] `BusinessQuery.limit` — Home lists the N nearest, not a 20 km ring
+
+- **Area:** BusinessRepository / businesses (`list`)
+- **Supabase change:** `src/data/supabase/businesses.ts` `list()` now destructures `limit`
+  from the query and, **after** the existing sort, returns `results.slice(0, limit)` when it
+  is a number. It must stay after the sort (so `limit` + `sortByDistance` means "the N
+  nearest") and it cannot become a PostgREST `.limit()` — distance lives inside the `data`
+  jsonb document and is computed in JS, so a DB-side limit would cut an arbitrary 100 rows
+  before we know which are close.
+- **Domain/interface:** already shared, done — `src/data/repositories.ts` `BusinessQuery`
+  gained `limit?: number` ("return at most this many, applied AFTER sorting"). The mock
+  (`src/data/mock/mockRepositories.ts`) applies the identical slice.
+  Frontend (shared, no Path B work): `src/app/(tabs)/index.tsx` dropped `HOME_RADIUS_KM = 20`
+  / `maxDistanceKm` in favour of `HOME_NEARBY_COUNT = 100` / `limit`, and its empty-state
+  copy no longer mentions a radius. `maxDistanceKm` itself is UNCHANGED and still used by
+  `app/map.tsx` and `LocationPicker` (5 km map viewports) — do not remove it.
+- **Path B — backend/:** `backend/src/services/businesses.ts` `list()` — destructure `limit`
+  alongside `near, maxDistanceKm, sortByDistance` and apply the same post-sort
+  `slice(0, limit)`. `backend/src/routers/businesses.ts` — parse it off the query string
+  next to `maxDistanceKm`: `limit: q.limit != null ? num(q.limit) : undefined`. Update the
+  Swagger annotation for `GET /businesses` with the new optional integer param.
+- **Path B — src/data/api/:** `src/data/api/repositories.ts` around line 98 — add
+  `limit: query.limit,` beside `maxDistanceKm` / `sortByDistance` in the businesses `list`
+  params so the value actually reaches the server. Until this lands, Path B silently
+  returns every business on Home (correct rows, no cap).
+- **DB/migration:** none.
+- **Verify:** `npm run typecheck` in `backend/`; `GET /businesses?near.latitude=…&
+  near.longitude=…&sortByDistance=true&limit=5` returns exactly the 5 closest.
+
+## [SYNC-045] Renewing plans are their own list (`Business.plans`)
+
+- **Area:** BusinessRepository / businesses — a new document field plus one `create` input
+  field. No endpoint, no authz, no migration: it rides inside the existing `data` jsonb.
+- **Why:** `services` meant two different things at once. A gym membership and a call-out
+  electrician sat in one list, so the business page had to guess which button to show —
+  and for a joinable business it hid ordering entirely (`joinTakesServices`), because
+  Enrol and Order pointed at the same rows and landed in two different workspace
+  sections. Plans are now their own list: you ENROL in a plan (`app/enroll` → a pending
+  `Membership`) and you REQUEST a service (the orders desk). Same shape, same folder
+  editor, same catalog screen — different door.
+- **Domain/interface (shared, already done):** `src/domain/types.ts` — `PlanBasis`
+  (`'monthly' | 'quarterly' | 'half_yearly' | 'yearly'`), `PlanItem extends ServiceItem`
+  with `basis?: PlanBasis`, and `Business.plans?: PlanItem[]`.
+  `src/data/repositories.ts` — `CreateBusinessInput.plans?: PlanItem[]`.
+  `src/domain/catalog.ts` — `PLAN_BASES` + `planBasisSticker`.
+  `src/domain/offeringSections.ts` — `PLAN_SECTIONS` library.
+  `src/domain/offerings.ts` — a fifth bucket `'plans'`, plus `planOfferings(business)` and
+  `usesServicesAsPlans(business)`.
+- **Backwards compatibility — READ THIS BEFORE "migrating" anything:** listings made
+  before the split keep their plans in `services`. `planOfferings()` reads a joinable
+  business's `services` AS its plans when `plans` is empty (joinable = `commerceVocab`
+  mode `enroll`/`subscribe`), and the services bucket then renders EMPTY so the same rows
+  can never appear under two buttons. Nothing was migrated in the database and nothing
+  should be: the only thing that moves a legacy list is the owner saving
+  `manage/[businessId]/plans`, which writes `plans` and clears `services`.
+- **Supabase change:** `src/data/supabase/businesses.ts` — `create()` now copies
+  `plans: input.plans` into the business document; the search-term list gained
+  `...(b.plans ?? []).map((p) => p.name)`; and the collection-capture condition on
+  `update()` gained `|| patch.plans`. `update()` itself needed nothing (it merges whole
+  documents).
+- **Path B — backend/:** mirror `PlanBasis`, `PlanItem` and `Business.plans` in
+  `backend/src/domain/types.ts` and `plans` on the create input.
+  In `backend/src/services/businesses.ts`: carry `plans` through `create` exactly like
+  `services`, and add plan names to whatever backs the `query` search so a plan is findable
+  by name (twin of the Supabase change above). Confirm `update` merges the document whole
+  rather than rebuilding it field-by-field — if it whitelists fields, add `plans`.
+- **Path B — src/data/api/:** nothing new to call; `plans` rides inside the business
+  payload on `create`/`update`/`getById`. Just check `src/data/api/businesses.ts` does not
+  strip unknown fields when it maps the response.
+- **DB/migration:** none.
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; register a business with
+  one plan and one service and read it back with both lists intact and distinct; open a
+  legacy gym (plans still in `services`) and confirm it still shows one "Plans &
+  memberships" block with an Enroll button and NO services block.
+
+## [SYNC-046] Drop the verified-customer gate on ratings
+
+- **Area:** ReviewRepository / reviews
+- **Why:** rating was gated behind an accepted order, an accepted/completed booking, or a
+  bill. Someone who ENROLLED in a plan (a membership — e.g. the school bus service) has
+  none of those, so they could never rate the business they subscribe to. Rather than add
+  memberships to the gate, the gate is removed: anyone signed in may rate a listing they
+  don't own.
+- **Supabase change:** `src/data/supabase/reviews.ts` — `eligibilityFor()` now returns
+  `{ eligible: true }` for any real (uuid) customer id; it keeps ONLY the two refusals:
+  not signed in → `'Sign in to rate businesses.'`, and own listing (`business.ownerId ===
+  customerId`) → `'You can’t rate your own business.'`. The orders/bookings/bills lookups
+  are gone. The `submit()` fallback message became `'You can’t rate this business.'`.
+  Same change in `src/data/mock/mockRepositories.ts` (`reviewEligibilityFor`).
+- **Domain/interface (shared, already done):** doc comments only —
+  `src/data/repositories.ts` (`ReviewEligibility`, `ReviewRepository`,
+  `checkEligibility`) and `src/domain/types.ts` (`Review`). No signature changed.
+- **Path B — backend/:** `backend/src/services/reviews.ts` — in `eligibility()`, delete
+  the order/booking/bill queries and the "Ratings come only from verified customers…"
+  refusal; return `{ eligible: true }` once the caller is signed in and is not the
+  business owner. Keep the existing sign-in and owner refusals verbatim. Update the
+  `submit()` fallback throw to `'You can’t rate this business.'` and the file header
+  comment (it says "verified-customer gate"). The route
+  `GET /reviews/business/:businessId/eligibility/:customerId` and its authz are unchanged.
+- **Path B — src/data/api/:** none — same endpoints, same shapes.
+- **DB/migration:** none. (Supabase RLS on `reviews` already only pins the author, it
+  never enforced the transaction gate.)
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; with `EXPO_PUBLIC_BACKEND=api`,
+  a signed-in user with no order/booking/bill for a business gets the star picker instead
+  of the gate screen, and the owner still gets refused on their own listing.
+
+## [SYNC-047] Remove `User.isProfilePublic` (the public-profile toggle)
+
+- **Area:** UserRepository / users + profiles
+- **Why:** the Settings → Privacy "Public profile" switch was the only thing that turned it
+  on or off, and all it ever did was decide whether an employee's profile page was
+  tappable. It was a confusing extra choice for no real privacy (the `profiles` card is
+  world-readable regardless), so the whole concept is gone: an employee row is tappable
+  when the person has an app account, full stop.
+- **Domain/interface (shared, already done):** `src/domain/types.ts` — `isProfilePublic`
+  removed from `User`. `src/data/repositories.ts` — removed from `NewUserInput`.
+- **Supabase change:** `src/data/supabase/auth.ts` + `shared.ts` no longer write the field
+  onto the User objects they build; `src/data/mock/*` and the UI (`app/settings.tsx`
+  Privacy group, `app/employee/[id].tsx` private gate, `app/dev.tsx` 🔒 label,
+  `EmployeeEditor`/`OwnerPicker` "Public/Private profile" subtitle, `EmployeeRow.isPublic`
+  prop) dropped it too. No SQL ran: stale `isProfilePublic` keys left inside
+  `profiles.data` are simply ignored on read.
+- **Path B — backend/:** remove `isProfilePublic` from `backend/src/domain/types.ts`
+  (`User`) and `backend/src/domain/contracts.ts` (the update/create input). In
+  `backend/src/services/users.ts`, delete the `if (patch.isProfilePublic !== undefined)`
+  line from the whitelist in `update()` — ⚠️ do NOT loosen the whitelist itself, it is the
+  only authz guard on that path — and fix the two comments that mention the field (the
+  file header and the note in `search()`).
+- **Path B — src/data/api/:** `src/data/api/auth.ts` already stopped emitting the field
+  (shared file, done). Nothing else to change; no endpoint shape moved.
+- **DB/migration:** none, deliberately. `handle_new_user` and older migrations still seed
+  `'isProfilePublic', true` into the profile document; that key is now inert. Don't write
+  a migration to strip it — rewriting every profile row buys nothing.
+- **Verify:** `npm run typecheck` + `npm run build` in `backend/`; `PATCH /api/users/<me>`
+  with `{"isProfilePublic": false}` is accepted and simply ignored (unknown field), and an
+  employee with an account is tappable from the business page on `EXPO_PUBLIC_BACKEND=api`.

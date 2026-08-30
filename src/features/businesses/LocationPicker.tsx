@@ -112,7 +112,10 @@ export function LocationPicker({ value, onChange }: LocationPickerProps) {
       sortByDistance: true,
     });
     return { center: center.point, nearby };
-  }, []);
+    // No refetch on focus: the map page below is rebuilt whenever this data
+    // changes, and reloading the tiles under a pin the user is placing (after
+    // a trip to another step and back) loses their work for no gain.
+  }, [], { refetchOnFocus: false });
 
   // Like a delivery app: the pin starts on the user's current location and they
   // adjust from there.

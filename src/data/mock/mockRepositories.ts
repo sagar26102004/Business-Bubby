@@ -247,6 +247,8 @@ function businessCaptureInputs(b: Business): CaptureEntryInput[] {
   for (const t of b.tags ?? []) out.push({ kind: 'tag', name: t });
   for (const m of b.menu ?? []) out.push({ kind: 'dish', name: m.name });
   for (const s of b.services ?? []) out.push({ kind: 'service', name: s.name });
+  // A plan is a service by another name as far as the collection is concerned.
+  for (const p of b.plans ?? []) out.push({ kind: 'service', name: p.name });
   for (const p of b.products ?? []) out.push({ kind: 'product', name: p.name });
   return out;
 }
@@ -336,7 +338,7 @@ class MockBusinessRepository implements BusinessRepository {
   async list(query: BusinessQuery = {}): Promise<Business[]> {
     await delay();
     const term = query.search?.trim().toLowerCase();
-    const { near, maxDistanceKm, sortByDistance } = query;
+    const { near, maxDistanceKm, sortByDistance, limit } = query;
 
     const results = businesses
       .filter((b) => (query.type ? b.type === query.type : true))
@@ -361,6 +363,7 @@ class MockBusinessRepository implements BusinessRepository {
           ...(b.products ?? []).map((p) => p.name),
           ...(b.menu ?? []).map((m) => m.name),
           ...(b.services ?? []).map((s) => s.name),
+          ...(b.plans ?? []).map((p) => p.name),
           ...(b.rentals ?? []).map((r) => r.name),
         ]
           .filter(Boolean)
@@ -385,7 +388,8 @@ class MockBusinessRepository implements BusinessRepository {
         : b.createdAt.localeCompare(a.createdAt),
     );
 
-    return results;
+    // After the sort, so `limit` with `sortByDistance` means "the N nearest".
+    return typeof limit === 'number' ? results.slice(0, limit) : results;
   }
 
   async getById(id: string): Promise<Business | null> {
@@ -442,6 +446,7 @@ class MockBusinessRepository implements BusinessRepository {
       priceLabel: input.priceLabel,
       menu: input.menu,
       services: input.services,
+      plans: input.plans,
       products: withProductIds(input.products),
       hours: input.hours,
       openingHours: input.openingHours,
@@ -520,7 +525,8 @@ class MockBusinessRepository implements BusinessRepository {
     // Products edited in Manage come back without ids for the new rows.
     if (patch.products) business.products = withProductIds(patch.products);
     // Manage edits add new tags/menu/services/products — capture them too.
-    if (patch.tags || patch.menu || patch.services || patch.products) captureFromBusiness(business);
+    if (patch.tags || patch.menu || patch.services || patch.plans || patch.products)
+      captureFromBusiness(business);
     return clone(business);
   }
 
@@ -752,7 +758,6 @@ class MockUserRepository implements UserRepository {
       id: nextId('u'),
       name: input.name.trim() || 'Test user',
       email: input.email?.trim() || undefined,
-      isProfilePublic: input.isProfilePublic ?? true,
     };
     users.push(user);
     return clone(user);
@@ -841,7 +846,6 @@ class MockAuthRepository implements AuthRepository {
       username,
       email,
       phone,
-      isProfilePublic: false,
     };
     users.push(user);
     currentUserId = user.id;
@@ -869,7 +873,6 @@ class MockAuthRepository implements AuthRepository {
     const guest: User = {
       id: nextId('u_guest'),
       name: 'Guest',
-      isProfilePublic: false,
       isAnonymous: true,
     };
     users.push(guest);
@@ -1065,7 +1068,6 @@ function anonymizeAccount(userId: string): number {
     users[index] = {
       id: userId,
       name: DELETED_NAME,
-      isProfilePublic: false,
       deletedAt: new Date().toISOString(),
     };
   }
@@ -1170,18 +1172,44 @@ class MockChatRepository implements ChatRepository {
 
     // Notify the customer when the business replies, so they don't have to
     // reopen the chat to notice.
+    const business = businesses.find((b) => b.id === businessId);
     if (author.type === 'business') {
-      const businessName = businesses.find((b) => b.id === businessId)?.name ?? 'A business';
       notifications.push({
         id: nextId('n'),
         recipientId: participantId,
         kind: 'chat_reply',
-        title: `${author.name} from ${businessName}`,
+        title: `${author.name} from ${business?.name ?? 'A business'}`,
         body: body.trim(),
         businessId,
         read: false,
         createdAt: new Date().toISOString(),
       });
+    } else if (business) {
+      // And the other way round: tell the business someone wrote in. Who is
+      // pinged mirrors the call ring targets — the owner plus the employees
+      // chat is routed to (`chatRecipientIds`) who have an app account.
+      const routed = new Set(business.chatRecipientIds ?? []);
+      const recipientIds = Array.from(
+        new Set([
+          business.ownerId,
+          ...employees
+            .filter((e) => e.businessId === businessId && routed.has(e.id) && e.userId)
+            .map((e) => e.userId!),
+        ]),
+      );
+      recipientIds.forEach((recipientId) =>
+        notifications.push({
+          id: nextId('n'),
+          recipientId,
+          kind: 'chat_message',
+          title: `${author.name} · ${business.name}`,
+          body: body.trim(),
+          businessId,
+          participantId,
+          read: false,
+          createdAt: new Date().toISOString(),
+        }),
+      );
     }
 
     return messages.filter((m) => m.threadKey === key).map(clone);
@@ -2000,9 +2028,9 @@ class MockCustomerRepository implements CustomerRepository {
 // ── Reviews ─────────────────────────────────────────────────────────────────
 
 /**
- * The verified-customer gate: only someone who actually did business with the
- * listing may rate it — an accepted order, an accepted/completed booking, or a
- * bill in their name. Chats and calls alone don't count (anyone can message).
+ * The rating gate: anyone signed in may rate a listing, as long as it isn't
+ * their own. No prior order/booking/bill is required — subscribing to a plan,
+ * chatting, or simply visiting is enough of a reason to have an opinion.
  */
 function reviewEligibilityFor(businessId: string, customerId: string): ReviewEligibility {
   if (!customerId || customerId === 'guest') {
@@ -2012,24 +2040,7 @@ function reviewEligibilityFor(businessId: string, customerId: string): ReviewEli
   if (business?.ownerId === customerId) {
     return { eligible: false, reason: 'You can’t rate your own business.' };
   }
-  const hasOrder = orders.some(
-    (o) => o.businessId === businessId && o.customerId === customerId && o.status === 'accepted',
-  );
-  const hasBooking = bookings.some(
-    (b) =>
-      b.businessId === businessId &&
-      b.customerId === customerId &&
-      (b.status === 'accepted' || b.status === 'completed'),
-  );
-  const hasBill = bills.some(
-    (b) => b.businessId === businessId && b.customerId === customerId,
-  );
-  if (hasOrder || hasBooking || hasBill) return { eligible: true };
-  return {
-    eligible: false,
-    reason:
-      'Ratings come only from verified customers. Place an order, book a service, or get billed by this business first — then you can rate your experience.',
-  };
+  return { eligible: true };
 }
 
 class MockReviewRepository implements ReviewRepository {
@@ -2074,7 +2085,7 @@ class MockReviewRepository implements ReviewRepository {
     // Editing an existing review stays allowed; only NEW reviews pass the gate.
     if (!existing) {
       const gate = reviewEligibilityFor(input.businessId, input.customerId);
-      if (!gate.eligible) throw new Error(gate.reason ?? 'Only customers can rate this business.');
+      if (!gate.eligible) throw new Error(gate.reason ?? 'You can’t rate this business.');
     }
 
     // Fold the rating into the business's aggregate. The seeded avg/count act

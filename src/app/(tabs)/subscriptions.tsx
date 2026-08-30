@@ -8,9 +8,9 @@
  * breakdown; ‹ › pages back through previous months (MembershipRepository
  * .monthlySpend, newest first).
  */
-import { useCallback, useRef, useState } from 'react';
+import { useState } from 'react';
 import { LayoutAnimation, Modal, Pressable, StyleSheet, View } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import type { Membership, TrackedItem } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -85,15 +85,6 @@ export default function SubscriptionsScreen() {
     ]);
     return { subs, months, tracked };
   }, [currentUser?.id]);
-
-  // Refresh when the tab regains focus (a business may have enrolled you).
-  const reloadRef = useRef(reload);
-  reloadRef.current = reload;
-  useFocusEffect(
-    useCallback(() => {
-      reloadRef.current();
-    }, []),
-  );
 
   if (isGuest) {
     return (

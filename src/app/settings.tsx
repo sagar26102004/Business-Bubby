@@ -11,11 +11,10 @@
  * the rest. Delete leads to `/delete-account`, which explains itself before
  * anything happens; Play requires that path to exist and to be findable.
  */
-import { useState } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Constants from 'expo-constants';
 import { Stack, useRouter } from 'expo-router';
-import { useAuth, useRepositories } from '@/data/DataProvider';
+import { useAuth } from '@/data/DataProvider';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { DEV_TOOLS_ENABLED } from '@/lib/devTools';
 import { PRIVACY_POLICY_URL, SUPPORT_URL, TERMS_URL, openLegalPage } from '@/lib/legal';
@@ -24,9 +23,7 @@ import { spacing } from '@/theme/theme';
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { currentUser, authLoading, setCurrentUser, signOut } = useAuth();
-  const repos = useRepositories();
-  const [savingVisibility, setSavingVisibility] = useState(false);
+  const { currentUser, authLoading, signOut } = useAuth();
 
   const version = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -47,16 +44,6 @@ export default function SettingsScreen() {
       </Screen>
     );
   }
-
-  const togglePublic = async (value: boolean) => {
-    setSavingVisibility(true);
-    try {
-      const updated = await repos.users.update(currentUser.id, { isProfilePublic: value });
-      setCurrentUser(updated);
-    } finally {
-      setSavingVisibility(false);
-    }
-  };
 
   return (
     <Screen scroll>
@@ -80,21 +67,6 @@ export default function SettingsScreen() {
           label="Password"
           sub="Change the password you sign in with"
           onPress={() => router.push('/change-password')}
-        />
-      </ListGroup>
-
-      <ListGroup title="Privacy" style={styles.group}>
-        <ListRow
-          icon="shield"
-          label="Public profile"
-          sub="When on, businesses can list you as an employee and customers can view your profile."
-          accessory={
-            <Switch
-              value={currentUser.isProfilePublic}
-              onValueChange={togglePublic}
-              disabled={savingVisibility}
-            />
-          }
         />
       </ListGroup>
 

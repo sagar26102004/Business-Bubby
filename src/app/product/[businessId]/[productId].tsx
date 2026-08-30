@@ -11,24 +11,27 @@
  * (several conversations run side by side under one item) and marks the item
  * SOLD when it's gone; the listing and its thread stay readable afterwards.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
+  ScrollView,
   StyleSheet,
   TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { ProductMessage } from '@/domain/types';
 import { formatDistance, getSubcategory } from '@/domain/catalog';
 import { productDetailLine } from '@/domain/goods';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
 import {
   Button,
@@ -56,6 +59,15 @@ export default function ProductScreen() {
   const colors = useColors();
   const { currentUser, isGuest } = useAuth();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardInset();
+
+  // The composer sits at the bottom of a long page, so the keyboard would cover
+  // it: make room below it, then scroll it up into what is left.
+  const pageRef = useRef<ScrollView>(null);
+  const revealComposer = useCallback(() => {
+    setTimeout(() => pageRef.current?.scrollToEnd({ animated: true }), 120);
+  }, []);
 
   const [photoIndex, setPhotoIndex] = useState(0);
   const [text, setText] = useState('');
@@ -195,7 +207,12 @@ export default function ProductScreen() {
   const specLine = productDetailLine(product);
 
   return (
-    <Screen scroll padded={false}>
+    <Screen
+      scroll
+      padded={false}
+      scrollRef={pageRef}
+      contentStyle={{ paddingBottom: insets.bottom + spacing.xl + keyboard }}
+    >
       <Stack.Screen options={{ title: product.name }} />
 
       {/* Photos — swipe through them, Amazon-style, with dots underneath. */}
@@ -521,6 +538,7 @@ export default function ProductScreen() {
                     value={offerPrice}
                     onChangeText={(t) => setOfferPrice(sanitizePriceInput(t))}
                     keyboardType="numeric"
+                    onFocus={revealComposer}
                     onSubmitEditing={() => post()}
                     style={[styles.offerInput, { color: colors.text }]}
                   />
@@ -549,6 +567,7 @@ export default function ProductScreen() {
                     if (formError) setFormError(null);
                   }}
                   multiline
+                  onFocus={revealComposer}
                   style={[styles.chatInput, { color: colors.text, backgroundColor: colors.surfaceAlt }]}
                 />
 

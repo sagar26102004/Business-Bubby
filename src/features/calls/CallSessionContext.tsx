@@ -34,6 +34,7 @@ import {
   type ReactNode,
 } from 'react';
 import { AppState } from 'react-native';
+import { useAudioPlayer } from 'expo-audio';
 import { router } from 'expo-router';
 import type { Call } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -57,6 +58,16 @@ const POLL_MS = 1500;
  * of the other person's call within a minute.
  */
 const HEARTBEAT_MS = 10_000;
+
+/**
+ * What the CALLER hears while the other end is being rung.
+ *
+ * Same cadence file as the incoming ring on purpose — a ringback tone IS the
+ * ring signal played back down the line, which is why the two have always
+ * sounded alike on a real phone. (assets/ringtone.wav: a 4s loop of the classic
+ * 440+480 Hz cadence.)
+ */
+const RINGBACK = require('../../../assets/ringtone.wav');
 
 export interface CallSession {
   /** The call being polled, or null when there is none. */
@@ -117,6 +128,47 @@ export function CallSessionProvider({ children }: { children: ReactNode }) {
 
   // The real audio room. Mounted HERE, so it outlives every screen.
   const audio = useCallAudio(callId ?? '', !!callId && joined, muted);
+
+  // ------------------------------------------------------------------ ringback
+
+  /**
+   * Ring in the CALLER's ear while they wait. The person being called has rung
+   * since day one (IncomingCallGate), but whoever placed the call got silence
+   * under a "Ringing…" label — and a silent call is indistinguishable from a
+   * broken one, so people hang up on calls that were connecting fine.
+   *
+   * `ringing` + already `joined` is exactly and only the caller: everyone being
+   * rung sits at `state: 'ringing'` (and hears the incoming ringtone instead),
+   * and the first person to answer flips the call to `active`, which stops this.
+   * It lives in the provider rather than the call screen for the same reason
+   * everything else here does — navigating away must not silence it.
+   *
+   * Deliberately does NOT touch the global audio mode: expo-audio already plays
+   * in silent mode by default and requests no audio focus, so this cannot
+   * disturb the LiveKit session coming up underneath it.
+   */
+  const ringback = useAudioPlayer(RINGBACK);
+  const ringingOut = live && call?.status === 'ringing' && me?.state === 'joined';
+  useEffect(() => {
+    if (!ringingOut) return;
+    try {
+      ringback.loop = true;
+      // Softer than the incoming ring — this one is held against an ear.
+      ringback.volume = 0.6;
+      ringback.play();
+    } catch {
+      /* a missing ringback is cosmetic; it must never break the call */
+    }
+    return () => {
+      try {
+        ringback.pause();
+        // Rewind so the next call opens on the tone, not mid-silence.
+        void ringback.seekTo(0);
+      } catch {
+        /* player already released */
+      }
+    };
+  }, [ringingOut, ringback]);
 
   const enter = useCallback((id: string) => {
     setCallId((current) => {

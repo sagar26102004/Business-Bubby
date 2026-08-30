@@ -3,7 +3,7 @@
  * thread per customer per business, keyed by (business_id, participant_id);
  * participant_id is a user id or the literal 'guest'.
  */
-import type { ChatMessage } from '@/domain/types';
+import type { Business, ChatMessage, Employee } from '@/domain/types';
 import type {
   ChatAuthor,
   ChatRepository,
@@ -13,6 +13,26 @@ import type {
 import { sb, uuid, nowIso, notify } from './shared';
 
 const threadKeyFor = (businessId: string, participantId: string) => `${businessId}:${participantId}`;
+
+/**
+ * Who on the business side is told a customer wrote in. Mirrors the call ring
+ * targets: the owner, plus the employees the owner routed chat to
+ * (`chatRecipientIds`) who actually have an app account to be notified on.
+ * Reading the inbox is a wider right (managers can too) — being PINGED follows
+ * the routing the owner set, exactly like `callHandlerIds`.
+ */
+async function chatHandlerIds(business: Business): Promise<string[]> {
+  const ids = [business.ownerId];
+  const routed = new Set(business.chatRecipientIds ?? []);
+  if (routed.size > 0) {
+    const { data } = await sb().from('employees').select('data').eq('business_id', business.id);
+    (data ?? [])
+      .map((r) => r.data as Employee)
+      .filter((e) => routed.has(e.id) && e.userId)
+      .forEach((e) => ids.push(e.userId!));
+  }
+  return Array.from(new Set(ids));
+}
 
 async function namesFor(userIds: string[]): Promise<Map<string, string>> {
   const ids = userIds.filter((id) => id && id !== 'guest');
@@ -60,16 +80,34 @@ export function createSupabaseChat(): ChatRepository {
       });
       if (error) throw error;
 
+      const { data: bizRow } = await sb()
+        .from('businesses')
+        .select('data')
+        .eq('id', businessId)
+        .maybeSingle();
+      const business = bizRow?.data as Business | undefined;
+
       if (author.type === 'business') {
-        const { data } = await sb().from('businesses').select('data').eq('id', businessId).maybeSingle();
-        const businessName = (data?.data as { name?: string } | undefined)?.name ?? 'A business';
         await notify({
           recipientId: participantId,
           kind: 'chat_reply',
-          title: `${author.name} from ${businessName}`,
+          title: `${author.name} from ${business?.name ?? 'A business'}`,
           body: body.trim(),
           businessId,
         });
+      } else if (business) {
+        // The other direction, which used to be silent: a customer's message
+        // landed in the inbox and nothing told the business it was there.
+        for (const recipientId of await chatHandlerIds(business)) {
+          await notify({
+            recipientId,
+            kind: 'chat_message',
+            title: `${author.name} · ${business.name}`,
+            body: body.trim(),
+            businessId,
+            participantId,
+          });
+        }
       }
       return this.listThread(businessId, participantId);
     },

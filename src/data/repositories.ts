@@ -28,6 +28,7 @@ import type {
   Membership,
   MembershipPayment,
   MenuItem,
+  PlanItem,
   MonthlySpend,
   Offer,
   OfferingKind,
@@ -66,6 +67,14 @@ export interface BusinessQuery {
   maxDistanceKm?: number;
   /** Sort results nearest-first (requires `near`). */
   sortByDistance?: boolean;
+  /**
+   * Return at most this many, applied AFTER sorting — so with
+   * `sortByDistance` it is "the N nearest". A count is the honest way to bound
+   * a nearby list: a radius that is generous downtown leaves a village with an
+   * empty screen, while "the 100 closest" fills the screen wherever you stand
+   * and simply reaches further where things are sparse.
+   */
+  limit?: number;
 }
 
 /** Input for creating an employee while registering a business. */
@@ -99,7 +108,10 @@ export interface NewBusinessInput {
   website?: string;
   priceLabel?: string;
   menu?: MenuItem[];
+  /** One-off services, requested through the order desk. */
   services?: ServiceItem[];
+  /** Renewing plans, joined through `app/enroll` — never ordered. */
+  plans?: PlanItem[];
   products?: ProductItem[];
   /** Free-text hours customers can contact the business, e.g. "9 AM – 6 PM". */
   hours?: string;
@@ -236,7 +248,6 @@ export interface ChatRepository {
 export interface NewUserInput {
   name: string;
   email?: string;
-  isProfilePublic?: boolean;
 }
 
 export interface UserRepository {
@@ -769,7 +780,7 @@ export interface NewReviewInput {
   comment?: string;
 }
 
-/** Whether a customer may rate a business, and why not when they can't. */
+/** Whether this user may rate a business, and why not when they can't. */
 export interface ReviewEligibility {
   eligible: boolean;
   /** Human explanation when not eligible, shown on the rate screen. */
@@ -777,17 +788,16 @@ export interface ReviewEligibility {
 }
 
 /**
- * Verified-customer ratings. A review can only come from someone who actually
- * did business with the listing — an accepted order, an accepted or completed
- * booking, or a bill in their name — so strangers can't post fraud ratings.
- * One review per customer per business; submitting again edits it in place.
+ * Ratings. Any signed-in user may rate a listing they don't own — no prior
+ * order, booking or bill is required. One review per customer per business;
+ * submitting again edits it in place.
  */
 export interface ReviewRepository {
   /** A business's reviews, newest first. */
   listForBusiness(businessId: string): Promise<Review[]>;
   /** This customer's existing review of the business, if any. */
   getMine(businessId: string, customerId: string): Promise<Review | null>;
-  /** The verified-customer gate (owners are never eligible for their own). */
+  /** The rating gate (signed in, and never your own listing). */
   checkEligibility(businessId: string, customerId: string): Promise<ReviewEligibility>;
   /**
    * Create or update the customer's review. Enforces eligibility, rejects

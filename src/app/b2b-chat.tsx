@@ -5,19 +5,13 @@
  * "<member> · <business>". Members-only, like the workspace.
  */
 import { useEffect, useRef, useState } from 'react';
-import {
-  FlatList,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import type { BizChatMessage } from '@/domain/types';
 import { useAuth, useRepositories } from '@/data/DataProvider';
-import { useAsync } from '@/lib/useAsync';
+import { CHAT_REFRESH_MS, useAsync } from '@/lib/useAsync';
+import { useKeyboardInset } from '@/lib/useKeyboardInset';
 import { EmptyView, ErrorView, LoadingView, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
@@ -26,11 +20,21 @@ export default function B2BChatScreen() {
   const repos = useRepositories();
   const colors = useColors();
   const { currentUser } = useAuth();
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardInset();
 
   const [thread, setThread] = useState<BizChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const listRef = useRef<FlatList<BizChatMessage>>(null);
+
+  // The composer lifting shrinks the list — follow it down so the last message
+  // stays in view instead of sliding under the keyboard.
+  useEffect(() => {
+    if (keyboard > 0) {
+      requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: true }));
+    }
+  }, [keyboard]);
 
   const { data, loading, error, reload } = useAsync(async () => {
     const [mine, theirs, employees] = await Promise.all([
@@ -46,16 +50,24 @@ export default function B2BChatScreen() {
     return { mine, theirs, isMember };
   }, [me, other, currentUser?.id]);
 
+  // Re-read the conversation every few seconds while it's on screen, so the
+  // other business's replies arrive without leaving and coming back.
+  const threadKey = `${me}:${other}`;
+  const { data: fetched } = useAsync(
+    () => repos.bizChat.listMessages(me, other),
+    [repos, me, other],
+    { enabled: !!me && !!other, refreshMs: CHAT_REFRESH_MS },
+  );
+
+  // A poll that raced the message I just sent must not swallow it again: within
+  // one conversation, only take the fetched thread once it has caught up with
+  // what's already on screen. A different conversation always replaces it.
+  const shownKey = useRef(threadKey);
   useEffect(() => {
-    let active = true;
-    if (!me || !other) return;
-    repos.bizChat.listMessages(me, other).then((msgs) => {
-      if (active) setThread(msgs);
-    });
-    return () => {
-      active = false;
-    };
-  }, [repos, me, other]);
+    if (!fetched) return;
+    setThread((prev) => (shownKey.current === threadKey && fetched.length < prev.length ? prev : fetched));
+    shownKey.current = threadKey;
+  }, [fetched, threadKey]);
 
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
   if (loading || !data) return <LoadingView />;
@@ -89,10 +101,7 @@ export default function B2BChatScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+    <View style={[styles.flex, { paddingBottom: keyboard }]}>
       <Stack.Screen options={{ title: `🏢 ${data.theirs.name}` }} />
       <FlatList
         ref={listRef}
@@ -100,6 +109,7 @@ export default function B2BChatScreen() {
         keyExtractor={(m) => m.id}
         style={[styles.flex, { backgroundColor: colors.background }]}
         contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
         onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={
           <Text tone="muted" style={styles.emptyText}>
@@ -128,7 +138,18 @@ export default function B2BChatScreen() {
           );
         }}
       />
-      <View style={[styles.inputRow, { borderTopColor: colors.border, backgroundColor: colors.surface }]}>
+      <View
+        style={[
+          styles.inputRow,
+          {
+            borderTopColor: colors.border,
+            backgroundColor: colors.surface,
+            // Clear of the gesture bar when the keyboard is down; the keyboard
+            // inset already covers that strip when it is up.
+            paddingBottom: spacing.md + (keyboard > 0 ? 0 : insets.bottom),
+          },
+        ]}
+      >
         <TextInput
           value={draft}
           onChangeText={setDraft}
@@ -144,7 +165,7 @@ export default function B2BChatScreen() {
           </Text>
         </Pressable>
       </View>
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 

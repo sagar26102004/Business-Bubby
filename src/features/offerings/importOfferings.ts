@@ -34,10 +34,23 @@
  * ("Unexpected token } in JSON at position 214") are useless to a shop owner.
  * This parser accepts the shorthand and reports "Line 7: …" instead.
  */
-import type { MenuItem, ProductItem, RentalBasis, RentalItem, ServiceItem } from '@/domain/types';
+import type {
+  MenuItem,
+  PlanBasis,
+  PlanItem,
+  ProductItem,
+  RentalBasis,
+  RentalItem,
+  ServiceItem,
+} from '@/domain/types';
 import { findFoodSection } from '@/domain/foodMenu';
 import { findProductCategory } from '@/domain/goods';
-import { RENTAL_SECTIONS, SERVICE_SECTIONS, findSection } from '@/domain/offeringSections';
+import {
+  PLAN_SECTIONS,
+  RENTAL_SECTIONS,
+  SERVICE_SECTIONS,
+  findSection,
+} from '@/domain/offeringSections';
 import { joinSubcategoryPath } from '@/domain/subcategoryPath';
 import { formatMoney, parsePrice } from '@/lib/money';
 
@@ -492,6 +505,32 @@ export function toServiceItem(row: ImportedOffering): ServiceItem {
     category: canonical(row.category, (n) => findSection(SERVICE_SECTIONS, n)),
     subcategory: joinSubcategoryPath(row.path),
     imageUrl: row.imageUrl,
+  };
+}
+
+/**
+ * A plan reads its renewal period off `per` / `basis` the way a rental reads
+ * per-day/per-month — "Annual: { price: 10000, per: year }".
+ */
+export function toPlanItem(row: ImportedOffering, fallback?: PlanBasis): PlanItem {
+  const raw = row.basis ?? '';
+  const basis: PlanBasis | undefined = /year|annual/i.test(raw)
+    ? 'yearly'
+    : /half|6\s*month/i.test(raw)
+      ? 'half_yearly'
+      : /quarter|3\s*month/i.test(raw)
+        ? 'quarterly'
+        : /month/i.test(raw)
+          ? 'monthly'
+          : fallback;
+  return {
+    name: row.name,
+    price: row.price,
+    description: row.description,
+    category: canonical(row.category, (n) => findSection(PLAN_SECTIONS, n)),
+    subcategory: joinSubcategoryPath(row.path),
+    imageUrl: row.imageUrl,
+    basis,
   };
 }
 

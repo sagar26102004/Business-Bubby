@@ -264,7 +264,7 @@ export async function fetchPrivateProfiles(
 /**
  * Read a profile as a domain User, or null when it doesn't exist yet.
  *
- * `profiles` holds the PUBLIC directory card (name, isProfilePublic, avatar);
+ * `profiles` holds the PUBLIC directory card (name, avatar, bio);
  * phone/email/mutes live in `profiles_private`. Both are read and merged here,
  * so callers keep getting one `User` — but the private half comes back empty
  * unless you're that user (or a super-admin), enforced by RLS rather than by
@@ -313,7 +313,7 @@ export async function withAdminFlag(user: User): Promise<User> {
 
 /** A minimal User when the profile row hasn't been created yet (trigger lag). */
 export function fallbackUser(id: string, name?: string): User {
-  return { id, name: name || 'You', isProfilePublic: true };
+  return { id, name: name || 'You' };
 }
 
 /**

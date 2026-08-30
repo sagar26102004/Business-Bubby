@@ -19,7 +19,8 @@ import { useMemo, useState } from 'react';
 import { LayoutAnimation, Pressable, StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
-import type { Membership, User } from '@/domain/types';
+import type { Membership, PlanItem, User } from '@/domain/types';
+import { planOfferings } from '@/domain/offerings';
 import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -181,20 +182,29 @@ export default function WorkspaceMembersScreen() {
     .map((c) => ({ key: c.key, name: c.name, hasAccount: c.hasAccount }));
 
   // A subscription request should be accepted like an order: the price is
-  // already set on the business's page (its services), so the owner never
-  // re-types it. Look the plan's price up from the listed services — matching
-  // by name, or the lone service when there's just one.
-  const services = business.services ?? [];
+  // already set on the business's page (its plans), so the owner never
+  // re-types it. Look the plan's price up from the listed plans — matching by
+  // name, or the lone plan when there's just one. `planOfferings` also covers
+  // a listing that still keeps its plans in `services`.
+  const plans = planOfferings(business);
   const planNameFor = (m: Membership): string | undefined =>
-    m.requestedPlan ?? (services.length === 1 ? services[0].name : undefined);
+    m.requestedPlan ?? (plans.length === 1 ? plans[0].name : undefined);
+  /**
+   * Only a MONTHLY plan's price can be prefilled: a membership is priced per
+   * month (`pricePerMonth`) and every cycle downstream is monthly, so handing
+   * over a yearly ₹10,000 as a one-tap accept would file it as a monthly fee.
+   * The owner types that one, which is the honest answer.
+   */
+  const monthlyPrice = (plan?: PlanItem): number | undefined =>
+    plan && (!plan.basis || plan.basis === 'monthly') ? parsePrice(plan.price) : undefined;
   const priceFor = (m: Membership): number | undefined => {
     if (m.requestedPrice != null) return m.requestedPrice;
     const plan = planNameFor(m);
     const match = plan
-      ? services.find((s) => s.name.trim().toLowerCase() === plan.trim().toLowerCase())
+      ? plans.find((s) => s.name.trim().toLowerCase() === plan.trim().toLowerCase())
       : undefined;
-    if (match) return parsePrice(match.price);
-    return services.length === 1 ? parsePrice(services[0].price) : undefined;
+    if (match) return monthlyPrice(match);
+    return plans.length === 1 ? monthlyPrice(plans[0]) : undefined;
   };
 
   const toggleExpand = (key: string) => {
