@@ -6,13 +6,22 @@
  *
  * The picker hands back LOCAL uris (file:// on a phone, blob: on web), which
  * only exist on the device that picked them. Every pick therefore goes through
- * `uploadMedia` (lib/upload.ts) on its way out: on the Supabase backend that
- * returns a public URL other phones can actually load, and with no backend
- * configured it hands the local uri straight back — the old session-only
- * behaviour, unchanged, with no branch here.
+ * `uploadAll` (lib/upload.ts) on its way out: with a backend configured that
+ * returns a public URL other phones can actually load, and without one it hands
+ * the local uri straight back — the old session-only behaviour, unchanged, with
+ * no branch here.
  *
  * Picked photos show IMMEDIATELY from their local uri while the upload runs, so
  * the seller is never watching a blank box.
+ *
+ * AND WHEN AN UPLOAD FAILS, SAY SO. `uploadMedia` never throws — it returns the
+ * local uri — so a failed upload renders an apparently finished thumbnail and
+ * the parent saves a `file://` onto the domain object. `isLocalUri` is checked
+ * after every batch for exactly that reason; without it a misconfigured storage
+ * backend is indistinguishable from a working one until a customer complains.
+ *
+ * The committed strip is drawn through `thumbUrl`, so a 110 px thumbnail costs
+ * 110 px worth of bytes rather than the full stored image.
  */
 import { useState } from 'react';
 import {
@@ -26,7 +35,8 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Text } from '@/components/ui';
-import { uploadAll } from '@/lib/upload';
+import { isLocalUri, uploadAll } from '@/lib/upload';
+import { thumbUrl } from '@/lib/media';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 export interface PhotosFieldProps {
@@ -62,12 +72,36 @@ export function PhotosField({
     if (picked.length === 0) return;
     setPending(picked.map((a) => a.uri));
     const urls = await uploadAll(
-      picked.map((a) => a.uri),
-      { kind: 'image', mimeType: picked[0]?.mimeType, fileName: picked[0]?.fileName ?? undefined },
+      // Per file, not per batch — a mixed .png/.jpg selection used to label the
+      // second one as the first. `fileSize` lets an over-size photo be refused
+      // with a sentence instead of an opaque rejection from storage.
+      picked.map((a) => ({
+        uri: a.uri,
+        kind: 'image' as const,
+        mimeType: a.mimeType,
+        fileName: a.fileName ?? undefined,
+        bytes: a.fileSize,
+      })),
       (message) => setError(`Couldn’t upload: ${message}. The photo is saved on this device only.`),
     );
     setPending([]);
     onChange([...value, ...urls].slice(0, max));
+
+    // A FAILED UPLOAD LOOKS EXACTLY LIKE A SUCCESSFUL ONE. `uploadMedia` never
+    // throws — it hands back the local `file://` uri — so without this the strip
+    // shows a finished thumbnail, the parent saves that uri onto the business,
+    // and the seller believes the photo is live when only their own phone can
+    // see it. `onError` covers the cases that know why; this covers the rest.
+    const stranded = urls.filter(isLocalUri).length;
+    if (stranded > 0) {
+      setError((existing) =>
+        // Don't clobber a specific reason that onError already set.
+        existing ??
+        `${stranded === 1 ? 'That photo' : `${stranded} photos`} couldn’t be uploaded and ${
+          stranded === 1 ? 'is' : 'are'
+        } on this phone only — other people will see a blank space. Try again on a better connection.`,
+      );
+    }
   };
 
   const takePhoto = async () => {
@@ -123,7 +157,7 @@ export function PhotosField({
           <View style={styles.stripRow}>
             {value.map((uri, i) => (
               <View key={`${uri}-${i}`}>
-                <Image source={{ uri }} style={styles.thumb} resizeMode="cover" />
+                <Image source={{ uri: thumbUrl(uri) }} style={styles.thumb} resizeMode="cover" />
                 <Pressable
                   onPress={() => remove(i)}
                   hitSlop={6}

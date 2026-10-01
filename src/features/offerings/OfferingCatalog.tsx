@@ -41,6 +41,7 @@ import { EmptyView, ErrorView, LoadingView, Text } from '@/components/ui';
 import { VegDot } from '@/features/businesses/FoodMenuEditor';
 import { useCart } from '@/features/orders/CartContext';
 import { totalLabel, totalOf } from '@/features/orders/orderUtils';
+import { thumbUrl } from '@/lib/media';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 /**
@@ -423,7 +424,7 @@ function ItemCard({
 
       <View style={styles.itemMedia}>
         {item.imageUrl ? (
-          <Image source={{ uri: item.imageUrl }} style={styles.photo} resizeMode="cover" />
+          <Image source={{ uri: thumbUrl(item.imageUrl) }} style={styles.photo} resizeMode="cover" />
         ) : (
           <View style={[styles.photo, styles.photoBlank, { backgroundColor: colors.surfaceAlt }]}>
             <Text style={styles.photoIcon}>{icon}</Text>

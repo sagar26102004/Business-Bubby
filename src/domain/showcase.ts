@@ -22,7 +22,13 @@ import type { PortfolioItem, ShowcaseLinkKind } from './types';
 export const MAX_SHOWCASE_PHOTOS = 3;
 /** Videos we host per listing — video is the expensive one. */
 export const MAX_SHOWCASE_VIDEOS = 1;
-/** And it has to be short: the media bucket's ceiling is 50 MB a file. */
+/**
+ * And it has to be short, because duration is the ONLY size control there is.
+ * Nothing on the client can re-encode a video, and the delivery CDN won't be
+ * asked to either — transcoding is billed per second of footage, which makes it
+ * the most expensive operation available on a free plan. So this number, and the
+ * twin in features/media/VideoField.tsx, are the whole of video cost control.
+ */
 export const MAX_SHOWCASE_VIDEO_SECONDS = 60;
 
 export const countPhotos = (items: PortfolioItem[]): number =>

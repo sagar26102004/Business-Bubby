@@ -22,6 +22,13 @@
  *                                     more. Objects still referenced by a
  *                                     business the person TRANSFERRED on the
  *                                     way out are deliberately left alone.
+ *                                     TWO stores, because uploads moved: the
+ *                                     Supabase `media` bucket for anything
+ *                                     from before the move (3), and Cloudinary
+ *                                     for everything since (3b). Postgres
+ *                                     cannot see Cloudinary, so without 3b
+ *                                     this step quietly reports 0 and a
+ *                                     deleted account keeps its photos.
  *   4. `auth.admin.deleteUser`      — LAST, on purpose. If it fails, the person
  *                                     is left with an account they can still
  *                                     sign in to and retry, which is far kinder
@@ -35,7 +42,10 @@
  *
  * Deploy:  supabase functions deploy delete-account
  * Secrets: SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are
- *          injected by the platform; nothing extra to configure.
+ *          injected by the platform. CLOUDINARY_CLOUD_NAME / _API_KEY /
+ *          _API_SECRET are the same three `cloudinary-sign` uses, and step 3b
+ *          needs them — without them the Cloudinary sweep does nothing and
+ *          silently reports 0 files removed.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
@@ -68,6 +78,82 @@ interface Blocker {
   business_id: string;
   business_name: string;
   reasons: string[];
+}
+
+/**
+ * Remove this user's Cloudinary uploads that nothing points at any more.
+ *
+ * The Admin API is the only way to see what is actually stored there, and it
+ * authenticates with HTTP Basic (`api_key:api_secret`) rather than the signed
+ * form the upload endpoint uses — no signature to build.
+ *
+ * `unreferenced` is injected rather than queried here so the "is anything still
+ * pointing at this?" rule lives in ONE place (`media_keys_unreferenced`, 0023)
+ * and cannot drift from the Supabase-bucket sweep beside it.
+ *
+ * Returns how many objects were removed. NEVER THROWS — same reasoning as the
+ * sweep it sits next to: a leftover file is a tidiness problem, and failing the
+ * deletion over it would leave the person with an account they were told was
+ * gone. With the secrets unset it simply does nothing and reports 0.
+ */
+async function sweepCloudinary(
+  userId: string,
+  unreferenced: (keys: string[]) => Promise<string[]>,
+): Promise<number> {
+  const cloud = Deno.env.get('CLOUDINARY_CLOUD_NAME');
+  const apiKey = Deno.env.get('CLOUDINARY_API_KEY');
+  const apiSecret = Deno.env.get('CLOUDINARY_API_SECRET');
+  if (!cloud || !apiKey || !apiSecret) return 0;
+
+  const auth = `Basic ${btoa(`${apiKey}:${apiSecret}`)}`;
+  const base = `https://api.cloudinary.com/v1_1/${cloud}/resources`;
+  let removed = 0;
+
+  // Images and videos are separate resource types with separate endpoints, and
+  // a failure on one must not stop the other — hence a try per type.
+  for (const type of ['image', 'video'] as const) {
+    try {
+      const ids: string[] = [];
+      let cursor: string | undefined;
+      do {
+        const url = new URL(`${base}/${type}/upload`);
+        // The prefix IS the guarantee: `cloudinary-sign` builds every public_id
+        // as `<uid>/…`, so this can only ever see this user's own uploads.
+        url.searchParams.set('prefix', `${userId}/`);
+        url.searchParams.set('max_results', '500');
+        if (cursor) url.searchParams.set('next_cursor', cursor);
+
+        const res = await fetch(url, { headers: { Authorization: auth } });
+        if (!res.ok) break;
+        const body = (await res.json()) as {
+          resources?: { public_id?: string }[];
+          next_cursor?: string;
+        };
+        for (const r of body.resources ?? []) if (r.public_id) ids.push(r.public_id);
+        cursor = body.next_cursor;
+      } while (cursor);
+
+      if (ids.length === 0) continue;
+      const orphans = await unreferenced(ids);
+
+      // 100 public_ids per call is the Admin API's limit.
+      for (let i = 0; i < orphans.length; i += 100) {
+        const batch = orphans.slice(i, i + 100);
+        const form = new URLSearchParams();
+        for (const id of batch) form.append('public_ids[]', id);
+        const res = await fetch(`${base}/${type}/upload`, {
+          method: 'DELETE',
+          headers: { Authorization: auth, 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: form.toString(),
+        });
+        if (res.ok) removed += batch.length;
+      }
+    } catch {
+      // Swallowed, for the reason in the header.
+    }
+  }
+
+  return removed;
 }
 
 Deno.serve(async (req: Request) => {
@@ -158,6 +244,28 @@ Deno.serve(async (req: Request) => {
     } catch {
       // Swallowed for the reason above.
     }
+
+    // ---- 3b. The same sweep, in Cloudinary ---------------------------------
+    // Uploads land in Cloudinary now (src/lib/upload.ts), and Postgres cannot
+    // see them — `unreferenced_media_paths` above reads `storage.objects`, so
+    // on its own it reports "0 removed" and a deleted account's photos live on
+    // forever. Step 3 still runs because files uploaded BEFORE the move are
+    // genuinely in the bucket; this is its twin for everything since.
+    //
+    // Same rule, same reason: list what is under this user's prefix, then keep
+    // anything a surviving document still points at — a business they
+    // TRANSFERRED on the way out owns photos they uploaded. Hence
+    // `media_keys_unreferenced` (0023) rather than Cloudinary's
+    // `delete_resources_by_prefix`, which is the blanket wipe 0019 argues
+    // against.
+    //
+    // Best-effort, exactly like step 3.
+    mediaRemoved += await sweepCloudinary(user.id, async (keys) => {
+      const { data } = await admin.rpc('media_keys_unreferenced', { p_keys: keys });
+      return ((data ?? []) as (string | { media_keys_unreferenced: string })[])
+        .map((k) => (typeof k === 'string' ? k : k?.media_keys_unreferenced))
+        .filter((k): k is string => !!k);
+    });
 
     // ---- 4. The account itself, last ---------------------------------------
     const { error: authError } = await admin.auth.admin.deleteUser(user.id);

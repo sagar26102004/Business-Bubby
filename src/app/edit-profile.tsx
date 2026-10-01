@@ -17,7 +17,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import { useAuth, useRepositories } from '@/data/DataProvider';
-import { uploadMedia } from '@/lib/upload';
+import { isLocalUri, uploadMedia } from '@/lib/upload';
 import { Avatar, Button, Icon, Input, LoadingView, Screen, Text } from '@/components/ui';
 import { spacing, useColors } from '@/theme/theme';
 
@@ -79,11 +79,26 @@ export default function EditProfileScreen() {
     setUploading(true);
     const uploaded = await uploadMedia(
       asset.uri,
-      { kind: 'image', mimeType: asset.mimeType, fileName: asset.fileName ?? undefined },
+      {
+        kind: 'image',
+        mimeType: asset.mimeType,
+        fileName: asset.fileName ?? undefined,
+        bytes: asset.fileSize,
+      },
       (message) => setError(`Couldn’t upload that picture: ${message}`),
     );
     setAvatarUrl(uploaded);
     setUploading(false);
+
+    // A failed upload returns the local uri, which renders fine here and then
+    // saves onto the profile as a `file://` nobody else can load.
+    if (isLocalUri(uploaded)) {
+      setError(
+        (existing) =>
+          existing ??
+          'That picture couldn’t be uploaded and is on this phone only — other people will see your initials instead.',
+      );
+    }
   };
 
   const save = async () => {

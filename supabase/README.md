@@ -82,6 +82,8 @@ eviction goes back to taking up to an hour.
 supabase functions deploy call-ring
 supabase functions deploy call-decline --no-verify-jwt
 supabase functions deploy dynamic-responder
+supabase functions deploy cloudinary-sign
+supabase functions deploy delete-account
 ```
 
 ⚠️ **`call-decline` MUST be deployed with `--no-verify-jwt`.** It is called from
@@ -106,6 +108,93 @@ while Localo is open, check in this order:
    since the feature shipped, and granted the notification permission.
 3. **Battery optimisation**, which stops delivery outright on aggressive ROMs.
    The in-app check offers the settings screen.
+
+## Media storage (Cloudinary)
+
+Photos and videos go to **Cloudinary**, not to Supabase Storage. The free Supabase
+plan gives 1 GB of storage and **5 GB of egress a month**, and a browse grid
+pulling twenty full-size photos spends that in roughly 1,750 screen views —
+Cloudinary resizes on delivery, so a 150 px tile costs 150 px worth of bytes.
+(Cloudflare R2 was the first choice and was ruled out: it needs a credit card.)
+
+**The `media` bucket and `0015_media_bucket.sql` stay in place permanently.**
+Every URL stored before the move is absolute and still served from there; drop
+the bucket or its public-read policy and every one of those photos goes blank.
+Do not edit that migration either — it is applied.
+
+### Setting it up
+
+1. Create the Cloudinary account (free, no card). Copy the **cloud name** from
+   the dashboard — it is not the API key.
+2. **Settings → Upload → Upload presets → Add**, named `localo_media`:
+   - **Signing mode: Signed.** Unsigned would let anyone who unzips the APK
+     upload to the account, and could not pin a file to the person who sent it.
+   - **Asset folder: empty.** The `<uid>/` prefix comes from the signed
+     `public_id`; a preset folder would be prepended and double-nest it.
+   - **Use filename / unique filename: off** — we supply the `public_id`.
+   - **Overwrite: off.** The `public_id` carries a timestamp and random suffix,
+     so a collision is a bug, not a replacement.
+   - **Allowed formats:** `jpg,jpeg,png,webp,heic,heif,mp4,mov,webm` — the same
+     set `0015`'s `allowed_mime_types` accepts, so both paths take the same files.
+   - **Max file size:** `10000000`, if the console exposes it. This is the only
+     ceiling a modified client cannot talk past; the byte count in the request
+     body is a declared value that exists to produce a readable error.
+   - **Format:** leave **empty**. It converts every upload to one format, which
+     would mangle video and override the extension the app derived.
+   - **Incoming transformation:** leave **EMPTY**, and see the warning below.
+   - **Eager transformations:** leave **empty**. Eager variants are generated at
+     upload time and billed whether or not anyone ever requests them.
+
+⚠️ **Do not put an incoming transformation on the preset.** The preset is shared
+by image and video uploads, so one set there applies to BOTH — and an incoming
+transformation on a video means transcoding, which Cloudinary bills per second of
+footage. The image cap (`c_limit,w_1600,h_1600,q_auto:good`) is therefore signed
+per request by `cloudinary-sign`, for `resource_type=image` only, where it is
+visible in code and cannot silently start applying to reels.
+3. **Settings → Security: leave "Strict transformations" OFF.** `thumbUrl`
+   generates transformation URLs on the fly; strict mode would require every
+   width to be pre-registered as a named transformation first.
+4. Secrets, then deploy:
+   ```
+   supabase secrets set CLOUDINARY_CLOUD_NAME=<cloud name> \
+                        CLOUDINARY_API_KEY=<api key> \
+                        CLOUDINARY_API_SECRET=<api secret> \
+                        CLOUDINARY_UPLOAD_PRESET=localo_media
+   supabase functions deploy cloudinary-sign
+   supabase functions deploy delete-account
+   ```
+   `delete-account` needs the same three: it sweeps Cloudinary as well as the
+   bucket, and without them that half silently removes nothing.
+
+There is **nothing to configure for CORS** — Cloudinary's upload endpoint is
+CORS-open by design, since its own browser widget posts straight to it.
+
+### The rules that cost money if broken
+
+- **Video gets no transformation, ever.** Cloudinary bills video transcoding
+  *per second of footage* (~2 transformations a second for SD h264), so one
+  `q_auto` on a 60-second reel is 120+ transformations every time a variant is
+  asked for. `lib/media.ts` returns video URLs untouched; keep it that way.
+  Video size is controlled only by the duration caps in `domain/showcase.ts` and
+  `features/media/VideoField.tsx`.
+- **Three widths, named by role** in `lib/media.ts` — `THUMB_WIDTH`,
+  `CARD_WIDTH`, `IMAGE_WIDTH` — and reused, never chosen per component. Each
+  distinct variant is a derived asset consuming a transformation *and* storage
+  against the same 25-credit monthly budget.
+- **`f_auto` is browser-only.** It resolves from the request's `Accept` header,
+  so it genuinely serves WebP/AVIF on web and falls back to the original format
+  under React Native, which sends no meaningful `Accept`. That is free upside on
+  web and a harmless no-op on Android. Do not "fix" it by hardcoding `f_webp`:
+  one stored URL is shared by web, Android and any future iOS build, and iOS
+  cannot decode WebP through React Native's `Image`.
+
+Free tier is **25 credits/month**, where 1 credit = 1 GB stored *or* 1 GB
+delivered *or* 1,000 transformations — one shared budget. Bandwidth is what
+actually runs out, and reels are what spend it: a 12 MB clip viewed 100 times is
+1.2 credits. Roughly **2,000 reel views a month, total**, and the deals feed
+autoplays. That is a product constraint worth knowing before building more video
+surface; `react-native-compressor` (needs a native rebuild) would multiply it
+4–5×.
 
 ## Notes / to harden before launch
 

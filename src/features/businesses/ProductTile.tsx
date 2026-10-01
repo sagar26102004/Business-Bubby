@@ -5,6 +5,7 @@
  */
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from '@/components/ui';
+import { thumbUrl } from '@/lib/media';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 export interface StallProduct {
@@ -34,7 +35,7 @@ export function ProductTile({ item }: { item: StallProduct }) {
       <View style={[styles.imageWrap, { backgroundColor: colors.surfaceAlt }]}>
         {item.imageUrl ? (
           <Image
-            source={{ uri: item.imageUrl }}
+            source={{ uri: thumbUrl(item.imageUrl) }}
             style={[styles.image, item.sold && styles.faded]}
             resizeMode="cover"
           />

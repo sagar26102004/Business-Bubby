@@ -8,10 +8,16 @@
  * only "Choose a video" appears there.
  *
  * Length is capped at MAX_SECONDS. A neighborhood ad that runs a minute doesn't
- * get watched, and the bucket's 50 MB ceiling (migration 0015) is a hard wall a
- * long clip walks straight into. The picker enforces it while RECORDING; a clip
- * chosen from the gallery is checked here afterwards, because the picker can't
- * filter the library by duration.
+ * get watched — and duration is now the ONLY size control there is, because
+ * nothing on the client can re-encode a video (expo-image-manipulator is stills
+ * only) and the storage backend no longer enforces a per-file wall of its own.
+ * The picker enforces the cap while RECORDING; a clip chosen from the gallery is
+ * checked here afterwards, because the picker can't filter a library by duration.
+ *
+ * Reels are also the expensive half of the media budget: bytes delivered is what
+ * a free storage plan actually meters, and one autoplaying 12 MB clip viewed a
+ * hundred times costs more than a thousand photos. Shortening MAX_SECONDS is the
+ * cheapest lever available if that ever starts to bite.
  *
  * Like PhotosField, the picked file goes through `uploadMedia` on its way out,
  * so what gets stored is a public URL other phones can load — not a file:// uri
@@ -22,7 +28,7 @@ import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-
 import * as ImagePicker from 'expo-image-picker';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Text } from '@/components/ui';
-import { uploadMedia } from '@/lib/upload';
+import { isLocalUri, uploadMedia } from '@/lib/upload';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 /** Longest reel we accept, in seconds. */
@@ -65,11 +71,28 @@ export function VideoField({ label = 'Video ad (optional)', value, onChange, hin
     setUploading(asset.uri);
     const url = await uploadMedia(
       asset.uri,
-      { kind: 'video', mimeType: asset.mimeType, fileName: asset.fileName ?? undefined },
+      {
+        kind: 'video',
+        mimeType: asset.mimeType,
+        fileName: asset.fileName ?? undefined,
+        bytes: asset.fileSize,
+      },
       (message) => setError(`Couldn’t upload: ${message}. The video is saved on this device only.`),
     );
     setUploading(null);
     onChange(url);
+
+    // A failed upload hands back the local uri rather than throwing, so without
+    // this the preview plays perfectly and the business has no way to know the
+    // reel it is about to PAY to promote exists only on this phone. See the
+    // caption below, which stops claiming otherwise.
+    if (isLocalUri(url)) {
+      setError(
+        (existing) =>
+          existing ??
+          'That video couldn’t be uploaded and is on this phone only — it won’t play for anyone else.',
+      );
+    }
   };
 
   const record = async () => {
@@ -103,6 +126,8 @@ export function VideoField({ label = 'Video ad (optional)', value, onChange, hin
   };
 
   const busy = uploading !== null;
+  /** Stored, but only on this device — so the caption must not promise a feed. */
+  const stranded = !busy && isLocalUri(value);
 
   return (
     <View style={styles.wrap}>
@@ -131,8 +156,14 @@ export function VideoField({ label = 'Video ad (optional)', value, onChange, hin
           </View>
 
           <View style={styles.previewActions}>
-            <Text variant="caption" tone="muted">
-              {busy ? 'Uploading…' : 'This plays in the deals feed.'}
+            {/* Never claim the feed for a video that never left the device —
+                this line is what a business reads before paying to promote it. */}
+            <Text variant="caption" tone={stranded ? 'danger' : 'muted'}>
+              {busy
+                ? 'Uploading…'
+                : stranded
+                  ? 'On this phone only — it won’t play for anyone else.'
+                  : 'This plays in the deals feed.'}
             </Text>
             {!busy ? (
               <>

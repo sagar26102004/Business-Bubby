@@ -47,7 +47,8 @@ import {
 } from '@/domain/showcase';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
-import { uploadAll, uploadMedia } from '@/lib/upload';
+import { isLocalUri, uploadAll, uploadMedia } from '@/lib/upload';
+import { thumbUrl } from '@/lib/media';
 import { showAlert } from '@/lib/alert';
 import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
@@ -143,13 +144,34 @@ export default function ShowcaseScreen() {
     const picked = result.assets.slice(0, photosLeft);
     if (picked.length === 0) return;
     setPending(picked.map(() => 'photo' as const));
+    // Options per file, not per batch — a mixed .png/.jpg pick used to store the
+    // second one under the first one's extension.
     const urls = await uploadAll(
-      picked.map((a) => a.uri),
-      { kind: 'image', mimeType: picked[0]?.mimeType, fileName: picked[0]?.fileName ?? undefined },
+      picked.map((a) => ({
+        uri: a.uri,
+        kind: 'image' as const,
+        mimeType: a.mimeType,
+        fileName: a.fileName ?? undefined,
+        bytes: a.fileSize,
+      })),
       (message) => setError(`Couldn’t upload: ${message}. The photo is saved on this device only.`),
     );
     setPending([]);
     await savePortfolio([...portfolio, ...urls.map((u) => item('photo', u))]);
+
+    // `uploadMedia` hands back the local uri rather than throwing, so a failed
+    // upload saves a `file://` onto the business and looks identical to success
+    // on this phone. Say so, or the showcase is silently empty for customers.
+    const stranded = urls.filter(isLocalUri).length;
+    if (stranded > 0) {
+      setError(
+        (existing) =>
+          existing ??
+          `${stranded === 1 ? 'That photo' : `${stranded} photos`} couldn’t be uploaded and ${
+            stranded === 1 ? 'is' : 'are'
+          } on this phone only — customers will see a blank space.`,
+      );
+    }
   };
 
   const addVideo = async (fromCamera: boolean) => {
@@ -184,11 +206,24 @@ export default function ShowcaseScreen() {
     setPending(['video']);
     const url = await uploadMedia(
       asset.uri,
-      { kind: 'video', mimeType: asset.mimeType, fileName: asset.fileName ?? undefined },
+      {
+        kind: 'video',
+        mimeType: asset.mimeType,
+        fileName: asset.fileName ?? undefined,
+        bytes: asset.fileSize,
+      },
       (message) => setError(`Couldn’t upload: ${message}. The video is saved on this device only.`),
     );
     setPending([]);
     await savePortfolio([...portfolio, item('video', url)]);
+
+    if (isLocalUri(url)) {
+      setError(
+        (existing) =>
+          existing ??
+          'That video couldn’t be uploaded and is on this phone only — customers won’t see it.',
+      );
+    }
   };
 
   const addLink = async () => {
@@ -406,7 +441,7 @@ function MediaTile({ item, onRemove }: { item: PortfolioItem; onRemove: () => vo
         </Pressable>
       ) : (
         <Image
-          source={{ uri: item.url }}
+          source={{ uri: thumbUrl(item.url) }}
           style={[styles.tile, { backgroundColor: colors.surfaceAlt }]}
           resizeMode="cover"
         />

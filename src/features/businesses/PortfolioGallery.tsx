@@ -32,6 +32,7 @@ import { useVideoPlayer, VideoView } from 'expo-video';
 import type { PortfolioItem } from '@/domain/types';
 import { isPlayableVideo } from '@/domain/showcase';
 import { AutoCarousel, Text } from '@/components/ui';
+import { thumbUrl } from '@/lib/media';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 const SLIDE_H = 210;
@@ -78,7 +79,7 @@ function SlideMedia({ item }: { item: PortfolioItem }) {
         <VideoView player={player} style={styles.slideImage} nativeControls={false} contentFit="cover" />
       ) : (
         <Image
-          source={{ uri: item.thumbnailUrl ?? item.url }}
+          source={{ uri: thumbUrl(item.thumbnailUrl ?? item.url) }}
           style={[styles.slideImage, { backgroundColor: colors.surfaceAlt }]}
           resizeMode="cover"
         />

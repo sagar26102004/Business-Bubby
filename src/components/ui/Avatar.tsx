@@ -1,6 +1,7 @@
 /** Circular avatar. Shows the image if present, otherwise initials. */
 import { Image, StyleSheet, View } from 'react-native';
 import { useColors } from '@/theme/theme';
+import { thumbUrl } from '@/lib/media';
 import { Text } from './Text';
 
 export interface AvatarProps {
@@ -22,7 +23,7 @@ export function Avatar({ name, uri, size = 44 }: AvatarProps) {
   const dimension = { width: size, height: size, borderRadius: size / 2 };
 
   if (uri) {
-    return <Image source={{ uri }} style={[dimension, styles.image]} />;
+    return <Image source={{ uri: thumbUrl(uri) }} style={[dimension, styles.image]} />;
   }
 
   return (

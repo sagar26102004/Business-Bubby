@@ -23,6 +23,7 @@ import { useAsync } from '@/lib/useAsync';
 import { haversineKm } from '@/lib/geo';
 import { Card, Icon, Stars, Tag, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { CARD_WIDTH, thumbUrl } from '@/lib/media';
 import { locationSummary } from './location';
 import { StatusChip } from './StatusChip';
 
@@ -158,7 +159,7 @@ export function BusinessCard({ business }: { business: Business }) {
     >
       {onPhoto ? (
         <View style={styles.top}>
-          <Image source={{ uri: cover }} style={styles.cover} resizeMode="cover" />
+          <Image source={{ uri: thumbUrl(cover, CARD_WIDTH) }} style={styles.cover} resizeMode="cover" />
           <LinearGradient
             colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.72)']}
             style={StyleSheet.absoluteFill}
