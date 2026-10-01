@@ -4,7 +4,9 @@
 submission: what is done, what is decided, and what is next. The other files in this folder are
 *reference* (what to paste, what to record); this one is *status*.
 
-Last updated **23 August 2026** (fifth pass, amended late the same day by decision 6: a bundle has reached **internal testing**, so the
+Last updated **1 October 2026** — see blocker **9**: the submission was REJECTED for an empty
+**Sign in details** declaration, which is paperwork, not code (`docs/play-store/sign-in-details.md`).
+Before that, 23 August 2026 (fifth pass, amended late the same day by decision 6: a bundle has reached **internal testing**, so the
 Console is live and the form-filling era is over. The whole game is now the **closed-testing
 14-day clock** — see "Fifth pass record" below, which is the section to read first).
 
@@ -70,7 +72,8 @@ Play-only run:
 network connection this repo cannot reach. Numbers are kept stable so older notes keep pointing at
 the right item — the resolved ones stay, struck through in spirit, rather than being renumbered.
 
-**As of 23 Aug three are still live:** 8 (auth toggles — sharp, do it before any tester sees the
+**As of 1 Oct the live one that stops everything is 9** (the empty Sign in details declaration —
+the app is rejected until that form is filled and resubmitted). Behind it, from 23 Aug: 8 (auth toggles — sharp, do it before any tester sees the
 app), 4's leftovers (§2.5 is 8; §2.7 advisors is a five-minute re-run), and 3 (screenshots — soft,
 it can wait for the production promotion).
 
@@ -134,6 +137,33 @@ it can wait for the production promotion).
    never arrive) and **Anonymous sign-ins ON** (guest browse and guest calls). Getting it wrong
    burns the scarcest resource in this release — the goodwill of 12 volunteers — on day one of a
    clock where re-recruiting costs days that cannot be recovered.
+
+9. 🔴 **REJECTED 1 Oct 2026 — "Sign in details" was left empty.** The app was not reviewed at
+   all: Play Console Requirements → *Login credentials are missing*. The declaration (formerly
+   **App access**) answered **Yes, part of my app is restricted** and then supplied no username,
+   no password and no instructions, so the review team had no way into the owner side.
+   **Nothing in the app is wrong and no new bundle is needed** — the declaration lives under the
+   app, not under a bundle. The paste-ready text, both credential sets and the two form settings
+   that matter are in **`docs/play-store/sign-in-details.md`**; after saving, Publishing overview →
+   send for review.
+
+   Two things found while writing it, both worth keeping:
+
+   - **Hand over two accounts, not one, and leave the "allow Google to use these sign-in details
+     for testing on Google and trusted partner devices" box UNTICKED.** One account can be signed
+     in on one device (`deviceLock.ts`, migration 0022) — a fleet of test devices sharing one
+     credential set would evict each other every minute, and the symptom is "the credentials stop
+     working", i.e. this rejection again.
+   - **`cornercafeown` owns nothing.** Corner Cafe does not exist on the live DB; the 53-item
+     "Cafe Corner" belongs to `trayamb_rathore`, a personal account. `docs/testing/TEST-DATA.md`
+     describes the data pack as *intended*, not as *built* — check the DB before quoting it to
+     anyone. `jaikiranaown` / Jai Kirana Store was verified complete and is what the form now
+     names.
+
+   ⚠️ Also noted: **Home is no longer distance-capped.** `(tabs)/index.tsx` passes
+   `limit: HOME_NEARBY_COUNT` and no `maxDistanceKm`, so the `HOME_RADIUS_KM = 20` table in
+   TEST-DATA.md §0 is stale. It is good news here — a reviewer anywhere on earth still sees the
+   Indore listings, just with large distances — but fix the doc when next in it.
 
 ## Fifth pass record — 23 August 2026
 
