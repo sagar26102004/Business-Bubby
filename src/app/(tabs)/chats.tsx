@@ -1,23 +1,30 @@
 /**
  * Chat tab — the customer's DM list (one conversation per business, like
- * Instagram DMs), with Alerts folded in behind a segment toggle so replies,
- * bookings and order updates live on the same screen.
+ * Instagram DMs), with Alerts alongside it behind a segment toggle.
+ *
+ * The two segments never overlap: anything from the chat family (a business's
+ * reply to me, a customer writing to a business I answer for) belongs to
+ * **Chats** and shows there as an unread conversation; **Alerts** is
+ * everything else — bookings, orders, bills, calls, reviews. A message used to
+ * be announced twice, once as a thread and again as an alert; now the thread
+ * IS the announcement.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { Tabs, useFocusEffect, useRouter } from 'expo-router';
 import type { AppNotification } from '@/domain/types';
 import type { CustomerThreadSummary } from '@/data/repositories';
+import { categoryOfKind } from '@/domain/notifications';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { CHAT_REFRESH_MS } from '@/lib/useAsync';
 import { Avatar, Card, EmptyView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
+/** Chat alerts are shown as conversations, so they never reach the alert list. */
+const isChatAlert = (n: AppNotification) => categoryOfKind(n.kind) === 'chats';
+
 function kindIcon(kind: AppNotification['kind']): string {
   switch (kind) {
-    case 'chat_reply':
-    case 'chat_message':
-      return '💬';
     case 'missed_call':
       return '📞';
     case 'order_requested':
@@ -53,6 +60,24 @@ function timeAgo(iso: string): string {
 
 type Segment = 'chats' | 'alerts';
 
+/**
+ * One row in the Chats list. It is either a conversation of my own (a customer
+ * thread) or a conversation someone started with a business I answer for —
+ * that one lives in the business inbox and has no row of its own here, so its
+ * unread chat alert makes one.
+ */
+type ChatRow = {
+  key: string;
+  name: string;
+  preview: string;
+  /** "You: " prefix — only for a thread whose last word was mine. */
+  fromMe: boolean;
+  at: string;
+  /** The chat alerts this row stands for; opening it clears them. */
+  unreadIds: string[];
+  href: string;
+};
+
 export default function ChatsScreen() {
   const repos = useRepositories();
   const router = useRouter();
@@ -84,12 +109,78 @@ export default function ChatsScreen() {
     }, [load]),
   );
 
+  /** Everything that is NOT a message — this is the Alerts list. */
+  const alerts = useMemo(() => items.filter((n) => !isChatAlert(n)), [items]);
+  /** The chat family, which drives the unread state of the Chats list. */
+  const chatAlerts = useMemo(() => items.filter(isChatAlert), [items]);
+
+  const rows = useMemo<ChatRow[]>(() => {
+    const used = new Set<string>();
+    const mine: ChatRow[] = threads.map((t) => {
+      const unread = chatAlerts.filter(
+        (n) => n.kind === 'chat_reply' && n.businessId === t.businessId,
+      );
+      unread.forEach((n) => used.add(n.id));
+      const newest = unread.reduce((at, n) => (n.createdAt > at ? n.createdAt : at), t.lastAt);
+      return {
+        key: `thread:${t.businessId}`,
+        name: t.businessName,
+        preview: unread.length ? unread[0].body : t.lastBody,
+        fromMe: unread.length === 0 && t.lastAuthorType === 'customer',
+        at: newest,
+        unreadIds: unread.map((n) => n.id),
+        href: `/chat/${t.businessId}`,
+      };
+    });
+
+    // A customer wrote to a business I answer for: that thread lives in the
+    // business inbox, not in my DMs, so give it a row here keyed by the pair.
+    const inbox = new Map<string, ChatRow>();
+    for (const n of chatAlerts) {
+      if (used.has(n.id) || !n.businessId) continue;
+      const key = `inbox:${n.businessId}:${n.participantId ?? ''}`;
+      const row = inbox.get(key);
+      if (row) {
+        row.unreadIds.push(n.id);
+        if (n.createdAt > row.at) {
+          row.at = n.createdAt;
+          row.preview = n.body;
+        }
+        continue;
+      }
+      inbox.set(key, {
+        key,
+        name: n.title,
+        preview: n.body,
+        fromMe: false,
+        at: n.createdAt,
+        unreadIds: [n.id],
+        href:
+          n.kind === 'chat_message' && n.participantId
+            ? `/inbox/${n.businessId}/${n.participantId}`
+            : n.kind === 'chat_message'
+              ? `/inbox/${n.businessId}`
+              : `/chat/${n.businessId}`,
+      });
+    }
+
+    return [...mine, ...inbox.values()].sort((a, b) => b.at.localeCompare(a.at));
+  }, [threads, chatAlerts]);
+
+  const openRow = async (row: ChatRow) => {
+    if (row.unreadIds.length) {
+      await Promise.all(row.unreadIds.map((id) => repos.notifications.markRead(id)));
+      load();
+    }
+    router.push(row.href as never);
+  };
+
   const openNotification = async (n: AppNotification) => {
     await repos.notifications.markRead(n.id);
     load();
-    // Route by kind: orders/bills deep-link straight to the thing; chat → the
-    // chat; new request → the workspace; a decision on my booking → the
-    // business page; a missed call → the business inbox.
+    // Route by kind: orders/bills deep-link straight to the thing; a new
+    // request → the workspace; a decision on my booking → the business page; a
+    // missed call → the business inbox.
     if ((n.kind === 'order_requested' || n.kind === 'order_update') && n.orderId) {
       router.push(`/order/${n.orderId}`);
       return;
@@ -128,14 +219,6 @@ export default function ChatsScreen() {
       return;
     }
     if (!n.businessId) return;
-    // A customer wrote to a business I'm on: open THEIR side of the thread,
-    // not my own chat with the business.
-    if (n.kind === 'chat_message') {
-      router.push(
-        n.participantId ? `/inbox/${n.businessId}/${n.participantId}` : `/inbox/${n.businessId}`,
-      );
-      return;
-    }
     if (n.kind === 'booking_requested') router.push(`/workspace/${n.businessId}`);
     else if (n.kind === 'booking_update') router.push(`/business/${n.businessId}`);
     else if (n.kind === 'missed_call') router.push(`/inbox/${n.businessId}`);
@@ -143,13 +226,15 @@ export default function ChatsScreen() {
     else router.push(`/chat/${n.businessId}`);
   };
 
+  // Clears the ALERTS only — conversations are cleared by opening them, and a
+  // button sitting over the alert list must never mark chats read behind you.
   const markAll = async () => {
-    await repos.notifications.markAllRead(participantId);
+    await Promise.all(alerts.map((n) => repos.notifications.markRead(n.id)));
     load();
   };
 
-  const hasUnread = items.some((n) => !n.read);
-  const unreadCount = items.filter((n) => !n.read).length;
+  const chatUnread = chatAlerts.length;
+  const alertUnread = alerts.length;
 
   const segmentButton = (value: Segment, label: string, badge?: number) => {
     const active = segment === value;
@@ -185,7 +270,7 @@ export default function ChatsScreen() {
             segment === 'alerts'
               ? () => (
                   <View style={styles.headerActions}>
-                    {hasUnread ? (
+                    {alertUnread ? (
                       <Text tone="accent" weight="semibold" onPress={markAll}>
                         Mark all read
                       </Text>
@@ -204,14 +289,14 @@ export default function ChatsScreen() {
       />
 
       <View style={[styles.segments, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
-        {segmentButton('chats', 'Chats')}
-        {segmentButton('alerts', 'Alerts', unreadCount || undefined)}
+        {segmentButton('chats', 'Chats', chatUnread || undefined)}
+        {segmentButton('alerts', 'Alerts', alertUnread || undefined)}
       </View>
 
       {segment === 'chats' ? (
         <FlatList
-          data={threads}
-          keyExtractor={(t) => t.businessId}
+          data={rows}
+          keyExtractor={(r) => r.key}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <EmptyView
@@ -219,33 +304,46 @@ export default function ChatsScreen() {
               subtitle="Message a business from its page and your conversation will show up here."
             />
           }
-          renderItem={({ item }) => (
-            <Card onPress={() => router.push(`/chat/${item.businessId}`)} style={styles.card}>
-              <View style={styles.row}>
-                <Avatar name={item.businessName} size={44} />
-                <View style={styles.info}>
-                  <Text weight="semibold">{item.businessName}</Text>
-                  <Text variant="caption" tone="muted" numberOfLines={1}>
-                    {item.lastAuthorType === 'customer' ? 'You: ' : ''}
-                    {item.lastBody}
-                  </Text>
+          renderItem={({ item }) => {
+            const unread = item.unreadIds.length > 0;
+            return (
+              <Card onPress={() => openRow(item)} style={styles.card}>
+                <View style={styles.row}>
+                  <Avatar name={item.name} size={44} />
+                  <View style={styles.info}>
+                    <Text weight="semibold">{item.name}</Text>
+                    <Text
+                      variant="caption"
+                      tone={unread ? 'default' : 'muted'}
+                      weight={unread ? 'semibold' : 'regular'}
+                      numberOfLines={1}
+                    >
+                      {item.fromMe ? 'You: ' : ''}
+                      {item.preview}
+                    </Text>
+                  </View>
+                  <View style={styles.meta}>
+                    <Text variant="caption" tone="muted">
+                      {timeAgo(item.at)}
+                    </Text>
+                    {unread ? (
+                      <View style={[styles.dot, { backgroundColor: colors.brand }]} />
+                    ) : null}
+                  </View>
                 </View>
-                <Text variant="caption" tone="muted">
-                  {timeAgo(item.lastAt)}
-                </Text>
-              </View>
-            </Card>
-          )}
+              </Card>
+            );
+          }}
         />
       ) : (
         <FlatList
-          data={items}
+          data={alerts}
           keyExtractor={(n) => n.id}
           contentContainerStyle={styles.list}
           ListEmptyComponent={
             <EmptyView
               title="You’re all caught up"
-              subtitle="New alerts land here and leave once you’ve opened them."
+              subtitle="Bookings, orders and bills land here. Messages stay in Chats."
             />
           }
           renderItem={({ item }) => (
@@ -313,6 +411,7 @@ const styles = StyleSheet.create({
   list: { padding: spacing.lg, flexGrow: 1 },
   card: { marginBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  meta: { alignItems: 'flex-end', gap: spacing.xs },
   dot: { width: 8, height: 8, borderRadius: 4 },
   dotSpacer: { width: 8 },
   info: { flex: 1 },
