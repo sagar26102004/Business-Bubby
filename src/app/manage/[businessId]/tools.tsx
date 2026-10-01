@@ -9,6 +9,7 @@ import {
   AVAILABLE_MODULES,
   COMING_SOON_MODULES,
   enabledModules,
+  moduleImpliedBy,
   type ModuleId,
 } from '@/domain/modules';
 import { ManageGate, type ManageFormProps } from '@/features/businesses/ManageGate';
@@ -39,26 +40,36 @@ function ToolsForm({ business, save, saving }: ManageFormProps) {
   return (
     <>
       <Card style={styles.card}>
-        {AVAILABLE_MODULES.map((m, i) => (
-          <View
-            key={m.id}
-            style={[
-              styles.switchRow,
-              i === 0 && styles.firstSwitchRow,
-              { borderTopColor: colors.border },
-            ]}
-          >
-            <View style={styles.moduleInfo}>
-              <Text>
-                {m.icon} {m.label}
-              </Text>
-              <Text variant="caption" tone="muted">
-                {m.description}
-              </Text>
+        {AVAILABLE_MODULES.map((m, i) => {
+          // Some tools are on because of what the listing holds — a rental
+          // list needs Orders to receive "Request to rent". The switch says so
+          // rather than flipping back on its own.
+          const locked = moduleImpliedBy(business, m.id);
+          return (
+            <View
+              key={m.id}
+              style={[
+                styles.switchRow,
+                i === 0 && styles.firstSwitchRow,
+                { borderTopColor: colors.border },
+              ]}
+            >
+              <View style={styles.moduleInfo}>
+                <Text>
+                  {m.icon} {m.label}
+                </Text>
+                <Text variant="caption" tone="muted">
+                  {locked ?? m.description}
+                </Text>
+              </View>
+              <Switch
+                value={locked ? true : moduleSet.has(m.id)}
+                onValueChange={() => toggle(m.id)}
+                disabled={!!locked}
+              />
             </View>
-            <Switch value={moduleSet.has(m.id)} onValueChange={() => toggle(m.id)} />
-          </View>
-        ))}
+          );
+        })}
         <Text variant="caption" tone="muted" style={styles.comingSoon}>
           Coming soon: {COMING_SOON_MODULES.map((m) => m.label).join(', ')}.
         </Text>

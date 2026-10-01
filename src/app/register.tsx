@@ -572,8 +572,9 @@ export default function RegisterScreen() {
         hasServices: serves,
         hasMenu: sells && isFoodShop(tags),
         hasPlans: enrols,
+        hasRentals: rents,
       }),
-    [derivedType, tags, sells, serves, enrols],
+    [derivedType, tags, sells, serves, enrols, rents],
   );
   const chosenModules = modules ?? suggestedModules;
   const toggleModule = (id: ModuleId) => {

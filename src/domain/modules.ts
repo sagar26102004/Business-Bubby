@@ -158,11 +158,16 @@ export function suggestModules(input: {
   hasMenu?: boolean;
   /** Renewing plans were listed — the business runs memberships whatever its tags say. */
   hasPlans?: boolean;
+  /** Something is listed for rent — rent requests arrive as orders. */
+  hasRentals?: boolean;
 }): ModuleId[] {
   const picked = new Set<ModuleId>(['billing', 'customers']);
   if (input.type === 'shop' || input.type === 'item' || input.hasProducts || input.hasMenu) {
     picked.add('orders');
   }
+  // "Request to rent" is an order under another name, so a lister who never
+  // ticks a single tool still needs the module that receives one.
+  if (input.type === 'rental' || input.hasRentals) picked.add('orders');
   if (input.type === 'service' || input.hasServices) picked.add('bookings');
 
   const tagSet = new Set((input.tags ?? []).map((t) => t.trim().toLowerCase()));
@@ -187,15 +192,44 @@ export function suggestModules(input: {
 }
 
 /**
+ * Modules a listing runs whether or not its owner ticked them, because its own
+ * content has nowhere else to land.
+ *
+ * A rental list is the case that bit: renting something out IS a request, and
+ * a rent request becomes an `Order` exactly like a dish does — so without the
+ * orders module a page full of flats and scooters showed no "Request to rent"
+ * button at all, and the workspace had no section to receive one. Listing
+ * something for rent therefore turns orders on by itself, the same way listing
+ * a plan means the business enrols people.
+ */
+function impliedModules(business: Pick<Business, 'rentals'>): ModuleId[] {
+  return (business.rentals?.length ?? 0) > 0 ? ['orders'] : [];
+}
+
+/**
+ * Is this module on because of what the listing holds, rather than a tick? The
+ * Manage toggles ask, so a switch that can't be turned off says why.
+ */
+export function moduleImpliedBy(
+  business: Pick<Business, 'rentals'>,
+  id: ModuleId,
+): string | undefined {
+  return impliedModules(business).includes(id)
+    ? 'Always on while you have something listed for rent.'
+    : undefined;
+}
+
+/**
  * The modules a business actually runs. Businesses created before the opt-in
  * step (including the mock seed) carry no explicit list — they keep every
  * available module, which is exactly the pre-modules workspace.
  */
-export function enabledModules(business: Pick<Business, 'modules'>): ModuleId[] {
+export function enabledModules(business: Pick<Business, 'modules' | 'rentals'>): ModuleId[] {
   if (!business.modules) return AVAILABLE_MODULES.map((m) => m.id);
-  return AVAILABLE_MODULES.filter((m) => business.modules!.includes(m.id)).map((m) => m.id);
+  const running = new Set<string>([...business.modules, ...impliedModules(business)]);
+  return AVAILABLE_MODULES.filter((m) => running.has(m.id)).map((m) => m.id);
 }
 
-export function hasModule(business: Pick<Business, 'modules'>, id: ModuleId): boolean {
+export function hasModule(business: Pick<Business, 'modules' | 'rentals'>, id: ModuleId): boolean {
   return enabledModules(business).includes(id);
 }
