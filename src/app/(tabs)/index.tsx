@@ -1,27 +1,20 @@
 /**
- * Home (no app-bar) — a quiet, flat top sheet in the neighborhood style:
- *  - The product pills on top: Explore (this side) ⇄ Stalls ⇄ My Business.
- *  - Location row (saved-place dropdown + Map), then the search bar.
- *  - A CATEGORY STRIP (For You + every intent from domain/intents.ts) that
- *    filters this same screen inline — no navigation. The active category is
- *    underlined.
- *  - Picking a category swaps the AD SLOT (the rotating card carousel, filtered
- *    to that category), reveals its SUBCATEGORY TILES (the category's tags as
- *    emoji tiles → tap opens /browse/[intent]?sub=Tag), and filters the nearby
- *    business list below.
+ * Explore (One Place redesign — docs/redesign-one-place/explore.png). A flat
+ * linen top sheet, then the feed:
+ *  - Brand row ("One Place" + the place you're browsing) with Map and Deals.
+ *  - Location dropdown (saved places) + a "within N km" pill that states how far
+ *    the list actually reaches, then the search pill.
+ *  - INTENT CHIPS with live counts (All + every category that has listings
+ *    here) — they filter this screen inline, no navigation.
+ *  - A TRENDING row of #tags: the tags most carried by nearby listings, or, with
+ *    a category picked, that category's tags (→ /browse/[intent]?sub=).
+ *  - "Neighborhood deals near you" — the AD SLOT (domain/ads.ts), filtered to
+ *    the picked category; what goes in it is decided by AdRepository.
+ *  - "Near you now" — the listing cards, sorted Popular or Nearest.
  *
- * The list below is bounded by COUNT, not distance: the HOME_NEARBY_COUNT
- * listings closest to the active place, nearest first. Search and the category
- * pages stay unbounded — see the constant's note for why.
- *
- * The ad slot is the platform's revenue line (domain/ads.ts): sponsored cards
- * from businesses that bought a campaign, then any live offer from a shop close
- * by. What goes in it is decided by AdRepository.listPlacements, not here — see
- * data/adPlacements.ts.
- *
- * The header used to be a blue gradient block. It's now a plain white sheet
- * closed by a hairline: the content below (photos, deals, cards) supplies the
- * color, and the chrome stays out of its way.
+ * The list is bounded by COUNT, not distance: the HOME_NEARBY_COUNT listings
+ * closest to the active place. Search and the category pages stay unbounded —
+ * see the constant's note for why.
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -41,12 +34,22 @@ import { INTENT_CATEGORIES, intentMatches, tagEmoji, type IntentCategory } from 
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { useResponsive } from '@/lib/useResponsive';
-import { Card, EmptyView, ErrorView, Icon, LoadingView, Text } from '@/components/ui';
+import {
+  Card,
+  EmptyView,
+  ErrorView,
+  Icon,
+  IconTile,
+  LoadingView,
+  SectionHeader,
+  SegmentedControl,
+  Tag,
+  Text,
+} from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { AdCarousel, type AdCardItem } from '@/features/ads/AdCarousel';
 import { AD_GRADIENTS } from '@/features/ads/adGradients';
-import { ModePills } from '@/features/shell/ModePills';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { isListedPublicly } from '@/lib/onHold';
 
@@ -91,6 +94,7 @@ export default function BrowseScreen() {
   // null = "For You" (everything). Otherwise the strip filters Home inline.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected: IntentCategory | undefined = INTENT_CATEGORIES.find((c) => c.id === selectedId);
+  const [sort, setSort] = useState<'popular' | 'nearest'>('nearest');
 
   const { data: places } = useAsync(() => repos.places.listPlaces(), []);
   const activePlace = places?.find((p) => p.id === activePlaceId) ?? places?.[0];
@@ -121,8 +125,38 @@ export default function BrowseScreen() {
   // The nearby list, narrowed to the selected category.
   const businesses = useMemo(() => {
     const all = data ?? [];
-    return selected ? all.filter((b) => intentMatches(b, selected)) : all;
-  }, [data, selected]);
+    const inCategory = selected ? all.filter((b) => intentMatches(b, selected)) : all;
+    if (sort === 'nearest') return inCategory; // already nearest-first
+    // Popular = a rating weighted by how many people gave it, so one 5★ review
+    // doesn't outrank a hundred 4.7s.
+    const score = (b: (typeof all)[number]) =>
+      (b.ratingAvg ?? 0) * Math.log10(1 + (b.ratingCount ?? 0));
+    return [...inCategory].sort((a, b) => score(b) - score(a));
+  }, [data, selected, sort]);
+
+  // How many nearby listings each category holds — the counts on the chips.
+  const intentCounts = useMemo(() => {
+    const all = data ?? [];
+    return new Map(INTENT_CATEGORIES.map((c) => [c.id, all.filter((b) => intentMatches(b, c)).length]));
+  }, [data]);
+
+  // "Within N km": how far the list actually reaches, from the furthest result.
+  const reachKm = useMemo(() => {
+    const far = Math.max(0, ...(data ?? []).map((b) => b.distanceKm ?? 0));
+    return far > 0 ? Math.max(1, Math.ceil(far)) : undefined;
+  }, [data]);
+
+  // Trending: the tags carried by the most nearby listings.
+  const trending = useMemo(() => {
+    const freq = new Map<string, number>();
+    for (const b of data ?? []) {
+      for (const t of b.tags ?? []) freq.set(t, (freq.get(t) ?? 0) + 1);
+    }
+    return [...freq.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([t]) => t);
+  }, [data]);
 
   // What's in the ad slot: sponsored campaigns first, then live offers from
   // shops close by. The reach rules live in the repository (data/adPlacements),
@@ -203,17 +237,11 @@ export default function BrowseScreen() {
     [campaignByKey, repos],
   );
 
-  // Subcategory tiles for the selected category — its tags found on nearby
-  // listings (stalls: the item categories instead), Flipkart-grid style.
+  // A picked category's own tags that nearby listings carry — its trending row.
+  // (ON HOLD (redesign 2026-10): stall — the Stalls category's item-subcategory
+  // chips used to be built here.)
   const subTiles = useMemo(() => {
     if (!selected) return [];
-    if (selected.id === 'stalls') {
-      return (getType('item')?.subcategories ?? []).map((s) => ({
-        id: s.id,
-        label: s.name,
-        emoji: s.icon ?? selected.icon,
-      }));
-    }
     const present = new Set(
       businesses.flatMap((b) => b.tags ?? []).map((t) => t.trim().toLowerCase()),
     );
@@ -251,31 +279,39 @@ export default function BrowseScreen() {
             },
           ]}
         >
-          {/* Three products, one app — the top switcher. */}
-          <ModePills active="explore" />
+          {/* Brand row */}
+          <View style={styles.brandRow}>
+            <IconTile icon="store" size={36} solid />
+            <View style={styles.flex}>
+              <Text variant="subheading" weight="bold">
+                One Place
+              </Text>
+              <Text variant="caption" tone="muted" numberOfLines={1}>
+                ● {activePlace ? activePlace.label : 'Near you'} · local hub
+              </Text>
+            </View>
+            <HeaderIcon icon="map" label="Map of businesses" onPress={() => router.push('/map')} />
+            <HeaderIcon icon="ticket" label="Deals near you" onPress={() => router.push('/deals')} />
+          </View>
 
-          {/* Location row — the place you're browsing, stated plainly. */}
+          {/* Location row — the place you're browsing, and how far the list reaches. */}
           <View style={styles.locationRow}>
             <Pressable
               onPress={() => setPlacesOpen((v) => !v)}
               style={styles.locationBtn}
               hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Change location"
             >
-              <Icon name="pin" size={17} color={colors.brand} filled />
-              <Text variant="subheading" weight="bold" numberOfLines={1} style={styles.locationText}>
+              <Icon name="pin" size={17} color={colors.cta} />
+              <Text variant="label" weight="bold" numberOfLines={1} style={styles.locationText}>
                 {activePlace ? activePlace.label : 'Near you'}
               </Text>
               <View style={placesOpen ? styles.chevOpen : undefined}>
-                <Icon name="chevronDown" size={17} color={colors.textMuted} />
+                <Icon name="chevronDown" size={16} color={colors.textMuted} />
               </View>
             </Pressable>
-            <Pressable
-              onPress={() => router.push('/map')}
-              style={[styles.iconBtn, { backgroundColor: colors.surfaceAlt }]}
-              hitSlop={6}
-            >
-              <Icon name="map" size={19} color={colors.text} />
-            </Pressable>
+            {reachKm ? <Tag label={`Within ${reachKm} km`} tone="status" size="sm" /> : null}
           </View>
 
           {/* Dropdown panel */}
@@ -297,14 +333,14 @@ export default function BrowseScreen() {
                       {placeIcon(p.kind)}  {p.label}
                       {locked ? '  🔒' : ''}
                     </Text>
-                    {active ? <Text tone="brand" weight="semibold">✓</Text> : null}
+                    {active ? <Icon name="check" size={18} color={colors.brand} /> : null}
                   </Pressable>
                 );
               })}
             </Card>
           ) : null}
 
-          {/* Search pill (→ /search) + QR scan button */}
+          {/* Search pill (→ /search) */}
           <View
             style={styles.searchRow}
             onLayout={(e) => {
@@ -313,117 +349,102 @@ export default function BrowseScreen() {
           >
             <SearchScanBar />
           </View>
-
-          {/* Category strip — filters THIS screen inline, Flipkart-style. */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.stripScroll}
-            contentContainerStyle={styles.stripRow}
-          >
-            {[
-              { id: null as string | null, label: 'For You', icon: '✨', color: colors.brand },
-              ...INTENT_CATEGORIES,
-            ].map((c) => {
-              const active = selectedId === c.id;
-              return (
-                <Pressable
-                  key={c.id ?? 'foryou'}
-                  onPress={() => setSelectedId(c.id)}
-                  style={styles.stripItem}
-                >
-                  {/* Each category owns a color (domain/intents.ts) — the tile
-                      wears it, so the strip is the colorful part of the page. */}
-                  <View
-                    style={[
-                      styles.stripIconBox,
-                      { backgroundColor: c.color + (active ? '3D' : '1F') },
-                      active && { borderColor: c.color, borderWidth: 2 },
-                    ]}
-                  >
-                    <Text style={styles.stripEmoji}>{c.icon}</Text>
-                  </View>
-                  <Text
-                    variant="caption"
-                    weight={active ? 'bold' : 'medium'}
-                    numberOfLines={1}
-                    style={[styles.stripLabel, active && { color: c.color }]}
-                  >
-                    {c.label}
-                  </Text>
-                  <View
-                    style={[
-                      styles.stripUnderline,
-                      { backgroundColor: c.color, opacity: active ? 1 : 0 },
-                    ]}
-                  />
-                </Pressable>
-              );
-            })}
-          </ScrollView>
         </View>
 
-        {/* Subcategory tiles — one row, right under the strip, above the ad */}
-        {selected && subTiles.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.tilesScroll}
-            contentContainerStyle={styles.tilesRow}
-          >
-            {subTiles.map((t) => (
-              <Pressable key={t.id} onPress={() => openSubcategory(t.id)} style={styles.tile}>
-                <View style={[styles.tileBox, { backgroundColor: selected.color + '1C' }]}>
-                  <Text style={styles.tileEmoji}>{t.emoji}</Text>
-                </View>
-                <Text variant="caption" weight="medium" numberOfLines={1} style={styles.tileLabel}>
-                  {t.label}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+        {/* Intent chips — filter THIS screen inline, with live counts. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.bleed}
+          contentContainerStyle={styles.chipRow}
+        >
+          <Tag
+            label="All"
+            count={data?.length ?? 0}
+            selected={selectedId === null}
+            onPress={() => setSelectedId(null)}
+          />
+          {INTENT_CATEGORIES.filter((c) => (intentCounts.get(c.id) ?? 0) > 0 || c.id === selectedId).map(
+            (c) => (
+              <Tag
+                key={c.id}
+                icon={c.icon}
+                label={c.label}
+                count={intentCounts.get(c.id) ?? 0}
+                selected={selectedId === c.id}
+                onPress={() => setSelectedId(selectedId === c.id ? null : c.id)}
+              />
+            ),
+          )}
+        </ScrollView>
+
+        {/* Trending tags — or the picked category's own tags. */}
+        {(selected ? subTiles.length : trending.length) > 0 ? (
+          <View style={styles.trendRow}>
+            <Text variant="caption" weight="bold" tone="muted">
+              {selected ? `In ${selected.label}:` : 'Trending:'}
+            </Text>
+            {selected
+              ? subTiles.map((t) => (
+                  <Tag
+                    key={t.id}
+                    label={`${t.emoji} ${t.label}`}
+                    tone="soft"
+                    size="sm"
+                    onPress={() => openSubcategory(t.id)}
+                  />
+                ))
+              : trending.map((t) => (
+                  <Tag
+                    key={t}
+                    label={`#${t.replace(/\s+/g, '')}`}
+                    tone="soft"
+                    size="sm"
+                    onPress={() => router.push({ pathname: '/search', params: { q: t } })}
+                  />
+                ))}
+          </View>
         ) : null}
 
         {/* The ad slot — offers near you, scoped to the picked category */}
         {ads.length > 0 ? (
-          <View style={styles.dealsSection}>
-            <View style={styles.dealsHeadingRow}>
-              <Text variant="subheading" weight="bold" style={styles.dealsHeading}>
-                🔥 {selected ? `${selected.label} deals` : 'Deals near you'}
-              </Text>
-              {/* Four cards is a glance. The feed is where someone who WANTS
-                  deals browses them — full-screen, swipe-up, videos playing.
-                  It carries the place and category over so "See all" continues
-                  what's on screen rather than resetting it. */}
-              <Pressable
-                onPress={() =>
-                  router.push({
-                    pathname: '/deals',
-                    params: {
-                      ...(activePlace ? { place: activePlace.id } : {}),
-                      ...(selectedId ? { intent: selectedId } : {}),
-                    },
-                  })
-                }
-                hitSlop={8}
-              >
-                <Text variant="label" weight="semibold" tone="brand">
-                  See all →
-                </Text>
-              </Pressable>
-            </View>
+          <View>
+            <SectionHeader
+              emoji="🔥"
+              title={selected ? `${selected.label} deals near you` : 'Neighborhood deals near you'}
+              actionLabel="View all"
+              onAction={() =>
+                router.push({
+                  pathname: '/deals',
+                  params: {
+                    ...(activePlace ? { place: activePlace.id } : {}),
+                    ...(selectedId ? { intent: selectedId } : {}),
+                  },
+                })
+              }
+            />
             {/* Bleeds to the screen edges so neighbouring cards peek in. */}
-            <View style={styles.dealsBleed}>
+            <View style={styles.bleed}>
               <AdCarousel items={ads} onImpression={countImpression} />
             </View>
           </View>
         ) : null}
 
-        {selected ? (
-          <Text variant="subheading" weight="bold" style={styles.listHeading}>
-            {selected.icon} {selected.label} near you
-          </Text>
-        ) : null}
+        <SectionHeader
+          title={selected ? `${selected.label} near you` : 'Near you now'}
+          subtitle="Neighborhood providers around you, open and active"
+          right={
+            <SegmentedControl
+              fill={false}
+              value={sort}
+              onChange={setSort}
+              options={[
+                { id: 'popular', label: 'Popular' },
+                { id: 'nearest', label: 'Nearest' },
+              ]}
+            />
+          }
+        />
       </View>
     ),
     [
@@ -437,7 +458,13 @@ export default function BrowseScreen() {
       ads,
       countImpression,
       selectedId,
+      selected,
       subTiles,
+      trending,
+      intentCounts,
+      reachKm,
+      data,
+      sort,
     ],
   );
 
@@ -501,8 +528,37 @@ export default function BrowseScreen() {
   );
 }
 
+/** A round white icon button in the header sheet. */
+function HeaderIcon({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: 'map' | 'ticket' | 'bell';
+  label: string;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.iconBtn,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+        pressed && { opacity: 0.6 },
+      ]}
+    >
+      <Icon name={icon} size={18} color={colors.text} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   screen: { flex: 1 },
+  flex: { flex: 1, minWidth: 0 },
   list: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
   // Multi-column nearby grid on wide screens.
   column: { gap: spacing.md },
@@ -511,24 +567,24 @@ const styles = StyleSheet.create({
   sheet: {
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    marginBottom: spacing.lg,
+    paddingBottom: spacing.lg,
     borderBottomWidth: 1,
   },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginTop: spacing.lg,
+    marginTop: spacing.md,
   },
-  // Borderless: the location is a heading you can tap, not a form control.
   locationBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   locationText: { flexShrink: 1 },
   chevOpen: { transform: [{ rotate: '180deg' }] },
   iconBtn: {
-    width: 40,
-    height: 40,
+    width: 38,
+    height: 38,
     borderRadius: radius.pill,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -550,43 +606,14 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  // Category strip
-  stripScroll: { marginTop: spacing.lg, marginHorizontal: -spacing.lg },
-  stripRow: { paddingHorizontal: spacing.lg, gap: spacing.md },
-  stripItem: { alignItems: 'center', width: 68 },
-  stripIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: radius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stripEmoji: { fontSize: 22 },
-  stripLabel: { marginTop: spacing.xs, maxWidth: 68 },
-  stripUnderline: { height: 3, width: 28, borderRadius: 2, marginTop: 3 },
-  // Deals
-  dealsSection: { marginBottom: spacing.md },
-  dealsHeadingRow: {
+  // Escape the list's horizontal padding so rows reach the screen edges.
+  bleed: { marginHorizontal: -spacing.lg },
+  chipRow: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingTop: spacing.lg },
+  trendRow: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: spacing.md,
-  },
-  dealsHeading: { marginBottom: spacing.md },
-  // Escape the list's horizontal padding so peeking cards reach the edges.
-  dealsBleed: { marginHorizontal: -spacing.lg },
-  // Subcategory tiles
-  tilesScroll: { marginHorizontal: -spacing.lg, marginBottom: spacing.md },
-  tilesRow: { paddingHorizontal: spacing.lg, gap: spacing.md },
-  tile: { alignItems: 'center', width: 76 },
-  tileBox: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.lg,
+    flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: spacing.xs + 2,
+    marginTop: spacing.md,
   },
-  tileEmoji: { fontSize: 30 },
-  tileLabel: { marginTop: spacing.xs, maxWidth: 76 },
-  listHeading: { marginBottom: spacing.md },
 });

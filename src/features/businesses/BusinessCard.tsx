@@ -1,31 +1,35 @@
 /**
- * Business card used in the browse list, in the neighborhood style: a bold
- * name, one quiet meta line, and soft-tinted status chips — no saturated
- * badges competing with the content. Icons carry the meaning that emoji used
- * to, so every row lines up on the same baseline.
+ * The listing card (One Place redesign — docs/redesign-one-place/explore.png,
+ * "Neighborhood Business Card" in DESIGN.md). Every list of businesses uses it:
+ * Explore, Browse, Search.
  *
- * When the owner has uploaded a display picture the card opens with it, using
- * the SAME treatment as the business page hero — the photo behind a dark
- * scrim, with the name, provider line and status chips reading on top of it —
- * so a listing looks like itself whether you meet it in a list or on its own
- * page. Everything below (rating, address, tags) stays on plain surface, and a
- * card with no picture keeps exactly the layout it had before.
+ *  ┌──────┐ [Open now] [#Cafe]              ★ 4.8 (240)
+ *  │photo │ Green Valley Artisan Cafe
+ *  └──────┘ 450 m away · Until 10 PM
+ *           (Coffee) (Bakery) (Outdoor)
+ *  ┌ Popular: Vanilla Cold Brew ₹180 ──────────────┐
+ *  (📞) (💬) [        🛒 Order now        ]
+ *
+ * The "Popular" strip is the first thing the business sells and the action
+ * button is that bucket's own door (BUCKET_META in domain/offerings.ts): a dish
+ * is ordered (terracotta), a service or rental requested (sage), a plan
+ * enrolled in (outline). A business with nothing listed gets "View page".
  */
-import { useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import type { Business, PlaceKind } from '@/domain/types';
 import { openState } from '@/domain/hours';
-import { formatDistance, priceLevelLabel, rentalBasisLabel } from '@/domain/catalog';
+import { formatDistance, getType, rentalBasisLabel } from '@/domain/catalog';
+import { offeringBuckets, type OfferingBucket } from '@/domain/offerings';
+import { tagEmoji } from '@/domain/intents';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { haversineKm } from '@/lib/geo';
-import { Card, Icon, Stars, Tag, Text } from '@/components/ui';
+import { Button, Card, Icon, IconTile, Tag, Text } from '@/components/ui';
+import { catalogLink } from '@/features/offerings/links';
 import { radius, spacing, useColors } from '@/theme/theme';
-import { CARD_WIDTH, thumbUrl } from '@/lib/media';
-import { locationSummary } from './location';
-import { StatusChip } from './StatusChip';
+import { THUMB_WIDTH, thumbUrl } from '@/lib/media';
+import { ON_HOLD } from '@/lib/onHold';
 
 const PLACE_ICONS: Record<PlaceKind, string> = {
   current: '🧭',
@@ -34,30 +38,21 @@ const PLACE_ICONS: Record<PlaceKind, string> = {
   custom: '📌',
 };
 
-/** Shorter than the hero's 200 — a list has to fit several of these on screen. */
-const COVER_H = 150;
+/** How each bucket's door looks on a card. */
+const DOOR: Record<OfferingBucket, { label: string; icon: 'cart' | 'bag' | 'tools' | 'key' | 'ticket'; variant: 'cta' | 'primary' | 'outline' }> = {
+  menu: { label: 'Order now', icon: 'cart', variant: 'cta' },
+  products: { label: 'Buy now', icon: 'bag', variant: 'cta' },
+  services: { label: 'Request service', icon: 'tools', variant: 'primary' },
+  rentals: { label: 'Request to rent', icon: 'key', variant: 'primary' },
+  plans: { label: 'View plans', icon: 'ticket', variant: 'outline' },
+};
 
 export function BusinessCard({ business }: { business: Business }) {
   const router = useRouter();
   const colors = useColors();
   const repos = useRepositories();
-  const [favorite, setFavorite] = useState(false);
 
   const distance = formatDistance(business.distanceKm);
-  const price = priceLevelLabel(business.priceLevel);
-
-  // The display picture doubles as the header background; without one the
-  // header is simply the top of the card, on plain surface.
-  const cover = business.coverImageUrl;
-  const onPhoto = !!cover;
-  const tone = onPhoto ? ('inverse' as const) : ('default' as const);
-  const mutedTone = onPhoto ? ('inverse' as const) : ('muted' as const);
-  // Muted text would vanish against the scrim, so on a photo the hours and
-  // distance ride in surface pills — the same trick the hero uses.
-  const pillStyle = onPhoto ? [styles.metaPill, { backgroundColor: colors.surface }] : null;
-
-  // Open/Closed is computed from structured hours when present, else the stored
-  // openNow flag; the 🕒 label prefers today's timings over the legacy summary.
   const status = openState(business);
   const hoursLabel = status.todayLabel ?? business.hours;
 
@@ -81,104 +76,114 @@ export function BusinessCard({ business }: { business: Business }) {
           .filter((d) => d.distance)
       : [];
 
-  // Personal stall (type 'item'): the card sells the stall's contents, so
-  // show an item count and a preview of what's inside.
-  const stallItems = business.type === 'item' ? business.products ?? [] : [];
+  // ON HOLD (redesign 2026-10): stall — the stall's item preview.
+  const stallItems = !ON_HOLD.stalls && business.type === 'item' ? business.products ?? [] : [];
+
+  // The lead offering and its door.
+  const lead = offeringBuckets(business)[0];
+  const leadItem = lead?.items.find((i) => i.price) ?? lead?.items[0];
+  const door = lead ? DOOR[lead.bucket] : undefined;
+
+  const tags = business.tags ?? [];
+  const typeIcon = getType(business.type)?.icon ?? '🏪';
   const basis = isRental ? rentalBasisLabel(business.rentalBasis) : undefined;
-  const providerLine =
-    stallItems.length > 0
-      ? `${business.providerType ?? 'Personal stall'} · ${stallItems.length} item${stallItems.length === 1 ? '' : 's'}`
-      : basis
-        ? [business.providerType, basis].filter(Boolean).join(' · ')
-        : business.providerType;
+  const cover = business.coverImageUrl;
+  const open = () => router.push(`/business/${business.id}`);
 
-  // Identity block — this is the part that sits on the photo when there is one.
-  const header = (
-    <>
-      <View style={styles.titleRow}>
-        <Text variant="subheading" weight="bold" tone={tone} style={styles.name} numberOfLines={1}>
-          {business.name}
-        </Text>
-        {price ? (
-          <Text variant="label" weight="semibold" tone={mutedTone}>
-            {price}
-          </Text>
-        ) : null}
-        <Pressable onPress={() => setFavorite((f) => !f)} hitSlop={10} style={styles.heart}>
-          <Icon
-            name="heart"
-            size={19}
-            color={favorite ? colors.danger : onPhoto ? '#FFFFFF' : colors.textMuted}
-            filled={favorite}
-          />
-        </Pressable>
-      </View>
-
-      {providerLine ? (
-        <Text variant="label" tone={mutedTone} style={styles.provider} numberOfLines={1}>
-          {providerLine}
-        </Text>
-      ) : null}
-
-      {/* Status · hours · distance — soft chips, not saturated badges. */}
-      <View style={[styles.badgeRow, onPhoto && styles.badgeRowOnPhoto]}>
-        {business.rentalStatus ? (
-          <StatusChip
-            label={business.rentalStatus === 'available' ? 'Available' : 'Rented'}
-            positive={business.rentalStatus === 'available'}
-          />
-        ) : typeof status.open === 'boolean' ? (
-          <StatusChip label={status.open ? 'Open now' : 'Closed'} positive={status.open} />
-        ) : null}
-        {hoursLabel ? (
-          <View style={[styles.metaItem, pillStyle]}>
-            <Icon name="clock" size={13} color={colors.textMuted} strokeWidth={2.2} />
-            <Text variant="caption" tone="muted">
-              {hoursLabel}
-            </Text>
-          </View>
-        ) : null}
-        {distance ? (
-          <View style={[styles.metaItem, pillStyle]}>
-            <Icon name="pin" size={13} color={colors.textMuted} strokeWidth={2.2} />
-            <Text variant="caption" weight="semibold" tone="muted">
-              {distance}
-            </Text>
-          </View>
-        ) : null}
-      </View>
-    </>
-  );
+  // "450 m away · Until 10 PM" — the distance leads; hours colour by state.
+  const metaHours =
+    business.rentalStatus
+      ? business.rentalStatus === 'available'
+        ? 'Available now'
+        : 'Rented out'
+      : hoursLabel;
+  const metaPositive = business.rentalStatus ? business.rentalStatus === 'available' : status.open;
 
   return (
-    <Card
-      onPress={() => router.push(`/business/${business.id}`)}
-      padded={false}
-      style={styles.card}
-      accessibilityLabel={business.name}
-    >
-      {onPhoto ? (
+    // The card BODY is the link to the page; the footer's buttons sit outside it
+    // (a button inside a button is invalid HTML on web, and taps would bubble).
+    <Card style={styles.card}>
+      <Pressable
+        onPress={open}
+        accessibilityRole="link"
+        accessibilityLabel={business.name}
+        style={({ pressed }) => [styles.body, pressed && styles.pressed]}
+      >
         <View style={styles.top}>
-          <Image source={{ uri: thumbUrl(cover, CARD_WIDTH) }} style={styles.cover} resizeMode="cover" />
-          <LinearGradient
-            colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.72)']}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.headerOnPhoto}>{header}</View>
-        </View>
-      ) : (
-        <View style={styles.header}>{header}</View>
-      )}
+          {cover ? (
+            <Image source={{ uri: thumbUrl(cover, THUMB_WIDTH) }} style={styles.thumb} resizeMode="cover" />
+          ) : (
+            <IconTile emoji={tagEmoji(tags[0] ?? '', typeIcon)} size={72} />
+          )}
 
-      {/* Everything below the picture reads on plain surface. */}
-      <View style={styles.body}>
-        <View style={styles.ratingRow}>
-          <Stars rating={business.ratingAvg} count={business.ratingCount} />
-        </View>
+          <View style={styles.main}>
+            <View style={styles.chipRow}>
+              {business.rentalStatus ? (
+                <Tag
+                  label={business.rentalStatus === 'available' ? 'Available' : 'Rented'}
+                  tone={business.rentalStatus === 'available' ? 'status' : 'default'}
+                  size="sm"
+                  dot
+                />
+              ) : typeof status.open === 'boolean' ? (
+                <Tag
+                  label={status.open ? 'Open now' : 'Closed'}
+                  tone={status.open ? 'status' : 'default'}
+                  size="sm"
+                  dot
+                />
+              ) : null}
+              {business.providerType ? (
+                <Tag label={business.providerType} tone="soft" size="sm" />
+              ) : null}
+              <View style={styles.spacer} />
+              {typeof business.ratingAvg === 'number' && (business.ratingCount ?? 0) > 0 ? (
+                <View style={styles.rating}>
+                  <Icon name="star" size={14} color={colors.star} filled />
+                  <Text variant="caption" weight="bold">
+                    {business.ratingAvg.toFixed(1)}
+                  </Text>
+                  <Text variant="caption" tone="muted">
+                    ({business.ratingCount})
+                  </Text>
+                </View>
+              ) : (
+                <Tag label="New" tone="cta" size="sm" />
+              )}
+            </View>
 
-        <Text variant="caption" tone="muted" style={styles.location} numberOfLines={1}>
-          {locationSummary(business.location)}
-        </Text>
+            <Text variant="subheading" weight="bold" numberOfLines={1} style={styles.name}>
+              {business.name}
+            </Text>
+
+            <Text variant="caption" numberOfLines={1}>
+              {distance ? (
+                <Text variant="caption" tone="muted">
+                  {distance} away
+                </Text>
+              ) : null}
+              {distance && metaHours ? <Text variant="caption" tone="muted"> · </Text> : null}
+              {metaHours ? (
+                <Text
+                  variant="caption"
+                  weight="bold"
+                  style={{ color: metaPositive ? colors.successText : colors.danger }}
+                >
+                  {metaHours}
+                </Text>
+              ) : null}
+              {basis ? <Text variant="caption" tone="muted"> · {basis}</Text> : null}
+            </Text>
+
+            {tags.length > 0 ? (
+              <View style={styles.tags}>
+                {tags.slice(0, 3).map((t) => (
+                  <Tag key={t} label={t} size="sm" />
+                ))}
+              </View>
+            ) : null}
+          </View>
+        </View>
 
         {placeDistances.length > 0 ? (
           <View style={styles.distances}>
@@ -191,78 +196,121 @@ export function BusinessCard({ business }: { business: Business }) {
         ) : null}
 
         {stallItems.length > 0 ? (
-          <View style={styles.stallItems}>
+          <View style={styles.distances}>
             {stallItems.slice(0, 3).map((p, i) => (
               <Text key={`${p.name}-${i}`} variant="caption" tone="muted" numberOfLines={1}>
                 •  {p.name}
                 {p.price ? ` · ${p.price}` : ''}
               </Text>
             ))}
-            {stallItems.length > 3 ? (
-              <Text variant="caption" tone="muted">
-                +{stallItems.length - 3} more
-              </Text>
-            ) : null}
           </View>
         ) : null}
 
-        {business.tags && business.tags.length > 0 ? (
-          <View style={styles.tags}>
-            {business.tags.slice(0, 3).map((t) => (
-              <Tag key={t} label={t} />
-            ))}
+        {leadItem ? (
+          <View style={[styles.popular, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+            <Text variant="caption" numberOfLines={1} style={styles.popularText}>
+              <Text variant="caption" tone="muted">
+                {lead!.bucket === 'plans' ? 'Plans from: ' : 'Popular: '}
+              </Text>
+              <Text variant="caption" weight="bold">
+                {leadItem.name}
+                {leadItem.price ? ` ${leadItem.price}` : ''}
+                {leadItem.badge ? ` ${leadItem.badge}` : ''}
+              </Text>
+            </Text>
+            <Text variant="caption" tone="muted">
+              {lead!.subtitle}
+            </Text>
           </View>
         ) : null}
+      </Pressable>
+
+      <View style={styles.footer}>
+        <RoundAction
+          icon="phone"
+          label={`Call ${business.name}`}
+          onPress={() => router.push(`/call/${business.id}`)}
+        />
+        <RoundAction
+          icon="chat"
+          label={`Chat with ${business.name}`}
+          onPress={() => router.push(`/chat/${business.id}`)}
+        />
+        {lead && door ? (
+          <Button
+            title={door.label}
+            icon={door.icon}
+            variant={door.variant}
+            size="sm"
+            onPress={() => router.push(catalogLink(business.id, lead.bucket))}
+            style={styles.door}
+          />
+        ) : (
+          <Button title="View page" variant="secondary" size="sm" onPress={open} style={styles.door} />
+        )}
       </View>
     </Card>
   );
 }
 
+function RoundAction({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: 'phone' | 'chat';
+  label: string;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.round,
+        { borderColor: colors.border, backgroundColor: colors.surface },
+        pressed && { opacity: 0.7 },
+      ]}
+    >
+      <Icon name={icon} size={17} color={colors.brandText} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  card: { marginBottom: spacing.md },
-  heart: { alignItems: 'center', justifyContent: 'center' },
-  // Photo header: the identity sits at the BOTTOM of the frame, where the
-  // scrim is darkest.
-  top: { justifyContent: 'flex-end', minHeight: COVER_H },
-  cover: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    width: '100%',
-    height: '100%',
-  },
-  header: { padding: spacing.lg, paddingBottom: 0 },
-  headerOnPhoto: { padding: spacing.lg, paddingTop: spacing.xxl },
-  body: { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
-  badgeRow: {
+  card: { marginBottom: spacing.md, gap: spacing.md },
+  body: { gap: spacing.md },
+  pressed: { opacity: 0.75 },
+  top: { flexDirection: 'row', gap: spacing.md },
+  thumb: { width: 72, height: 72, borderRadius: radius.md },
+  main: { flex: 1, minWidth: 0, gap: 3 },
+  chipRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap' },
+  spacer: { flex: 1 },
+  rating: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  name: { marginTop: 2 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  distances: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: 2 },
+  popular: {
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    columnGap: spacing.md,
-    rowGap: spacing.xs,
-    marginTop: spacing.md,
+    gap: spacing.sm,
   },
-  badgeRowOnPhoto: { columnGap: spacing.sm, rowGap: spacing.sm },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaPill: {
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
+  popularText: { flex: 1 },
+  footer: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  round: {
+    width: 38,
+    height: 38,
     borderRadius: radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  name: { flex: 1 },
-  provider: { marginTop: 3 },
-  ratingRow: { marginTop: spacing.md },
-  location: { marginTop: spacing.xs },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.md },
-  stallItems: { marginTop: spacing.sm, gap: 2 },
-  distances: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    columnGap: spacing.md,
-    rowGap: 2,
-    marginTop: spacing.sm,
-  },
+  door: { flex: 1 },
 });

@@ -514,7 +514,11 @@ export function WorkspaceHub({ businessId, header }: WorkspaceHubProps) {
             {open === undefined ? 'No opening hours set' : open ? 'Open now' : 'Closed right now'}
           </Text>
           <Text variant="caption" tone="muted">
-            {todayLabel ? `Today: ${todayLabel}` : 'Add hours so customers know when to come'}
+            {todayLabel
+              ? `Today: ${todayLabel}`
+              : business.hours
+                ? business.hours
+                : 'Add opening hours so customers know when to come'}
           </Text>
         </View>
         <Tag label={`You: ${role}`} tone="soft" size="sm" />
@@ -692,7 +696,7 @@ export function WorkspaceHub({ businessId, header }: WorkspaceHubProps) {
 function ToolCard({ tool, onPress }: { tool: Tool; onPress: () => void }) {
   const colors = useColors();
   return (
-    <Card onPress={onPress} padded={false} accessibilityLabel={tool.label}>
+    <Card onPress={onPress} padded={false} accessibilityLabel={tool.label} style={styles.tool}>
       <View style={styles.toolTop}>
         <IconTile icon={tool.icon} size={40} />
         <View style={styles.flex}>
@@ -853,7 +857,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.lg,
   },
-  toolList: { gap: spacing.md },
+  // Stacks on a phone; wraps into a grid of cards on a wide screen.
+  toolList: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
+  tool: { flexGrow: 1, flexBasis: 300 },
   toolTop: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, paddingBottom: spacing.md },
   toolTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 2 },
   toolFoot: {

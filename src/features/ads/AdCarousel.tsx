@@ -1,5 +1,6 @@
 /**
  * THE AD SLOT — the rotating card carousel on Home, under the category strip.
+ * (One Place redesign: white "deal circular" cards — docs/redesign-one-place.)
  *
  * One tall card sits centered with a sliver of the previous and next peeking in
  * at the edges; the list wraps around (circular) and auto-advances. Tapping a
@@ -30,7 +31,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Text } from '@/components/ui';
+import { Icon, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 export interface AdCardItem {
@@ -73,7 +74,8 @@ export interface AdCarouselProps {
 export function AdCarousel({ items, onImpression }: AdCarouselProps) {
   const { width } = useWindowDimensions();
   const colors = useColors();
-  const cardW = width - 2 * (PEEK + GAP);
+  // Narrow deal cards so the next one peeks in, like a stack of circulars.
+  const cardW = Math.min(width - 2 * (PEEK + GAP), 300);
   const step = cardW + GAP;
   const n = items.length;
   const loop = n > 1;
@@ -174,89 +176,77 @@ export function AdCarousel({ items, onImpression }: AdCarouselProps) {
             onPress={it.onPress}
             style={({ pressed }) => [{ width: cardW }, pressed && styles.pressed]}
           >
-            <View style={styles.card}>
-              {/* With a photo the card is the photo, darkened just enough at the
-                  bottom for the text to hold. Without one it's the old look:
-                  the business's color as a gradient, emoji watermarked in. */}
-              {it.imageUrl ? (
-                <>
-                  <Image source={{ uri: it.imageUrl }} style={styles.photo} resizeMode="cover" />
-                  <LinearGradient
-                    colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.45)', 'rgba(0,0,0,0.8)']}
-                    style={styles.photo}
-                  />
-                </>
-              ) : (
-                <>
+            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+              {/* One Place deal card: white paper, a terracotta tag pill, the
+                  offer in bold, and the photo (or the business's emoji) as a
+                  thumbnail on the right. */}
+              <View style={styles.topRow}>
+                <View style={[styles.tagPill, { backgroundColor: colors.ctaSoft }]}>
+                  <Text variant="caption" weight="bold" style={{ color: colors.cta }} numberOfLines={1}>
+                    {it.tag}
+                  </Text>
+                </View>
+                {/* Never quiet about it: a paid placement is labelled. */}
+                {it.sponsored ? (
+                  <View style={[styles.sponsoredPill, { backgroundColor: colors.surfaceAlt }]}>
+                    <Text variant="caption" weight="semibold" tone="muted">
+                      Sponsored
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <View style={styles.middle}>
+                <View style={styles.body}>
+                  <Text variant="subheading" weight="bold" numberOfLines={2}>
+                    {it.title}
+                  </Text>
+                  <Text variant="caption" tone="muted" numberOfLines={1} style={styles.desc}>
+                    {it.businessName}
+                    {it.description ? ` · ${it.description}` : ''}
+                  </Text>
+                </View>
+                {it.imageUrl ? (
+                  <Image source={{ uri: it.imageUrl }} style={styles.thumb} resizeMode="cover" />
+                ) : (
                   <LinearGradient
                     colors={it.colors}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={styles.photo}
-                  />
-                  <Text style={styles.emoji}>{it.emoji}</Text>
-                </>
-              )}
+                    style={[styles.thumb, styles.thumbFallback]}
+                  >
+                    <Text style={styles.emoji}>{it.emoji}</Text>
+                  </LinearGradient>
+                )}
+              </View>
 
-              <View style={styles.content}>
-                <View style={styles.topRow}>
-                  <View style={styles.tagPill}>
-                    <Text variant="caption" weight="bold" tone="inverse">
-                      {it.tag}
+              <View style={[styles.footer, { borderTopColor: colors.border }]}>
+                {it.distanceLabel ? (
+                  <View style={styles.meta}>
+                    <Icon name="pin" size={13} color={colors.textMuted} />
+                    <Text variant="caption" tone="muted" numberOfLines={1}>
+                      {it.distanceLabel} away
                     </Text>
                   </View>
-                  {/* Never quiet about it: a paid placement is labelled. */}
-                  {it.sponsored ? (
-                    <View style={styles.sponsoredPill}>
-                      <Text variant="caption" weight="semibold" tone="inverse">
-                        Sponsored
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-
-                <View style={styles.body}>
-                  <Text variant="heading" weight="bold" tone="inverse" numberOfLines={3}>
-                    {it.title}
-                  </Text>
-                  {it.description ? (
-                    <Text variant="label" tone="inverse" numberOfLines={2} style={styles.desc}>
-                      {it.description}
+                ) : (
+                  <View style={styles.meta} />
+                )}
+                {it.price ? (
+                  <View style={[styles.pricePill, { backgroundColor: colors.brandSoft }]}>
+                    <Text variant="label" weight="bold" tone="brand">
+                      {it.price}
                     </Text>
-                  ) : null}
-                  {it.price ? (
-                    <View style={styles.priceRow}>
-                      <Text variant="title" weight="bold" tone="inverse">
-                        {it.price}
+                    {it.wasPrice ? (
+                      <Text variant="caption" tone="muted" style={styles.wasPrice}>
+                        {it.wasPrice}
                       </Text>
-                      {it.wasPrice ? (
-                        <Text variant="body" tone="inverse" style={styles.wasPrice}>
-                          {it.wasPrice}
-                        </Text>
-                      ) : null}
-                    </View>
-                  ) : null}
-                </View>
-
-                <View style={styles.footer}>
-                  <Text
-                    variant="label"
-                    weight="semibold"
-                    tone="inverse"
-                    numberOfLines={1}
-                    style={styles.bizName}
-                  >
-                    {it.businessName}
+                    ) : null}
+                  </View>
+                ) : (
+                  <Text variant="caption" weight="bold" tone="brand">
+                    View deal ›
                   </Text>
-                  {it.distanceLabel ? (
-                    <Text variant="caption" tone="inverse" style={styles.distance}>
-                      📍 {it.distanceLabel}
-                    </Text>
-                  ) : null}
-                  <Text variant="caption" weight="semibold" tone="inverse">
-                    View →
-                  </Text>
-                </View>
+                )}
               </View>
             </View>
           </Pressable>
@@ -283,43 +273,50 @@ export function AdCarousel({ items, onImpression }: AdCarouselProps) {
 
 const styles = StyleSheet.create({
   row: { gap: GAP, paddingHorizontal: PEEK + GAP },
-  pressed: { opacity: 0.92 },
+  pressed: { opacity: 0.85 },
   card: {
-    height: 280,
-    borderRadius: radius.xl,
-    overflow: 'hidden',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.lg,
+    gap: spacing.md,
+    minHeight: 168,
   },
-  // Both the photo and its scrim fill the card behind the content.
-  photo: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  content: { flex: 1, padding: spacing.lg },
-  emoji: { position: 'absolute', top: 16, right: 18, fontSize: 84, opacity: 0.3 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   tagPill: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 3,
+    flexShrink: 1,
   },
   sponsoredPill: {
-    backgroundColor: 'rgba(0,0,0,0.35)',
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
-  body: { flex: 1, justifyContent: 'flex-end', paddingBottom: spacing.sm },
-  desc: { opacity: 0.85, marginTop: 2 },
-  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: 2 },
-  wasPrice: { opacity: 0.75, textDecorationLine: 'line-through' },
+  middle: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', flex: 1 },
+  body: { flex: 1, minWidth: 0 },
+  desc: { marginTop: 2 },
+  thumb: { width: 64, height: 64, borderRadius: radius.md },
+  thumbFallback: { alignItems: 'center', justifyContent: 'center' },
+  emoji: { fontSize: 30, lineHeight: 36 },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(255,255,255,0.4)',
     paddingTop: spacing.sm,
   },
-  bizName: { flexShrink: 1 },
-  distance: { opacity: 0.9, flexGrow: 1 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
+  pricePill: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: spacing.xs,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  wasPrice: { textDecorationLine: 'line-through' },
   dots: { flexDirection: 'row', justifyContent: 'center', gap: 5, marginTop: spacing.sm },
   dot: { width: 6, height: 6, borderRadius: 3 },
 });

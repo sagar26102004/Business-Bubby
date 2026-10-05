@@ -9,7 +9,7 @@
  */
 import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSubcategory } from '@/domain/catalog';
@@ -32,9 +32,11 @@ export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const { cardColumns, gridMaxWidth, readableMaxWidth, centered } = useResponsive();
 
-  const [query, setQuery] = useState('');
+  // `?q=` pre-fills and runs a search — Explore's trending #tag chips use it.
+  const { q } = useLocalSearchParams<{ q?: string }>();
+  const [query, setQuery] = useState(q ?? '');
   /** The committed search term — set on enter or when a suggestion is tapped. */
-  const [submitted, setSubmitted] = useState('');
+  const [submitted, setSubmitted] = useState(q ?? '');
   const debounced = useDebouncedValue(query.trim(), 300);
 
   const { data: places } = useAsync(() => repos.places.listPlaces(), []);
