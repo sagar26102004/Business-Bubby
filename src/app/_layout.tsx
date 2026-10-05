@@ -22,6 +22,7 @@ import { OngoingCallBar } from '@/features/calls/OngoingCallBar';
 import { PushRegistrar } from '@/features/notifications/PushRegistrar';
 import { CartProvider } from '@/features/orders/CartContext';
 import { spacing, useColors } from '@/theme/theme';
+import { fontFor, useAppFonts } from '@/theme/fonts';
 // Registers the driver background-location task at app start, so the OS can
 // restart it after the app is killed (see lib/backgroundLocation.ts).
 import '@/lib/backgroundLocation';
@@ -145,7 +146,7 @@ function AppHeader({ title, headerRight }: { title: string; headerRight?: Header
           style={{
             color: colors.text,
             fontSize: 17,
-            fontWeight: '700',
+            ...fontFor('bold'),
             maxWidth: headerRight ? '45%' : '65%',
           }}
         >
@@ -208,6 +209,10 @@ const styles = StyleSheet.create({ root: { flex: 1 } });
 
 export default function RootLayout() {
   const colors = useColors();
+  // Hold the first paint (behind the splash) until the typeface has settled,
+  // so text doesn't render in the system font and then jump.
+  const fontsSettled = useAppFonts();
+  if (!fontsSettled) return null;
 
   return (
     <SafeAreaProvider>

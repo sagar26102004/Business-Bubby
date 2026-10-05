@@ -15,3 +15,11 @@ export { SearchIcon } from './SearchIcon';
 export { SearchField } from './SearchField';
 export { ScanIcon } from './ScanIcon';
 export { LoadingView, ErrorView, EmptyView } from './StateView';
+// — One Place redesign (2026-10) —
+export { IconTile } from './IconTile';
+export { SegmentedControl } from './SegmentedControl';
+export { SectionHeader } from './SectionHeader';
+export { ToggleCard } from './ToggleCard';
+export { StepHeader } from './StepHeader';
+export { BottomActionBar } from './BottomActionBar';
+export type { TagTone } from './Tag';

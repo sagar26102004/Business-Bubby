@@ -45,7 +45,31 @@ export type IconName =
   | 'camera'
   | 'logout'
   | 'trash'
-  | 'info';
+  | 'info'
+  | 'explore'
+  | 'grid'
+  | 'receipt'
+  | 'calendar'
+  | 'directions'
+  | 'share'
+  | 'bookmark'
+  | 'edit'
+  | 'tools'
+  | 'key'
+  | 'utensils'
+  | 'box'
+  | 'trending'
+  | 'rupee'
+  | 'users'
+  | 'truck'
+  | 'megaphone'
+  | 'refresh'
+  | 'close'
+  | 'minus'
+  | 'filter'
+  | 'sparkle'
+  | 'image'
+  | 'bolt';
 
 export interface IconProps {
   name: IconName;
@@ -268,6 +292,142 @@ export function Icon({ name, size = 24, color = '#000', filled, strokeWidth = 2 
           <Circle cx={12} cy={7.8} r={0.9} fill={color} stroke="none" />
         </>
       ) : null}
+      {/* — One Place redesign additions (2026-10) — */}
+      {name === 'explore' ? (
+        <>
+          <Circle cx={12} cy={12} r={9} {...s} />
+          <Path d="m15.5 8.5-2 5-5 2 2-5z" {...solid} />
+        </>
+      ) : null}
+
+      {name === 'grid' ? (
+        <>
+          <Rect x={3.5} y={3.5} width={7} height={7} rx={1.5} {...solid} />
+          <Rect x={13.5} y={3.5} width={7} height={7} rx={1.5} {...solid} />
+          <Rect x={3.5} y={13.5} width={7} height={7} rx={1.5} {...solid} />
+          <Rect x={13.5} y={13.5} width={7} height={7} rx={1.5} {...solid} />
+        </>
+      ) : null}
+
+      {name === 'receipt' ? (
+        <>
+          <Path d="M5 2.5h14v19l-2.5-1.5-2.3 1.5-2.2-1.5-2.2 1.5-2.3-1.5L5 21.5z" {...solid} />
+          {!filled ? <Path d="M8.5 8h7M8.5 12h7M8.5 16h4" {...s} /> : null}
+        </>
+      ) : null}
+
+      {name === 'calendar' ? (
+        <>
+          <Rect x={3.5} y={5} width={17} height={16} rx={2} {...s} />
+          <Path d="M3.5 10h17M8 3v4M16 3v4" {...s} />
+        </>
+      ) : null}
+
+      {name === 'directions' ? <Path d="M3 11.5 21 3l-8.5 18-2-7.5z" {...solid} /> : null}
+
+      {name === 'share' ? (
+        <>
+          <Circle cx={18} cy={5.5} r={2.5} {...s} />
+          <Circle cx={6} cy={12} r={2.5} {...s} />
+          <Circle cx={18} cy={18.5} r={2.5} {...s} />
+          <Path d="m8.2 10.8 7.6-4.1M8.2 13.2l7.6 4.1" {...s} />
+        </>
+      ) : null}
+
+      {name === 'bookmark' ? <Path d="M6 3.5h12v17.5l-6-4.2-6 4.2z" {...solid} /> : null}
+
+      {name === 'edit' ? (
+        <>
+          <Path d="M15.5 4.5 19.5 8.5 8.5 19.5H4.5v-4z" {...s} />
+          <Path d="m13 7 4 4" {...s} />
+        </>
+      ) : null}
+
+      {name === 'tools' ? (
+        <>
+          <Path d="M14.5 6.5a4 4 0 0 1 5-5l-2.5 2.5.5 2 2 .5 2.5-2.5a4 4 0 0 1-5 5L8 18a2 2 0 1 1-3-3z" {...s} />
+        </>
+      ) : null}
+
+      {name === 'key' ? (
+        <>
+          <Circle cx={7.5} cy={15.5} r={4} {...s} />
+          <Path d="m10.5 12.5 9-9M16.5 6.5l2.5 2.5M14 9l2 2" {...s} />
+        </>
+      ) : null}
+
+      {name === 'utensils' ? (
+        <>
+          <Path d="M7 2.5v19M4 2.5v5a3 3 0 0 0 6 0v-5" {...s} />
+          <Path d="M17 21.5v-19c-2.5 1.5-3.5 4-3.5 7.5V13h3.5" {...s} />
+        </>
+      ) : null}
+
+      {name === 'box' ? (
+        <>
+          <Path d="M3.5 7.5 12 3l8.5 4.5v9L12 21l-8.5-4.5z" {...s} />
+          <Path d="M3.5 7.5 12 12l8.5-4.5M12 12v9" {...s} />
+        </>
+      ) : null}
+
+      {name === 'trending' ? (
+        <>
+          <Path d="m2.5 17 6.5-6.5 4 4 8.5-8.5" {...s} />
+          <Path d="M15.5 6h6v6" {...s} />
+        </>
+      ) : null}
+
+      {name === 'rupee' ? <Path d="M6.5 3.5h11M6.5 8.5h11M6.5 3.5h3a5 5 0 0 1 0 10h-3l9 7" {...s} /> : null}
+
+      {name === 'users' ? (
+        <>
+          <Circle cx={9} cy={8} r={3.5} {...solid} />
+          <Path d="M2.5 20.5a6.5 6.5 0 0 1 13 0" {...solid} />
+          <Path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 6.3" {...s} />
+        </>
+      ) : null}
+
+      {name === 'truck' ? (
+        <>
+          <Path d="M2.5 5.5h11v11h-11zM13.5 9.5h4l3.5 3.5v3.5h-7.5" {...s} />
+          <Circle cx={6.5} cy={18} r={2} {...s} />
+          <Circle cx={17} cy={18} r={2} {...s} />
+        </>
+      ) : null}
+
+      {name === 'megaphone' ? (
+        <>
+          <Path d="M3.5 10v4h3l9 5V5l-9 5z" {...solid} />
+          <Path d="M19 9.5a3.5 3.5 0 0 1 0 5M7 14l1.5 6h2.5l-1-6" {...s} />
+        </>
+      ) : null}
+
+      {name === 'refresh' ? (
+        <>
+          <Path d="M20.5 12a8.5 8.5 0 0 1-15.2 5.2M3.5 12A8.5 8.5 0 0 1 18.7 6.8" {...s} />
+          <Path d="M19 2.5v4.5h-4.5M5 21.5V17h4.5" {...s} />
+        </>
+      ) : null}
+
+      {name === 'close' ? <Path d="M6 6l12 12M18 6 6 18" {...s} /> : null}
+
+      {name === 'minus' ? <Path d="M5 12h14" {...s} /> : null}
+
+      {name === 'filter' ? <Path d="M3.5 5h17l-6.5 8v6l-4 2v-8z" {...solid} /> : null}
+
+      {name === 'sparkle' ? (
+        <Path d="M12 2.5c.7 4.6 2.9 6.8 7.5 7.5-4.6.7-6.8 2.9-7.5 7.5-.7-4.6-2.9-6.8-7.5-7.5 4.6-.7 6.8-2.9 7.5-7.5zM19 16c.3 2 1.2 2.9 3 3.2-1.8.3-2.7 1.2-3 3-.3-1.8-1.2-2.7-3-3 1.8-.3 2.7-1.2 3-3.2z" {...solid} />
+      ) : null}
+
+      {name === 'image' ? (
+        <>
+          <Rect x={3} y={4} width={18} height={16} rx={2} {...s} />
+          <Circle cx={8.5} cy={9.5} r={1.8} {...s} />
+          <Path d="m21 16-5-5-9 9" {...s} />
+        </>
+      ) : null}
+
+      {name === 'bolt' ? <Path d="M13 2.5 4.5 13.5H12l-1 8 8.5-11H12z" {...solid} /> : null}
     </Svg>
   );
 }

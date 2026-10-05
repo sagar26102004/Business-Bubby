@@ -3,7 +3,8 @@
  * restyle touches one file. Components read colors through `useColors()`.
  *
  * THREE looks live side by side, picked by `DESIGN` below:
- *  - 'forest' (current, 2026-10-04) — the high-fidelity neighborhood palette:
+ *  - 'forest' (current) — the "One Place" redesign (2026-10, source of truth:
+ *    docs/redesign-one-place/DESIGN.md). Plus Jakarta Sans (theme/fonts.ts),
  *    deep forest green (#2D5A43) as the one brand color on warm linen paper,
  *    sage-tinted fills, and terracotta (`cta`) for "go buy it" accents only.
  *  - 'neighborhood' (previous) — Nextdoor structure in a neutral monochrome:
@@ -31,16 +32,18 @@ const FOLLOW_SYSTEM_THEME = false;
 export const palette = {
   // — Forest (current): forest green on warm linen, terracotta for CTAs —
   forest: '#2D5A43', // brand: primary buttons, active tab pill, links
-  forestDeep: '#1F4231', // brand text on light fills, pressed states
-  sage: '#EAF7EC', // tinted chips / subtle containers
-  sageWash: '#F0FDF1', // header sheet + tab bar tint
-  sageLine: '#DDE8DF', // crisp soft-sage card outline
+  forestDeep: '#14422D', // brand text on light fills, pressed states
+  sage: '#E7EFEA', // tinted chips / icon tiles / subtle containers
+  sageWash: '#F2EFEB', // header sheet + tab bar (soft linen tint)
+  sageLine: '#E8E4DC', // warm stone card outline (DESIGN.md)
   linen: '#FBF9F5', // app background (warm paper)
-  linenAlt: '#F3F0EA', // secondary button / chip fill on linen
-  terracotta: '#A24936', // secondary "go" CTAs: Claim, View menu, Buy now
-  terracottaSoft: '#F7E6E0', // terracotta tint for badges
-  forestInk: '#1C2420', // primary text — green-black, not pure black
-  forestStone: '#5E6A63', // secondary text — ≥4.5:1 on linen and white
+  linenAlt: '#F2EFEB', // secondary button / chip fill / segmented track
+  // DESIGN.md names #E06D53, but white on it is ~3:1 and fails AA for button
+  // labels; this is the mockups' own darker `secondary`, same hue.
+  terracotta: '#A24936', // secondary "go" CTAs: Order now, Claim, Buy
+  terracottaSoft: '#FFDAD2', // terracotta tint for deal badges
+  forestInk: '#1E2922', // primary text — dense charcoal, not pure black
+  forestStone: '#637067', // secondary text — stone olive
 
   // — Neighborhood (current): black brand on a neutral grey ramp —
   // Every step below is a pure neutral, so nothing tints warm or cool. The
@@ -74,11 +77,14 @@ export const palette = {
 
   // Status
   star: '#F0A500',
+  starText: '#8A5A00', // readable gold-brown for rating numbers on white
   success: '#16A34A',
   successDark: '#15803D', // readable green text on successSoft
   successSoft: '#DCFCE7',
   warning: '#D97706',
+  warningSoft: '#FEF3C7',
   danger: '#DC2626',
+  dangerSoft: '#FEE2E2',
 
   // Dark scheme neutrals (kept for later)
   black: '#0B1220',
@@ -114,9 +120,16 @@ export interface ColorScheme {
   cta: string;
   ctaSoft: string;
   star: string;
+  /** Rating numbers / gold text that must stay readable on white. */
+  starText: string;
   success: string;
   successSoft: string;
+  /** Readable green text on `successSoft` — "Open now", "Active", "In stock". */
+  successText: string;
+  warning: string;
+  warningSoft: string;
   danger: string;
+  dangerSoft: string;
 }
 
 /** Nextdoor-inspired structure, monochrome identity: black on a grey ramp. */
@@ -141,9 +154,14 @@ const neighborhood: ColorScheme = {
   cta: palette.noir,
   ctaSoft: palette.greySoft,
   star: palette.star,
+  starText: palette.starText,
   success: palette.success,
   successSoft: palette.successSoft,
+  successText: palette.successDark,
+  warning: palette.warning,
+  warningSoft: palette.warningSoft,
   danger: palette.danger,
+  dangerSoft: palette.dangerSoft,
 };
 
 /** Forest green on warm linen — the high-fidelity neighborhood redesign. */
@@ -164,9 +182,14 @@ const forest: ColorScheme = {
   cta: palette.terracotta,
   ctaSoft: palette.terracottaSoft,
   star: palette.star,
+  starText: palette.starText,
   success: palette.success,
   successSoft: palette.successSoft,
+  successText: palette.successDark,
+  warning: palette.warning,
+  warningSoft: palette.warningSoft,
   danger: palette.danger,
+  dangerSoft: palette.dangerSoft,
 };
 
 /** The original navy/blue directory look. */
@@ -187,9 +210,14 @@ const classic: ColorScheme = {
   cta: palette.accent,
   ctaSoft: palette.accentSoft,
   star: palette.star,
+  starText: palette.starText,
   success: palette.success,
   successSoft: palette.successSoft,
+  successText: palette.successDark,
+  warning: palette.warning,
+  warningSoft: palette.warningSoft,
   danger: palette.danger,
+  dangerSoft: palette.dangerSoft,
 };
 
 const light: ColorScheme =
@@ -212,9 +240,14 @@ const dark: ColorScheme = {
   cta: '#F0997B',
   ctaSoft: '#4A2118',
   star: palette.star,
+  starText: palette.star,
   success: '#4ADE80',
   successSoft: '#14532D',
+  successText: '#86EFAC',
+  warning: '#FBBF24',
+  warningSoft: '#451A03',
   danger: '#F87171',
+  dangerSoft: '#450A0A',
 };
 
 export const spacing = {
@@ -232,8 +265,8 @@ export const spacing = {
  */
 export const radius = {
   sm: 10,
-  md: DESIGN === 'forest' ? 12 : 14,
-  lg: DESIGN === 'forest' ? 16 : 18,
+  md: 14, // inputs, inner tiles
+  lg: 18, // cards and dashboard modules
   xl: 24,
   pill: 999,
 } as const;
@@ -243,8 +276,8 @@ export const fontSize = {
   sm: 14,
   md: 16,
   lg: 18,
-  xl: 22,
-  xxl: 28,
+  xl: 20, // heading (DESIGN.md heading-lg-mobile)
+  xxl: 24, // display title (DESIGN.md display-title-mobile)
 } as const;
 
 /**

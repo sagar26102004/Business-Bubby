@@ -9,6 +9,7 @@
  */
 import { Pressable, StyleProp, StyleSheet, TextInput, View, ViewStyle } from 'react-native';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { fontFor } from '@/theme/fonts';
 import { Icon } from './Icon';
 import { Text } from './Text';
 
@@ -43,7 +44,7 @@ export function SearchField({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={colors.textMuted}
-        style={[styles.input, { color: colors.text }]}
+        style={[styles.input, { color: colors.text }, fontFor('regular')]}
         autoCorrect={false}
         accessibilityLabel={accessibilityLabel ?? placeholder}
         returnKeyType="search"

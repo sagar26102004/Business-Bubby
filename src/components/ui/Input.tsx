@@ -9,18 +9,22 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, TextInputProps, View } from 'react-native';
 import { radius, spacing, useColors } from '@/theme/theme';
-import { Icon } from './Icon';
+import { fontFor } from '@/theme/fonts';
+import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
 export interface InputProps extends TextInputProps {
   label?: string;
   helper?: string;
   error?: string;
+  /** A line icon shown inside the right edge (e.g. a building, a flag). */
+  rightIcon?: IconName;
 }
 
-export function Input({ label, helper, error, style, ...rest }: InputProps) {
+export function Input({ label, helper, error, rightIcon, style, onFocus, onBlur, ...rest }: InputProps) {
   const colors = useColors();
   const [revealed, setRevealed] = useState(false);
+  const [focused, setFocused] = useState(false);
   const isPassword = !!rest.secureTextEntry;
 
   return (
@@ -39,12 +43,23 @@ export function Input({ label, helper, error, style, ...rest }: InputProps) {
             {
               color: colors.text,
               backgroundColor: colors.surface,
-              borderColor: error ? colors.danger : colors.border,
+              borderColor: error ? colors.danger : focused ? colors.brand : colors.border,
             },
+            // The soft sage halo on focus (DESIGN.md → Inputs).
+            focused && !error ? { boxShadow: `0 0 0 3px ${colors.brandSoft}` } : null,
+            fontFor('regular'),
             // Room for the eye, so a long password never runs under it.
-            isPassword && styles.inputWithToggle,
+            (isPassword || rightIcon) && styles.inputWithToggle,
             style,
           ]}
+          onFocus={(e) => {
+            setFocused(true);
+            onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            onBlur?.(e);
+          }}
           {...rest}
           // After the spread on purpose: revealing the password is this
           // component's call, not the caller's.
@@ -66,6 +81,10 @@ export function Input({ label, helper, error, style, ...rest }: InputProps) {
               color={revealed ? colors.brand : colors.textMuted}
             />
           </Pressable>
+        ) : rightIcon ? (
+          <View style={styles.toggle} pointerEvents="none">
+            <Icon name={rightIcon} size={20} color={colors.textMuted} />
+          </View>
         ) : null}
       </View>
 
@@ -90,7 +109,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderWidth: 1,
     borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     fontSize: 16,
   },
