@@ -1,6 +1,7 @@
 /**
  * Account screen — who you are, and the way in to everything about your
- * account. Businesses live in the "My Business" tab.
+ * account. Businesses live in the Workspace tab. "My orders" sits at the top
+ * here since the redesign gave its bottom-bar slot to Subscriptions.
  *
  * Deliberately SHORT. The profile card is the subject of the screen, then the
  * handful of rows people actually open a settings area to find; the long tail
@@ -104,6 +105,10 @@ export default function AccountScreen() {
           style={styles.editBtn}
         />
       </View>
+
+      <ListGroup style={styles.group}>
+        <ListRow icon="bag" label="My orders" onPress={() => router.push('/orders')} />
+      </ListGroup>
 
       <ListGroup style={styles.group}>
         <ListRow

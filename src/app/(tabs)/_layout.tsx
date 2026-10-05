@@ -1,7 +1,8 @@
 /**
- * Bottom tab navigator: Home, Subs (memberships), Orders, Chat, Account.
- * Stalls and My Business are tab ROUTES (the Explore ⇄ Stalls ⇄ My Business
- * top switcher navigates to them) but have no bottom-bar button (href: null).
+ * Bottom tab navigator (One Place redesign, 2026-10):
+ *   Explore · Subscriptions · Chats · Workspace · Account.
+ * My Orders is a tab ROUTE without a button (reached from Account); Stalls is
+ * on hold (lib/onHold.ts).
  */
 import { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
@@ -10,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon, type IconName } from '@/components/ui';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { radius, useColors } from '@/theme/theme';
+import { fontFor } from '@/theme/fonts';
 
 /**
  * Tab icon — stroked when idle, solid inside a tinted pill when active. The
@@ -99,15 +101,17 @@ export default function TabsLayout() {
         // height is set, otherwise it clips on phones with a home indicator.
         tabBarStyle: {
           backgroundColor: colors.headerTint,
-          borderTopWidth: 0,
+          // The One Place bar: soft linen with a 1px stone hairline on top.
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
           elevation: 0,
           paddingTop: 8,
           paddingBottom: insets.bottom,
           height: 66 + insets.bottom,
         },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '700', marginTop: 2 },
+        tabBarLabelStyle: { fontSize: 11, marginTop: 2, ...fontFor('bold') },
         headerStyle: { backgroundColor: colors.surface },
-        headerTitleStyle: { color: colors.text, fontWeight: '700' },
+        headerTitleStyle: { color: colors.text, ...fontFor('bold') },
         headerShadowVisible: false,
         headerTitleAlign: 'center',
       }}
@@ -115,58 +119,42 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Explore',
           headerShown: false,
           tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="home" color={color} focused={focused} />
+            <TabIcon name="explore" color={color} focused={focused} />
           ),
-        }}
-      />
-      <Tabs.Screen
-        name="stalls"
-        options={{
-          title: 'Stalls',
-          // Reached via the top Explore ⇄ Stalls ⇄ My Business switcher.
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="my-business"
-        options={{
-          title: 'My Business',
-          // Reached via the top Explore ⇄ Stalls ⇄ My Business switcher.
-          href: null,
         }}
       />
       <Tabs.Screen
         name="subscriptions"
         options={{
           title: 'My Subscriptions',
-          tabBarLabel: 'Subs',
+          tabBarLabel: 'Subscriptions',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name="ticket" color={color} focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
-        name="orders"
-        options={{
-          title: 'My Orders',
-          tabBarLabel: 'Orders',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="cart" color={color} focused={focused} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="chats"
         options={{
-          title: 'Chat',
-          tabBarLabel: 'Chat',
+          title: 'Chats',
+          tabBarLabel: 'Chats',
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name="chat" color={color} focused={focused} />
           ),
           tabBarBadge: unread > 0 ? unread : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="my-business"
+        options={{
+          title: 'Workspace',
+          tabBarLabel: 'Workspace',
+          tabBarIcon: ({ color, focused }) => (
+            <TabIcon name="grid" color={color} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -176,6 +164,23 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, focused }) => (
             <TabIcon name="user" color={color} focused={focused} />
           ),
+        }}
+      />
+      {/* My Orders lives under Account (redesign 2026-10) — still a tab ROUTE
+          so the bottom bar stays visible on it, but with no button of its own. */}
+      <Tabs.Screen
+        name="orders"
+        options={{
+          title: 'My Orders',
+          href: null,
+        }}
+      />
+      {/* ON HOLD (redesign 2026-10): stall — the Stalls feed (lib/onHold.ts). */}
+      <Tabs.Screen
+        name="stalls"
+        options={{
+          title: 'Stalls',
+          href: null,
         }}
       />
     </Tabs>

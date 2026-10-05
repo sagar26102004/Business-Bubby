@@ -1,72 +1,202 @@
 /**
- * My Business tab — every business the signed-in user owns or belongs to.
- * Tapping one opens its workspace. Users can own several; if they have none,
- * they're pointed at registration.
+ * Workspace tab (One Place redesign) — the business side of the app, one tap
+ * from the bottom bar. It opens straight onto the WORKSPACE HUB of the
+ * business you last worked in, with a "‹Business› ▾" switcher in the header for
+ * anyone who owns or works at more than one. The pick is remembered on this
+ * device.
  *
- * ONE EXCEPTION: a platform super-admin. Their "business" is the app itself,
- * so this side of the app shows the PLATFORM CONSOLE instead of a list of
- * shops (`features/admin/AdminConsole.tsx`) — the same thing `/admin` renders.
- * Anything still listed under their account shows up inside that console, to be
- * handed to its real owner or removed.
+ *  - Guests: a sign-in prompt.
+ *  - Nobody's business yet: an empty state that leads to registration.
+ *  - A platform super-admin: their "business" is the app itself, so this tab
+ *    shows the PLATFORM CONSOLE (`features/admin/AdminConsole.tsx`) instead.
+ *
+ * Supplier (B2B) chats and "list another business" sit in the header.
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tabs, useFocusEffect, useRouter } from 'expo-router';
 import type { Business } from '@/domain/types';
-import { getType } from '@/domain/catalog';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { useAuth, useRepositories } from '@/data/DataProvider';
-import { Button, Card, Icon, LoadingView, Screen, Tag, Text } from '@/components/ui';
+import { Button, Card, Icon, IconTile, LoadingView, Screen, Tag, Text } from '@/components/ui';
 import { AdminConsole } from '@/features/admin/AdminConsole';
-import { ModePills } from '@/features/shell/ModePills';
+import { WorkspaceHub } from '@/features/workspace/WorkspaceHub';
 import { radius, spacing, useColors } from '@/theme/theme';
-import { ON_HOLD, isListedPublicly } from '@/lib/onHold';
+import { isListedPublicly } from '@/lib/onHold';
 
-export default function MyBusinessScreen() {
+const LAST_BUSINESS_KEY = 'localo.workspace.lastBusinessId';
+
+async function readLastBusiness(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(LAST_BUSINESS_KEY);
+  } catch {
+    return null;
+  }
+}
+async function writeLastBusiness(id: string): Promise<void> {
+  try {
+    await AsyncStorage.setItem(LAST_BUSINESS_KEY, id);
+  } catch {
+    // A convenience only — the first business is a fine fallback.
+  }
+}
+
+export default function WorkspaceTab() {
   const { currentUser, isGuest } = useAuth();
   const repos = useRepositories();
   const router = useRouter();
-  const colors = useColors();
-  const insets = useSafeAreaInsets();
 
   const [businesses, setBusinesses] = useState<Business[] | null>(null);
-  const [stall, setStall] = useState<Business | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // A super-admin runs the platform, not a shop — the console below fetches
-  // its own numbers, so don't pay for the business list they'll never see.
+  // A super-admin runs the platform, not a shop — don't load a list they'll never see.
   const isAdmin = isSuperAdminUser(currentUser);
 
   const load = useCallback(() => {
     if (!currentUser || isAdmin) {
       setBusinesses([]);
-      setStall(null);
       return;
     }
     Promise.all([
       repos.businesses.list(),
       repos.employees.listBusinessesForUser(currentUser.id),
-      repos.businesses.getStallForOwner(currentUser.id),
-    ]).then(([all, memberOf, myStall]) => {
-      const mine = all.filter((b) => b.ownerId === currentUser.id);
-      const byId = new Map(mine.map((b) => [b.id, b]));
-      memberOf.forEach((b) => byId.set(b.id, b));
-      setBusinesses(Array.from(byId.values()));
-      setStall(myStall);
-    });
+    ])
+      .then(([all, memberOf]) => {
+        const mine = all.filter((b) => b.ownerId === currentUser.id);
+        const byId = new Map(mine.map((b) => [b.id, b]));
+        memberOf.forEach((b) => byId.set(b.id, b));
+        // ON HOLD (redesign 2026-10): stall — a personal stall has no workspace here.
+        setBusinesses(Array.from(byId.values()).filter(isListedPublicly));
+      })
+      .catch(() => setBusinesses([]));
   }, [repos, currentUser, isAdmin]);
 
   // Refresh whenever the tab regains focus (e.g. after registering one).
   useFocusEffect(useCallback(() => load(), [load]));
 
-  // No navigator header — this is the business side's HOME, so it carries
-  // the same header sheet + product pills as Explore.
-  // The customer tab bar is hidden too: the business side is its own world.
-  const headerAction = (
-    <Tabs.Screen options={{ headerShown: false, tabBarStyle: { display: 'none' } }} />
-  );
+  // Pick the remembered business once the list is in, else the first one.
+  useEffect(() => {
+    if (!businesses || businesses.length === 0) return;
+    if (selectedId && businesses.some((b) => b.id === selectedId)) return;
+    let active = true;
+    void readLastBusiness().then((last) => {
+      if (!active) return;
+      const pick = businesses.find((b) => b.id === last) ?? businesses[0];
+      setSelectedId(pick.id);
+    });
+    return () => {
+      active = false;
+    };
+  }, [businesses, selectedId]);
 
-  const topBar = (
+  const select = (id: string) => {
+    setSelectedId(id);
+    void writeLastBusiness(id);
+  };
+
+  const noHeader = <Tabs.Screen options={{ headerShown: false }} />;
+
+  if (isGuest) {
+    return (
+      <Screen scroll>
+        {noHeader}
+        <WorkspaceHeader title="Workspace" subtitle="Run your business on One Place" />
+        <EmptyWorkspace
+          title="Run a business? List it on One Place."
+          body="Sign in to register a business, manage your team, take orders and answer customer chats."
+          cta="Sign in / Sign up"
+          onPress={() => router.push('/sign-in')}
+        />
+      </Screen>
+    );
+  }
+
+  if (isAdmin) {
+    return (
+      <Screen scroll>
+        {noHeader}
+        <WorkspaceHeader title="Platform console" subtitle="One Place · super-admin" />
+        <AdminConsole />
+      </Screen>
+    );
+  }
+
+  if (businesses === null) return <LoadingView />;
+
+  if (businesses.length === 0) {
+    return (
+      <Screen scroll>
+        {noHeader}
+        <WorkspaceHeader title="Workspace" subtitle="Your business, in one place" />
+        <EmptyWorkspace
+          title="You don’t have a business here yet"
+          body="List a shop, a service or something you rent out — it takes a few minutes, and everything can be changed later."
+          cta="List your business"
+          onPress={() => router.push('/register')}
+        />
+      </Screen>
+    );
+  }
+
+  const selected = businesses.find((b) => b.id === selectedId) ?? businesses[0];
+
+  return (
+    <>
+      {noHeader}
+      <WorkspaceHub
+        key={selected.id}
+        businessId={selected.id}
+        header={
+          <WorkspaceHeader
+            title={selected.name}
+            subtitle={
+              selected.ownerId === currentUser?.id ? 'Workspace · Owner' : 'Workspace · Team member'
+            }
+            businesses={businesses}
+            selectedId={selected.id}
+            onSelect={select}
+            onB2B={() => router.push('/b2b')}
+            onAdd={() => router.push('/register')}
+            onOpenPage={() => router.push(`/business/${selected.id}`)}
+          />
+        }
+      />
+    </>
+  );
+}
+
+/**
+ * The linen header sheet: business name with a ▾ switcher, its role line, and
+ * header actions (supplier chats, list another business). Bleeds to the edges
+ * of the Screen's padding.
+ */
+function WorkspaceHeader({
+  title,
+  subtitle,
+  businesses,
+  selectedId,
+  onSelect,
+  onB2B,
+  onAdd,
+  onOpenPage,
+}: {
+  title: string;
+  subtitle: string;
+  businesses?: Business[];
+  selectedId?: string;
+  onSelect?: (id: string) => void;
+  onB2B?: () => void;
+  onAdd?: () => void;
+  onOpenPage?: () => void;
+}) {
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const [open, setOpen] = useState(false);
+  const canSwitch = !!businesses && businesses.length > 1;
+
+  return (
     <View
       style={[
         styles.sheet,
@@ -77,151 +207,119 @@ export default function MyBusinessScreen() {
         },
       ]}
     >
-      <ModePills active="business" />
-
-      {/* No "My Business" heading — the active pill above already says it. */}
-      {!isGuest && (businesses?.length ?? 0) > 0 ? (
-        <View style={styles.registerRow}>
-          <Pressable onPress={() => router.push('/register')} style={styles.registerBtn}>
-            <Icon name="plus" size={15} color={colors.brand} strokeWidth={2.5} />
-            <Text tone="brand" weight="bold" variant="label">
-              Register
+      <View style={styles.headRow}>
+        <IconTile icon="store" size={40} solid />
+        <Pressable
+          style={styles.flex}
+          disabled={!canSwitch}
+          onPress={() => setOpen((o) => !o)}
+          accessibilityRole={canSwitch ? 'button' : undefined}
+          accessibilityLabel={canSwitch ? `Switch business, current ${title}` : undefined}
+        >
+          <View style={styles.titleRow}>
+            <Text variant="subheading" weight="bold" numberOfLines={1} style={styles.shrink}>
+              {title}
             </Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </View>
-  );
-
-  /**
-   * B2B chat — business ↔ business (dealer ↔ distributor), a separate world
-   * from the customer (B2C) chats in Explore. It floats over the content at the
-   * bottom-right so it stays reachable no matter how far the list is scrolled.
-   */
-  const b2bButton = isGuest ? null : (
-    <Pressable
-      onPress={() => router.push('/b2b')}
-      style={[
-        styles.b2bFab,
-        { backgroundColor: colors.brand, bottom: insets.bottom + spacing.xl },
-      ]}
-    >
-      <Icon name="chat" size={24} color={colors.textInverse} />
-    </Pressable>
-  );
-
-  // Guest — must sign in to have businesses.
-  if (isGuest) {
-    return (
-      <Screen scroll>
-        {headerAction}
-        {topBar}
-        <View style={styles.guest}>
-          <Text style={styles.guestEmoji}>🏢</Text>
-          <Text variant="subheading" weight="semibold" style={styles.center}>
-            Run a business? List it on One Place.
+            {canSwitch ? (
+              <Icon name="chevronDown" size={18} color={colors.text} />
+            ) : null}
+          </View>
+          <Text variant="caption" tone="muted" numberOfLines={1}>
+            {subtitle}
           </Text>
-          <Text tone="muted" style={[styles.center, styles.guestSub]}>
-            Sign in to register businesses, manage your team, and answer customer chats.
-          </Text>
-          <Button title="Sign in / Sign up" onPress={() => router.push('/sign-in')} style={styles.cta} />
-        </View>
-      </Screen>
-    );
-  }
+        </Pressable>
+        {onOpenPage ? (
+          <HeaderIcon icon="store" label="View your public page" onPress={onOpenPage} />
+        ) : null}
+        {onB2B ? <HeaderIcon icon="chat" label="Supplier chats" onPress={onB2B} /> : null}
+        {onAdd ? <HeaderIcon icon="plus" label="List another business" onPress={onAdd} /> : null}
+      </View>
 
-  // Super-admin: this whole side of the app is the platform console. No B2B
-  // FAB — supplier chats belong to a business, and the platform isn't one.
-  if (isAdmin) {
-    return (
-      <Screen scroll>
-        {headerAction}
-        {topBar}
-        <AdminConsole />
-      </Screen>
-    );
-  }
-
-  if (businesses === null) return <LoadingView />;
-
-  return (
-    <View style={styles.root}>
-      <Screen scroll>
-      {headerAction}
-      {topBar}
-      {businesses.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.guestEmoji}>🏢</Text>
-          <Text variant="subheading" weight="semibold" style={styles.center}>
-            You don’t have any businesses yet
-          </Text>
-          <Text tone="muted" style={[styles.center, styles.guestSub]}>
-            List a service, shop, item for sale, or rental to reach customers near you.
-          </Text>
-          <Button title="➕ Register a business" onPress={() => router.push('/register')} style={styles.cta} />
-        </View>
-      ) : (
-        <>
-          {/* The personal stall is one per user and gets its own front door:
-              view every item on it (and add more) from the stall page. */}
-          {/* ON HOLD (redesign 2026-10): stall — the "View your stall" card. */}
-          {stall && !ON_HOLD.stalls ? (
-            <Card onPress={() => router.push(`/business/${stall.id}`)} style={styles.card}>
-              <View style={styles.cardTop}>
-                <Text weight="semibold" style={styles.name} numberOfLines={1}>
-                  🏷️ {stall.name}
-                </Text>
-                <Tag
-                  label={`${stall.products?.length ?? 0} item${(stall.products?.length ?? 0) === 1 ? '' : 's'}`}
-                  tone="brand"
-                />
-              </View>
-              <Text variant="caption" tone="muted">
-                Everything you’re selling, in one stall.
-              </Text>
-              <Text variant="caption" tone="accent" style={styles.manageHint}>
-                View your stall ›
-              </Text>
-            </Card>
-          ) : null}
-
-          {businesses
-            .filter((b) => b.id !== stall?.id && isListedPublicly(b))
-            .map((b) => {
-          const type = getType(b.type);
-          const isOwner = b.ownerId === currentUser?.id;
-          return (
-            <Card
-              key={b.id}
-              onPress={() => router.push(`/workspace/${b.id}`)}
-              style={styles.card}
-            >
-              <View style={styles.cardTop}>
-                <Text weight="semibold" style={styles.name} numberOfLines={1}>
+      {open && businesses ? (
+        <Card padded={false} style={styles.menu}>
+          {businesses.map((b, i) => {
+            const on = b.id === selectedId;
+            return (
+              <Pressable
+                key={b.id}
+                onPress={() => {
+                  setOpen(false);
+                  onSelect?.(b.id);
+                }}
+                style={({ pressed }) => [
+                  styles.menuRow,
+                  i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+                  pressed && { backgroundColor: colors.surfaceAlt },
+                ]}
+              >
+                <Text weight={on ? 'bold' : 'medium'} style={styles.flex} numberOfLines={1}>
                   {b.name}
                 </Text>
-                <Tag label={isOwner ? 'Owner' : 'Team'} tone={isOwner ? 'brand' : 'default'} />
-              </View>
-              <Text variant="caption" tone="muted">
-                {type ? `${type.icon} ${type.singular}` : b.type}
-                {typeof b.ratingAvg === 'number' ? ` · ⭐ ${b.ratingAvg.toFixed(1)}` : ''}
-              </Text>
-              <Text variant="caption" tone="accent" style={styles.manageHint}>
-                Open workspace ›
-              </Text>
-            </Card>
-          );
-            })}
-        </>
-      )}
-      </Screen>
-      {b2bButton}
+                {on ? <Tag label="Current" tone="status" size="sm" /> : null}
+              </Pressable>
+            );
+          })}
+        </Card>
+      ) : null}
     </View>
   );
 }
 
+function HeaderIcon({
+  icon,
+  label,
+  onPress,
+}: {
+  icon: 'chat' | 'plus' | 'store';
+  label: string;
+  onPress: () => void;
+}) {
+  const colors = useColors();
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [
+        styles.headIcon,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+        pressed && { opacity: 0.6 },
+      ]}
+    >
+      <Icon name={icon} size={18} color={colors.text} />
+    </Pressable>
+  );
+}
+
+function EmptyWorkspace({
+  title,
+  body,
+  cta,
+  onPress,
+}: {
+  title: string;
+  body: string;
+  cta: string;
+  onPress: () => void;
+}) {
+  return (
+    <Card style={styles.empty}>
+      <IconTile icon="store" size={64} />
+      <Text variant="subheading" weight="bold" style={styles.center}>
+        {title}
+      </Text>
+      <Text tone="muted" style={styles.center}>
+        {body}
+      </Text>
+      <Button title={cta} onPress={onPress} style={styles.cta} />
+    </Card>
+  );
+}
+
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  flex: { flex: 1, minWidth: 0 },
+  shrink: { flexShrink: 1 },
   // Bleed the header sheet to the screen edges (Screen adds lg padding on all
   // sides, including top — cancel it so the sheet starts at the very top).
   sheet: {
@@ -232,33 +330,25 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
     borderBottomWidth: 1,
   },
-  // Floats above the scrolling list — always one tap from a supplier chat.
-  b2bFab: {
-    position: 'absolute',
-    right: spacing.lg,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 6,
   },
-  b2bIcon: { fontSize: 24 },
-  registerRow: { alignItems: 'flex-end', marginTop: spacing.md },
-  registerBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  headerAction: { marginRight: spacing.lg },
-  card: { marginBottom: spacing.md },
-  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.xs },
-  name: { flex: 1 },
-  manageHint: { marginTop: spacing.sm },
-  guest: { alignItems: 'center', paddingTop: spacing.xxl },
-  empty: { alignItems: 'center', paddingTop: spacing.xl },
-  guestEmoji: { fontSize: 48, marginBottom: spacing.xl },
+  menu: { marginTop: spacing.md },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  empty: { alignItems: 'center', gap: spacing.md, paddingVertical: spacing.xl },
   center: { textAlign: 'center' },
-  guestSub: { marginTop: spacing.sm },
-  cta: { alignSelf: 'stretch', marginTop: spacing.xl },
+  cta: { alignSelf: 'stretch', marginTop: spacing.sm },
 });
