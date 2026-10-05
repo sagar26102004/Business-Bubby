@@ -21,6 +21,7 @@ import { Button, Card, Icon, LoadingView, Screen, Tag, Text } from '@/components
 import { AdminConsole } from '@/features/admin/AdminConsole';
 import { ModePills } from '@/features/shell/ModePills';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { ON_HOLD, isListedPublicly } from '@/lib/onHold';
 
 export default function MyBusinessScreen() {
   const { currentUser, isGuest } = useAuth();
@@ -163,7 +164,8 @@ export default function MyBusinessScreen() {
         <>
           {/* The personal stall is one per user and gets its own front door:
               view every item on it (and add more) from the stall page. */}
-          {stall ? (
+          {/* ON HOLD (redesign 2026-10): stall — the "View your stall" card. */}
+          {stall && !ON_HOLD.stalls ? (
             <Card onPress={() => router.push(`/business/${stall.id}`)} style={styles.card}>
               <View style={styles.cardTop}>
                 <Text weight="semibold" style={styles.name} numberOfLines={1}>
@@ -184,7 +186,7 @@ export default function MyBusinessScreen() {
           ) : null}
 
           {businesses
-            .filter((b) => b.id !== stall?.id)
+            .filter((b) => b.id !== stall?.id && isListedPublicly(b))
             .map((b) => {
           const type = getType(b.type);
           const isOwner = b.ownerId === currentUser?.id;

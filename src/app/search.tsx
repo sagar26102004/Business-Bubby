@@ -20,6 +20,7 @@ import { useResponsive } from '@/lib/useResponsive';
 import { EmptyView, LoadingView, SearchIcon, Text } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { isListedPublicly } from '@/lib/onHold';
 
 const MAX_SUGGESTIONS = 8;
 
@@ -41,7 +42,8 @@ export default function SearchScreen() {
 
   // Suggestion corpus, built once from everything searchable across listings.
   const { data: corpus } = useAsync(async () => {
-    const all = await repos.businesses.list();
+    // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
+    const all = (await repos.businesses.list()).filter(isListedPublicly);
     const terms = new Set<string>();
     const add = (s?: string) => {
       const t = s?.trim();
@@ -84,7 +86,11 @@ export default function SearchScreen() {
   // Results load only for the committed term.
   const { data: results, loading } = useAsync(
     async () =>
-      submitted ? repos.businesses.list({ search: submitted, near, sortByDistance: true }) : null,
+      submitted
+        ? repos.businesses
+            .list({ search: submitted, near, sortByDistance: true })
+            .then((l) => l.filter(isListedPublicly))
+        : null,
     [submitted, near?.latitude, near?.longitude],
   );
 

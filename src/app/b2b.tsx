@@ -22,6 +22,7 @@ import {
   Text,
 } from '@/components/ui';
 import { spacing } from '@/theme/theme';
+import { isListedPublicly } from '@/lib/onHold';
 
 export default function B2BInboxScreen() {
   const { currentUser, isGuest } = useAuth();
@@ -42,7 +43,8 @@ export default function B2BInboxScreen() {
     const byId = new Map<string, Business>();
     all.filter((b) => b.ownerId === currentUser.id && b.type !== 'item').forEach((b) => byId.set(b.id, b));
     memberOf.filter((b) => b.type !== 'item').forEach((b) => byId.set(b.id, b));
-    return { threads, all, mine: Array.from(byId.values()) };
+    // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
+    return { threads, all: all.filter(isListedPublicly), mine: Array.from(byId.values()) };
     // A chat list: keep re-reading it so a message from another business shows
     // up here while you're looking at it.
   }, [currentUser?.id], { refreshMs: LIVE_REFRESH_MS });

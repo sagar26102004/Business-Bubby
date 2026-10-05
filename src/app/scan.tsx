@@ -1,6 +1,9 @@
 /**
- * QR scanner — point the camera at a business's Localo QR code (the one from
- * /qr/[businessId]) and jump straight to its page.
+ * QR scanner — staff point the camera at a customer's ORDER TICKET QR to
+ * open it for scan-to-pay / scan-to-collect (Billing, Fulfil).
+ *
+ * ON HOLD (redesign 2026-10): business-qr — it used to also open a business
+ * page from a storefront QR (/qr/[businessId]); see lib/onHold.ts.
  *
  * Camera barcode scanning is native-only: expo-camera has no barcode support
  * on web, so the web build (our preview) offers paste-a-link instead — same
@@ -12,6 +15,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Button, Input, LoadingView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { ON_HOLD } from '@/lib/onHold';
 
 /**
  * Pull the business id out of any Localo QR payload. The QR encodes whatever
@@ -33,6 +37,9 @@ function businessIdFrom(data: string): string | undefined {
 function routeForScan(data: string): string | undefined {
   const ticket = data.match(/fulfill\/([A-Za-z0-9_-]+)/);
   if (ticket?.[1]) return `/fulfill/${ticket[1]}`;
+  // ON HOLD (redesign 2026-10): business-qr — storefront QRs no longer open
+  // a business page; only order tickets resolve.
+  if (ON_HOLD.businessQr) return undefined;
   const businessId = businessIdFrom(data);
   return businessId ? `/business/${businessId}` : undefined;
 }
@@ -69,13 +76,13 @@ function PasteFallback() {
           Camera scanning works in the app
         </Text>
         <Text tone="muted" style={styles.centerText}>
-          On the web there’s no QR camera — paste the link from a One Place QR code
-          (a business sign or an order ticket) and we’ll open it.
+          On the web there’s no QR camera — paste the link from a customer’s order
+          ticket and we’ll open it.
         </Text>
       </View>
       <Input
         label="One Place link"
-        placeholder="e.g. https://…/business/b_cafe or …/fulfill/o12"
+        placeholder="e.g. https://…/fulfill/o12"
         value={value}
         onChangeText={(t) => {
           setValue(t);
@@ -112,8 +119,8 @@ function NativeScanner({
             Camera access needed
           </Text>
           <Text tone="muted" style={styles.centerText}>
-            One Place uses the camera only to scan business QR codes — point it at a
-            code on a counter or flyer to open that business.
+            One Place uses the camera only to scan order tickets — point it at the
+            QR on a customer’s order to take payment or hand it over.
           </Text>
         </View>
         <Button title="Allow camera" onPress={requestPermission} />
@@ -149,11 +156,11 @@ function NativeScanner({
       <View style={styles.overlay} pointerEvents="none">
         <View style={styles.frame} />
         <Text tone="inverse" weight="semibold" style={styles.hint}>
-          {badCode ? 'Not a One Place business code' : 'Point at a One Place QR code'}
+          {badCode ? 'Not a One Place order ticket' : 'Point at an order ticket QR'}
         </Text>
         {badCode ? (
           <Text variant="caption" style={[styles.hint, { color: colors.star }]}>
-            Look for the QR from a business’s “QR code & share link” page.
+            The customer’s ticket is on their order screen in the app.
           </Text>
         ) : null}
       </View>

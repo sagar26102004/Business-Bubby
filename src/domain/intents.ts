@@ -243,14 +243,16 @@ export const INTENT_CATEGORIES: IntentCategory[] = [
       'Resort', 'Farmhouse', 'Coworking Space',
     ],
   },
-  {
-    id: 'stalls',
-    label: 'Stalls',
-    icon: '🏷️',
-    color: '#D97706',
-    types: ['item'],
-    tags: [],
-  },
+  // ON HOLD (redesign 2026-10): stall — the Stalls category is hidden from
+  // Home, Deals and Browse while stalls are on hold (lib/onHold.ts).
+  // {
+  //   id: 'stalls',
+  //   label: 'Stalls',
+  //   icon: '🏷️',
+  //   color: '#D97706',
+  //   types: ['item'],
+  //   tags: [],
+  // },
   {
     id: 'agri',
     label: 'Agri & Industry',

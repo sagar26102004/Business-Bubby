@@ -110,6 +110,7 @@ import { hasUsableHours, summarizeHours, type OpeningHours } from '@/domain/hour
 import { TagPicker } from '@/features/businesses/TagPicker';
 import { PhotosField } from '@/features/media/PhotosField';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { ON_HOLD } from '@/lib/onHold';
 
 /** The only fork in the wizard — who is listing. */
 type ListingKind = 'business' | 'stall';
@@ -121,12 +122,13 @@ const KIND_OPTIONS: { id: ListingKind; icon: string; title: string; blurb: strin
     title: 'A business',
     blurb: 'A shop, food place, services, rentals — anything with customers.',
   },
-  {
-    id: 'stall',
-    icon: '🏷️',
-    title: 'Selling my own stuff',
-    blurb: 'Personal items in one stall — a phone, a car, furniture…',
-  },
+  // ON HOLD (redesign 2026-10): stall — "Selling my own stuff" is hidden.
+  // {
+  //   id: 'stall',
+  //   icon: '🏷️',
+  //   title: 'Selling my own stuff',
+  //   blurb: 'Personal items in one stall — a phone, a car, furniture…',
+  // },
 ];
 
 type StepId =
@@ -204,7 +206,8 @@ export default function RegisterScreen() {
   const [stepIndex, setStepIndex] = useState(0);
 
   const [kind, setKind] = useState<ListingKind>('business');
-  const [kindChosen, setKindChosen] = useState(false);
+  // ON HOLD (redesign 2026-10): stall — with only one kind left, it's chosen.
+  const [kindChosen, setKindChosen] = useState<boolean>(ON_HOLD.stalls);
   const [name, setName] = useState('');
   const [tagline, setTagline] = useState('');
   const [description, setDescription] = useState('');
@@ -285,8 +288,12 @@ export default function RegisterScreen() {
         ? ['kind', 'category', 'basics', 'review']
         : ['kind', 'category', 'basics', 'location', 'review'];
     }
-    const base: StepId[] = ['kind', 'category', 'basics', 'sell', 'plans', 'services', 'rent', 'modules', 'location', 'team', 'review'];
-    return isSuper ? (['kind', 'owner', ...base.slice(1)] as StepId[]) : base;
+    const all: StepId[] = ['kind', 'category', 'basics', 'sell', 'plans', 'services', 'rent', 'modules', 'location', 'team', 'review'];
+    // ON HOLD (redesign 2026-10): stall — no "what are you listing?" fork.
+    const base = ON_HOLD.stalls ? all.filter((id) => id !== 'kind') : all;
+    if (!isSuper) return base;
+    const at = ON_HOLD.stalls ? 0 : 1;
+    return [...base.slice(0, at), 'owner', ...base.slice(at)] as StepId[];
   }, [isItem, addingToStall, isSuper]);
 
   const safeIndex = Math.min(stepIndex, stepIds.length - 1);
@@ -405,9 +412,11 @@ export default function RegisterScreen() {
     (async () => {
       const draft = await loadRegisterDraft<RegisterDraft>();
       if (!active) return;
-      if (draft && draft.kindChosen) {
+      // ON HOLD (redesign 2026-10): stall — a saved stall draft is dropped.
+      const usable = draft && draft.kindChosen && !(ON_HOLD.stalls && draft.kind === 'stall');
+      if (usable) {
         applySnapshot(draft);
-      } else if (params.type && !kindChosen) {
+      } else if (params.type && !kindChosen && !ON_HOLD.stalls) {
         chooseKind(params.type === 'item' ? 'stall' : 'business');
       }
       hydratedRef.current = true;
@@ -707,7 +716,7 @@ export default function RegisterScreen() {
   const resetForm = () => {
     setStepIndex(0);
     setKind('business');
-    setKindChosen(false);
+    setKindChosen(ON_HOLD.stalls);
     setName('');
     setTagline('');
     setDescription('');

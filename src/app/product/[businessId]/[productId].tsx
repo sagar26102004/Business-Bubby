@@ -25,7 +25,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, Redirect } from 'expo-router';
 import type { ProductMessage } from '@/domain/types';
 import { formatDistance, getSubcategory } from '@/domain/catalog';
 import { productDetailLine } from '@/domain/goods';
@@ -44,12 +44,13 @@ import {
   Text,
 } from '@/components/ui';
 import { fontSize, radius, spacing, useColors } from '@/theme/theme';
+import { ON_HOLD } from '@/lib/onHold';
 
 /** "2 Jul" — enough to see whether an answer is fresh or from last month. */
 const formatWhen = (iso: string) =>
   new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
-export default function ProductScreen() {
+function ProductScreen() {
   const { businessId, productId } = useLocalSearchParams<{
     businessId: string;
     productId: string;
@@ -766,3 +767,10 @@ const styles = StyleSheet.create({
   },
   formError: {},
 });
+
+// ON HOLD (redesign 2026-10): stall — this route redirects home while the
+// feature is on hold; the screen above is kept intact. See lib/onHold.ts.
+export default function OnHoldRoute() {
+  if (ON_HOLD.stalls) return <Redirect href="/" />;
+  return <ProductScreen />;
+}

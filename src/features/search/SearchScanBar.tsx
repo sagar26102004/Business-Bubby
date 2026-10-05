@@ -7,6 +7,7 @@ import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native'
 import { useRouter } from 'expo-router';
 import { Icon, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { ON_HOLD } from '@/lib/onHold';
 
 export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
   const colors = useColors();
@@ -29,6 +30,9 @@ export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
           Search businesses, services…
         </Text>
       </Pressable>
+      {/* ON HOLD (redesign 2026-10): business-qr — scanning a business's QR
+          to open its page. Order-handover scanning lives in Billing/Fulfil. */}
+      {!ON_HOLD.businessQr ? (
       <Pressable
         onPress={() => router.push('/scan')}
         hitSlop={10}
@@ -42,6 +46,7 @@ export function SearchScanBar({ style }: { style?: StyleProp<ViewStyle> }) {
       >
         <Icon name="scan" size={20} color={colors.text} />
       </Pressable>
+      ) : null}
     </View>
   );
 }

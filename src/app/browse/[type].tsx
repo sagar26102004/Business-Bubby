@@ -24,6 +24,7 @@ import { EmptyView, ErrorView, LoadingView, Tag } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { spacing, useColors } from '@/theme/theme';
+import { isListedPublicly } from '@/lib/onHold';
 
 interface Chip {
   id: string;
@@ -48,7 +49,11 @@ export default function BrowseIntentScreen() {
   // One nearby fetch; intent membership and chip filtering happen here so a
   // business can sit in several categories and match several chips.
   const { data, loading, error, reload } = useAsync(
-    async () => (intent ? repos.businesses.list({ near, sortByDistance: true }) : []),
+    // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
+    async () =>
+      intent
+        ? (await repos.businesses.list({ near, sortByDistance: true })).filter(isListedPublicly)
+        : [],
     [intent?.id, near?.latitude, near?.longitude],
   );
   const all = useMemo(

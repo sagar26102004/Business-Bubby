@@ -13,7 +13,7 @@
  */
 import { useCallback } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter, Redirect } from 'expo-router';
 import type { ProductItem, ProductMessage } from '@/domain/types';
 import { getSubcategory } from '@/domain/catalog';
 import { parsePrice } from '@/lib/money';
@@ -30,8 +30,9 @@ import {
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
+import { ON_HOLD } from '@/lib/onHold';
 
-export default function StallAdminScreen() {
+function StallAdminScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const router = useRouter();
@@ -410,3 +411,10 @@ const styles = StyleSheet.create({
   },
   cardBtn: { flex: 1 },
 });
+
+// ON HOLD (redesign 2026-10): stall — this route redirects home while the
+// feature is on hold; the screen above is kept intact. See lib/onHold.ts.
+export default function OnHoldRoute() {
+  if (ON_HOLD.stalls) return <Redirect href="/" />;
+  return <StallAdminScreen />;
+}

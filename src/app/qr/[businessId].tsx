@@ -7,7 +7,7 @@
  */
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, Redirect } from 'expo-router';
 import * as Linking from 'expo-linking';
 import QRCode from 'react-native-qrcode-svg';
 import { getType } from '@/domain/catalog';
@@ -23,8 +23,9 @@ import {
   Text,
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { ON_HOLD } from '@/lib/onHold';
 
-export default function BusinessQrScreen() {
+function BusinessQrScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
   const colors = useColors();
@@ -122,3 +123,10 @@ const styles = StyleSheet.create({
   shareBtn: { alignSelf: 'stretch' },
   feedback: { marginTop: spacing.sm },
 });
+
+// ON HOLD (redesign 2026-10): business-qr — this route redirects home while the
+// feature is on hold; the screen above is kept intact. See lib/onHold.ts.
+export default function OnHoldRoute() {
+  if (ON_HOLD.businessQr) return <Redirect href="/" />;
+  return <BusinessQrScreen />;
+}

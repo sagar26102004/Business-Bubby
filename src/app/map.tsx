@@ -16,6 +16,7 @@ import { useAsync } from '@/lib/useAsync';
 import { Card, ErrorView, LoadingView, Screen, Stars, Text } from '@/components/ui';
 import RealMap, { type RealMapMarker } from '@/components/RealMap';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { isListedPublicly } from '@/lib/onHold';
 
 const RADIUS_KM = 5; // area shown around the user
 const RING_KMS = [1, 3, 5];
@@ -34,7 +35,8 @@ export default function MapScreen() {
       maxDistanceKm: RADIUS_KM,
       sortByDistance: true,
     });
-    return { center: center.point, businesses };
+    // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
+    return { center: center.point, businesses: businesses.filter(isListedPublicly) };
   }, []);
 
   if (loading) return <LoadingView label="Loading map…" />;

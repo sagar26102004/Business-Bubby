@@ -19,6 +19,7 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { CHAT_REFRESH_MS } from '@/lib/useAsync';
 import { Avatar, Card, EmptyView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { ON_HOLD } from '@/lib/onHold';
 
 /** Chat alerts are shown as conversations, so they never reach the alert list. */
 const isChatAlert = (n: AppNotification) => categoryOfKind(n.kind) === 'chats';
@@ -190,6 +191,16 @@ export default function ChatsScreen() {
       return;
     }
     // A question or an answer on a stall item → that item's public thread.
+    // ON HOLD (redesign 2026-10): stall — old stall-question alerts open the
+    // listing instead of the (hidden) item thread.
+    if (
+      ON_HOLD.stalls &&
+      (n.kind === 'product_question' || n.kind === 'product_reply') &&
+      n.businessId
+    ) {
+      router.push(`/business/${n.businessId}`);
+      return;
+    }
     if (
       (n.kind === 'product_question' || n.kind === 'product_reply') &&
       n.businessId &&

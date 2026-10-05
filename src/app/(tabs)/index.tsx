@@ -48,6 +48,7 @@ import { AdCarousel, type AdCardItem } from '@/features/ads/AdCarousel';
 import { AD_GRADIENTS } from '@/features/ads/adGradients';
 import { ModePills } from '@/features/shell/ModePills';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { isListedPublicly } from '@/lib/onHold';
 
 /**
  * How much Home shows: the N nearest listings, nearest first.
@@ -96,7 +97,11 @@ export default function BrowseScreen() {
   const near = activePlace?.point;
 
   const { data, loading, error, reload } = useAsync(
-    () => repos.businesses.list({ near, sortByDistance: true, limit: HOME_NEARBY_COUNT }),
+    // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
+    () =>
+      repos.businesses
+        .list({ near, sortByDistance: true, limit: HOME_NEARBY_COUNT })
+        .then((l) => l.filter(isListedPublicly)),
     [near?.latitude, near?.longitude],
   );
 

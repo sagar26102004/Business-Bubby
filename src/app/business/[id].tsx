@@ -49,6 +49,7 @@ import { ShowcaseLinks } from '@/features/businesses/ShowcaseLinks';
 import { ReviewsSection } from '@/features/businesses/ReviewsSection';
 import { OwnerPicker } from '@/features/businesses/OwnerPicker';
 import { spacing, useColors } from '@/theme/theme';
+import { ON_HOLD } from '@/lib/onHold';
 
 export default function BusinessDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -121,7 +122,8 @@ export default function BusinessDetailScreen() {
     employees.find((e) => e.userId && e.userId === currentUser?.id),
     currentUser,
   );
-  const isStall = business.type === 'item';
+  // ON HOLD (redesign 2026-10): stall — a stall renders as a plain listing.
+  const isStall = !ON_HOLD.stalls && business.type === 'item';
   // The page is what CUSTOMERS see, members included — a paused offer stays off
   // it. Status lives in Workspace › Offers, where it can be explained.
   const offers = liveOffers(business);
@@ -238,11 +240,14 @@ export default function BusinessDetailScreen() {
                 label="Chat with this business"
                 onPress={() => router.push(`/chat/${business.id}`)}
               />
-              <HeaderAction
-                icon="scan"
-                label="QR code and share link"
-                onPress={() => router.push(`/qr/${business.id}`)}
-              />
+              {/* ON HOLD (redesign 2026-10): business-qr — the QR/share button. */}
+              {!ON_HOLD.businessQr ? (
+                <HeaderAction
+                  icon="scan"
+                  label="QR code and share link"
+                  onPress={() => router.push(`/qr/${business.id}`)}
+                />
+              ) : null}
             </View>
           ),
         }}

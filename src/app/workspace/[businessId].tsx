@@ -37,6 +37,7 @@ import {
 } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
+import { ON_HOLD } from '@/lib/onHold';
 
 export default function WorkspaceScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -227,7 +228,8 @@ export default function WorkspaceScreen() {
   const groups: TileGroup[] = [
     // A personal stall's admin console — its own selling desk, above the
     // generic order/billing tiles.
-    ...(business.type === 'item'
+    // ON HOLD (redesign 2026-10): stall — the "Your stall" tile group.
+    ...(business.type === 'item' && !ON_HOLD.stalls
       ? [
           {
             title: 'Your stall',

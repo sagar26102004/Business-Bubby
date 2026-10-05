@@ -10,7 +10,7 @@
 import { useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter, Redirect } from 'expo-router';
 import { formatDistance, getSubcategory } from '@/domain/catalog';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
@@ -20,8 +20,9 @@ import { ProductTile, type StallProduct } from '@/features/businesses/ProductTil
 import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { ModePills } from '@/features/shell/ModePills';
 import { spacing, useColors } from '@/theme/theme';
+import { ON_HOLD } from '@/lib/onHold';
 
-export default function StallsScreen() {
+function StallsScreen() {
   const repos = useRepositories();
   const router = useRouter();
   const colors = useColors();
@@ -143,3 +144,10 @@ const styles = StyleSheet.create({
   sellBtn: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   column: { gap: spacing.md, marginTop: spacing.md },
 });
+
+// ON HOLD (redesign 2026-10): stall — this route redirects home while the
+// feature is on hold; the screen above is kept intact. See lib/onHold.ts.
+export default function OnHoldRoute() {
+  if (ON_HOLD.stalls) return <Redirect href="/" />;
+  return <StallsScreen />;
+}
