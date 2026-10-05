@@ -277,6 +277,10 @@ export default function RootLayout() {
             name="manage/[businessId]/plans"
             options={{ title: 'Plans & memberships' }}
           />
+          <Stack.Screen
+            name="manage/[businessId]/enroll-form"
+            options={{ title: 'Joining form' }}
+          />
           <Stack.Screen name="manage/[businessId]/services" options={{ title: 'Services' }} />
           <Stack.Screen name="manage/[businessId]/rentals" options={{ title: 'For rent' }} />
           <Stack.Screen name="manage/[businessId]/tables" options={{ title: 'Tables' }} />
@@ -295,6 +299,7 @@ export default function RootLayout() {
           <Stack.Screen name="workspace/[businessId]/billing" options={{ title: 'Billing' }} />
           <Stack.Screen name="workspace/[businessId]/bookings" options={{ title: 'Appointments' }} />
           <Stack.Screen name="workspace/[businessId]/members" options={{ title: 'Members' }} />
+          <Stack.Screen name="workspace/[businessId]/dues" options={{ title: 'Who hasn’t paid' }} />
           <Stack.Screen name="workspace/[businessId]/calls" options={{ title: 'Call log' }} />
           <Stack.Screen
             name="workspace/[businessId]/notifications"

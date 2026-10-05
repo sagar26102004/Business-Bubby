@@ -15,6 +15,12 @@
  * declines in Members. Names are optional — a blank one falls back to
  * "Member 1", "Member 2"… so the business can still tell the requests apart.
  * It is NOT the order flow.
+ *
+ * A business can also ask for MORE than a name — a photo, a mobile number, an
+ * address, anything the owner put on its joining form (`Business.enrollForm`,
+ * built in Manage › Joining form). The form is drawn once per staged person, so
+ * each child answers for themselves, and each request carries its own answers
+ * through to the business's Members screen.
  */
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -23,10 +29,18 @@ import type { PlanItem } from '@/domain/types';
 import { useDismiss } from '@/lib/navigation';
 import { commerceVocab, planBasisSticker } from '@/domain/catalog';
 import { planOfferings } from '@/domain/offerings';
+import {
+  answerableFields,
+  enrollFormFields,
+  missingRequired,
+  nameField,
+  toAnswers,
+} from '@/domain/enrollForm';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice } from '@/lib/money';
 import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Text } from '@/components/ui';
+import { EnrollFormFill } from '@/features/memberships/EnrollFormFill';
 import { spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
 
@@ -39,6 +53,8 @@ interface Enrollee {
   price?: number;
   /** Who the plan is for — blank falls back to a default label on submit. */
   name: string;
+  /** This person's answers to the business's joining form, by field id. */
+  answers: Record<string, string>;
 }
 
 let entryCounter = 0;
@@ -77,6 +93,10 @@ export default function EnrollScreen() {
   // The people being enrolled.
   const [entries, setEntries] = useState<Enrollee[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  // What's missing, per staged entry — shown on the card itself so the customer
+  // sees which person is incomplete, not just that something is.
+  const [entryError, setEntryError] = useState<Record<string, string | null>>({});
+  const [formError, setFormError] = useState<string | null>(null);
   // Running tally of requests sent this visit — powers the stay-on-page banner
   // so a parent can keep adding one child after another without leaving.
   const [sentCount, setSentCount] = useState(0);
@@ -90,12 +110,24 @@ export default function EnrollScreen() {
   // removed entry straight back.
   const staged = useRef(false);
   useEffect(() => {
-    if (staged.current || !pickedPlan || !business) return;
-    staged.current = true;
-    const match = planOfferings(business).find((p) => p.name === pickedPlan);
-    if (!match) return;
-    const { planName, price } = stageFrom(match);
-    setEntries((list) => [...list, { key: nextKey(), planName, price, name: '' }]);
+    if (staged.current || !business) return;
+    if (pickedPlan) {
+      staged.current = true;
+      const match = planOfferings(business).find((p) => p.name === pickedPlan);
+      if (!match) return;
+      const { planName, price } = stageFrom(match);
+      setEntries((list) => [...list, { key: nextKey(), planName, price, name: '', answers: {} }]);
+      return;
+    }
+    // A business that lists no plans has nothing to pick, so the only thing on
+    // this screen IS the person being enrolled — stage them up front, otherwise
+    // a joining form would have no card to be drawn on.
+    if (planOfferings(business).length === 0) {
+      staged.current = true;
+      setEntries((list) =>
+        list.length > 0 ? list : [{ key: nextKey(), name: '', answers: {} }],
+      );
+    }
   }, [pickedPlan, business]);
 
   if (loading) return <LoadingView />;
@@ -119,25 +151,77 @@ export default function EnrollScreen() {
   const verb = vocab.verb; // "Enroll" / "Subscribe"
   const plans = planOfferings(business);
 
+  // The business's joining form. `formName` is the reserved name question: when
+  // the owner put it on the form it relabels the one name box below (and can
+  // make it compulsory) rather than adding a second one — see NAME_FIELD_ID.
+  const formFields = enrollFormFields(business);
+  const form = business.enrollForm;
+  const formName = nameField(formFields);
+
   const addEntry = (planName?: string, price?: number) =>
-    setEntries((list) => [...list, { key: nextKey(), planName, price, name: '' }]);
-  const setName = (key: string, name: string) =>
+    setEntries((list) => [...list, { key: nextKey(), planName, price, name: '', answers: {} }]);
+  // Typing into a person's card clears THEIR "still needed" line — leaving it up
+  // while they fix it reads as though the fix didn't register.
+  const clearError = (key: string) => {
+    setFormError(null);
+    setEntryError((errs) => (errs[key] ? { ...errs, [key]: null } : errs));
+  };
+  const setName = (key: string, name: string) => {
+    clearError(key);
     setEntries((list) => list.map((e) => (e.key === key ? { ...e, name } : e)));
-  const remove = (key: string) => setEntries((list) => list.filter((e) => e.key !== key));
+  };
+  const setAnswer = (key: string, fieldId: string, value: string) => {
+    clearError(key);
+    setEntries((list) =>
+      list.map((e) => (e.key === key ? { ...e, answers: { ...e.answers, [fieldId]: value } } : e)),
+    );
+  };
+  const remove = (key: string) => {
+    setEntries((list) => list.filter((e) => e.key !== key));
+    setEntryError((errs) => ({ ...errs, [key]: null }));
+  };
 
   const submit = async () => {
     // Nothing staged? Fall back to a single general request, so the button is
-    // never a dead end (matches the old one-tap behaviour).
+    // never a dead end (matches the old one-tap behaviour) — unless the business
+    // asks something compulsory, which there would be nowhere to answer.
+    const needsForm = formFields.some((f) => f.required);
+    if (entries.length === 0 && needsForm) {
+      setFormError(
+        plans.length > 0
+          ? `Add a plan above first — ${business.name} asks a few things before you join.`
+          : 'Fill in the details above first.',
+      );
+      return;
+    }
     const list: Enrollee[] =
-      entries.length > 0 ? entries : [{ key: 'solo', planName: undefined, price: undefined, name: '' }];
+      entries.length > 0
+        ? entries
+        : [{ key: 'solo', planName: undefined, price: undefined, name: '', answers: {} }];
+
+    // Everything compulsory, per person, before anything is sent — a half-sent
+    // batch would leave the business holding requests it can't act on.
+    const errors: Record<string, string | null> = {};
+    for (const e of entries) {
+      const missing = missingRequired(formFields, e.answers);
+      if (formName?.required && !e.name.trim()) missing.unshift(formName.label);
+      errors[e.key] = missing.length > 0 ? `Still needed: ${missing.join(', ')}` : null;
+    }
+    setEntryError(errors);
+    if (Object.values(errors).some(Boolean)) {
+      setFormError('Fill in the marked details before sending.');
+      return;
+    }
+    setFormError(null);
+
     setSubmitting(true);
     try {
       for (let i = 0; i < list.length; i++) {
         const e = list[i];
-        // Default nomenclature for a blank name — but only when the customer
-        // is naming people (>1 staged); a lone request stays about themselves.
+        // Default nomenclature for a blank name — but only when the customer is
+        // naming SEVERAL people; one request with no name stays about themselves.
         const enrolleeName =
-          entries.length > 0 ? e.name.trim() || `Member ${i + 1}` : undefined;
+          list.length > 1 ? e.name.trim() || `Member ${i + 1}` : e.name.trim() || undefined;
         await repos.memberships.request({
           businessId: business.id,
           customerId: currentUser.id,
@@ -145,6 +229,7 @@ export default function EnrollScreen() {
           requestedPlan: e.planName,
           requestedPrice: e.price,
           enrolleeName,
+          formAnswers: toAnswers(formFields, e.answers),
         });
       }
       const n = list.length;
@@ -152,6 +237,7 @@ export default function EnrollScreen() {
       // bump the sent tally, which the banner reflects.
       setSentCount((c) => c + n);
       setEntries([]);
+      setEntryError({});
     } catch (err) {
       showAlert('Could not send', err instanceof Error ? err.message : 'Try again.');
     } finally {
@@ -237,8 +323,16 @@ export default function EnrollScreen() {
       {entries.length > 0 ? (
         <>
           <Text variant="label" weight="semibold" style={styles.label}>
-            Who's it for? ({entries.length})
+            {answerableFields(formFields).length > 0 ? 'Their details' : "Who's it for?"}{' '}
+            ({entries.length})
           </Text>
+          {/* The owner's own line above the questions — "bring the original ID",
+              "fees are due on the 5th". Shown once, not per person. */}
+          {form?.intro ? (
+            <Text variant="caption" tone="muted" style={styles.intro}>
+              {form.intro}
+            </Text>
+          ) : null}
           {entries.map((e, i) => (
             <Card key={e.key} style={styles.enrolleeCard}>
               <View style={styles.enrolleeTop}>
@@ -251,13 +345,36 @@ export default function EnrollScreen() {
                 </Text>
               </View>
               <Input
-                placeholder={`Name (optional) — defaults to Member ${i + 1}`}
+                label={formName ? `${formName.label}${formName.required ? ' *' : ''}` : undefined}
+                placeholder={
+                  formName?.required
+                    ? formName.label
+                    : `Name (optional) — defaults to Member ${i + 1}`
+                }
                 value={e.name}
                 onChangeText={(t) => setName(e.key, t)}
               />
+              {form ? (
+                <EnrollFormFill
+                  form={form}
+                  answers={e.answers}
+                  onChange={(fieldId, value) => setAnswer(e.key, fieldId, value)}
+                />
+              ) : null}
+              {entryError[e.key] ? (
+                <Text variant="caption" tone="danger">
+                  {entryError[e.key]}
+                </Text>
+              ) : null}
             </Card>
           ))}
         </>
+      ) : null}
+
+      {formError ? (
+        <Text variant="caption" tone="danger" style={styles.formError}>
+          {formError}
+        </Text>
       ) : null}
 
       <Button
@@ -299,6 +416,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   addBtnText: { fontSize: 14 },
+  intro: { marginBottom: spacing.sm },
+  formError: { marginTop: spacing.md },
   enrolleeCard: { marginBottom: spacing.sm },
   enrolleeTop: {
     flexDirection: 'row',

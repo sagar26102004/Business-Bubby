@@ -1017,6 +1017,13 @@ export interface Business {
    */
   plans?: PlanItem[];
   /**
+   * The joining form — what everyone enrolling is asked for (a photo, a mobile
+   * number, an address, anything else the owner adds). Built in Manage ›
+   * Joining form; answers ride on the `Membership` as `formAnswers`. Absent or
+   * empty = nothing extra is asked.
+   */
+  enrollForm?: EnrollForm;
+  /**
    * Products for sale, for businesses that stock goods (a tyre showroom's
    * tyre range, a hardware shop's stock). A business can have products only,
    * services only, or both — customers order from whatever is listed.
@@ -1265,6 +1272,72 @@ export interface BizChatMessage {
 }
 
 /**
+ * What one question on a business's joining form asks for. The type picks the
+ * keyboard and the control the customer gets — `photo` opens the camera/gallery
+ * and stores an uploaded URL, `choice` renders the owner's own options as chips,
+ * everything else is a text box with the right keyboard.
+ */
+export type EnrollFieldType =
+  | 'text'
+  | 'longtext'
+  | 'number'
+  | 'phone'
+  | 'email'
+  | 'date'
+  | 'address'
+  | 'photo'
+  | 'choice'
+  | 'yesno';
+
+/**
+ * One question on the joining form. `id` is stable — answers are filed against
+ * it — so renaming a question keeps the answers people already gave.
+ *
+ * The id `name` is RESERVED: it is the enrollee's own name, which the app
+ * already stores as `Membership.enrolleeName`, so adding it to the form only
+ * changes the label and whether it's compulsory. It never lands in
+ * `formAnswers` twice.
+ */
+export interface EnrollField {
+  id: string;
+  type: EnrollFieldType;
+  /** What the customer reads above the box, e.g. "Mobile number". */
+  label: string;
+  /** Must be filled before the request can be sent. */
+  required?: boolean;
+  /** A line of help under the label, e.g. "The number we'll call you on". */
+  hint?: string;
+  /** `choice` only — what they pick from. */
+  options?: string[];
+}
+
+/**
+ * The form a business asks everyone joining to fill in — built by the owner in
+ * Manage › Joining form, filled by the customer on the enrol screen, and read
+ * back on the member's detail page. No form (or an empty one) means the enrol
+ * screen stays as it was: pick a plan, name who it's for, send.
+ */
+export interface EnrollForm {
+  /** A sentence shown above the questions, e.g. "Please bring the original ID". */
+  intro?: string;
+  fields: EnrollField[];
+}
+
+/**
+ * One filled-in answer, carried on the `Membership` from the request onwards.
+ * The `label` and `type` are COPIED in at fill time on purpose: the owner can
+ * reword or delete a question later, and an answer still has to read correctly
+ * next to the member it belongs to.
+ */
+export interface EnrollAnswer {
+  fieldId: string;
+  label: string;
+  type: EnrollFieldType;
+  /** Text for every type; a `photo` holds the uploaded image URL. */
+  value: string;
+}
+
+/**
  * A recurring plan between a business and one of its customers — a gym
  * membership, a yoga batch, monthly tuition, a school-bus seat. Two ways one
  * begins: the business enrolls a customer directly (workspace → Members), or
@@ -1311,6 +1384,13 @@ export interface Membership {
    * glance without a second fetch.
    */
   payment?: MembershipPaymentSummary;
+  /**
+   * What the customer filled in on the business's joining form when they asked
+   * to enrol (`Business.enrollForm`). Shown to the business on the pending
+   * request and on the member's detail page. Empty when the business has no
+   * form, or when a member was added by the business by hand.
+   */
+  formAnswers?: EnrollAnswer[];
 }
 
 /** A membership's payment standing for its current cycle, computed on read. */

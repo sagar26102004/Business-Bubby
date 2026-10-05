@@ -1,4 +1,8 @@
-/** Themed button with primary / secondary / ghost variants. */
+/**
+ * Themed button with primary / secondary / ghost / cta variants. `cta` is the
+ * terracotta "go buy it" accent (Claim deal, View menu, Buy now) — use it
+ * sparingly, at most one per card; submit and navigation stay `primary`.
+ */
 import { ActivityIndicator, Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { Text } from './Text';
@@ -6,7 +10,7 @@ import { Text } from './Text';
 export interface ButtonProps {
   title: string;
   onPress?: () => void;
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'cta';
   disabled?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -27,9 +31,11 @@ export function Button({
     primary: colors.brand,
     secondary: colors.surfaceAlt,
     ghost: 'transparent',
+    cta: colors.cta,
   }[variant];
+  const solid = variant === 'primary' || variant === 'cta';
 
-  const textTone = variant === 'primary' ? 'inverse' : variant === 'ghost' ? 'brand' : 'default';
+  const textTone = solid ? 'inverse' : variant === 'ghost' ? 'brand' : 'default';
 
   return (
     <Pressable
@@ -44,7 +50,7 @@ export function Button({
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? colors.textInverse : colors.brand} />
+        <ActivityIndicator color={solid ? colors.textInverse : colors.brand} />
       ) : (
         <Text variant="label" tone={textTone} weight="bold" style={styles.label}>
           {title}

@@ -4,6 +4,10 @@
  * the running total collected. The owner can approve a payment the customer
  * reported, record one taken in person (cash at the counter), and reach the
  * customer over chat. Members only.
+ *
+ * It also prints whatever they filled in on the business's joining form
+ * (`Membership.formAnswers`) — the photo, the number, the address the owner
+ * asked for — so the details collected at signup are where the member is.
  */
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -13,6 +17,7 @@ import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney } from '@/lib/money';
+import { EnrollAnswers } from '@/features/memberships/EnrollAnswers';
 import {
   Button,
   Card,
@@ -255,6 +260,15 @@ export default function MemberDetailScreen() {
           </>
         )}
       </Card>
+
+      {/* What they filled in when they joined — the business's own form. Kept
+          next to the enrolment date because that's the "who is this person"
+          half of the screen; the money is below. */}
+      {m.formAnswers?.length ? (
+        <Card style={styles.card}>
+          <EnrollAnswers answers={m.formAnswers} title="📋 Joining form" />
+        </Card>
+      ) : null}
 
       {/* Headline status */}
       <Card style={styles.statusCard}>

@@ -2,13 +2,17 @@
  * Design tokens. All colors, spacing, radii, and type sizes live here so a
  * restyle touches one file. Components read colors through `useColors()`.
  *
- * TWO looks live side by side, picked by `DESIGN` below:
- *  - 'neighborhood' (current) — Nextdoor structure in a neutral monochrome:
+ * THREE looks live side by side, picked by `DESIGN` below:
+ *  - 'forest' (current, 2026-10-04) — the high-fidelity neighborhood palette:
+ *    deep forest green (#2D5A43) as the one brand color on warm linen paper,
+ *    sage-tinted fills, and terracotta (`cta`) for "go buy it" accents only.
+ *  - 'neighborhood' (previous) — Nextdoor structure in a neutral monochrome:
  *    near-black as the one brand color, a grey ramp between white and black for
  *    tints/sheets, near-black text, soft rounded surfaces.
  *  - 'classic' — the original deep-navy + blue-accent directory look.
  *
- * To go back to the old colors, change ONE word: DESIGN = 'classic'.
+ * To go back to the previous colors, change ONE word: DESIGN = 'neighborhood'
+ * (monochrome) or DESIGN = 'classic' (navy).
  * (The full pre-redesign UI, including layouts, is the git tag
  * `design-before-nextdoor` — see the redesign notes in docs/.)
  *
@@ -16,15 +20,28 @@
  */
 import { useColorScheme } from 'react-native';
 
-export type DesignName = 'neighborhood' | 'classic';
+export type DesignName = 'forest' | 'neighborhood' | 'classic';
 
-/** Which visual identity the app wears. Flip to 'classic' to revert colors. */
-export const DESIGN = 'neighborhood' as DesignName;
+/** Which visual identity the app wears. Flip to 'neighborhood' to revert colors. */
+export const DESIGN = 'forest' as DesignName;
 
 /** When false, always use the light theme regardless of OS setting. */
 const FOLLOW_SYSTEM_THEME = false;
 
 export const palette = {
+  // — Forest (current): forest green on warm linen, terracotta for CTAs —
+  forest: '#2D5A43', // brand: primary buttons, active tab pill, links
+  forestDeep: '#1F4231', // brand text on light fills, pressed states
+  sage: '#EAF7EC', // tinted chips / subtle containers
+  sageWash: '#F0FDF1', // header sheet + tab bar tint
+  sageLine: '#DDE8DF', // crisp soft-sage card outline
+  linen: '#FBF9F5', // app background (warm paper)
+  linenAlt: '#F3F0EA', // secondary button / chip fill on linen
+  terracotta: '#A24936', // secondary "go" CTAs: Claim, View menu, Buy now
+  terracottaSoft: '#F7E6E0', // terracotta tint for badges
+  forestInk: '#1C2420', // primary text — green-black, not pure black
+  forestStone: '#5E6A63', // secondary text — ≥4.5:1 on linen and white
+
   // — Neighborhood (current): black brand on a neutral grey ramp —
   // Every step below is a pure neutral, so nothing tints warm or cool. The
   // ramp runs surface(#FFF) → paper → mist → greySoft → greyWash → noir, and
@@ -89,6 +106,13 @@ export interface ColorScheme {
   accentSoft: string;
   /** Background for the home screens' top sheet — colored, not white. */
   headerTint: string;
+  /**
+   * Secondary "go" action (terracotta in the forest look) — Claim deal, View
+   * menu, Buy now. Never for navigation or primary submit; that stays `brand`.
+   * Pairs with `textInverse`.
+   */
+  cta: string;
+  ctaSoft: string;
   star: string;
   success: string;
   successSoft: string;
@@ -114,6 +138,31 @@ const neighborhood: ColorScheme = {
   accent: palette.noir,
   accentSoft: palette.greySoft,
   headerTint: palette.greyWash,
+  cta: palette.noir,
+  ctaSoft: palette.greySoft,
+  star: palette.star,
+  success: palette.success,
+  successSoft: palette.successSoft,
+  danger: palette.danger,
+};
+
+/** Forest green on warm linen — the high-fidelity neighborhood redesign. */
+const forest: ColorScheme = {
+  background: palette.linen,
+  surface: palette.white,
+  surfaceAlt: palette.linenAlt,
+  border: palette.sageLine,
+  text: palette.forestInk,
+  textMuted: palette.forestStone,
+  textInverse: palette.white,
+  brand: palette.forest,
+  brandSoft: palette.sage,
+  brandText: palette.forestDeep,
+  accent: palette.forest,
+  accentSoft: palette.sage,
+  headerTint: palette.sageWash,
+  cta: palette.terracotta,
+  ctaSoft: palette.terracottaSoft,
   star: palette.star,
   success: palette.success,
   successSoft: palette.successSoft,
@@ -135,13 +184,16 @@ const classic: ColorScheme = {
   accent: palette.accent,
   accentSoft: palette.accentSoft,
   headerTint: palette.navySoft,
+  cta: palette.accent,
+  ctaSoft: palette.accentSoft,
   star: palette.star,
   success: palette.success,
   successSoft: palette.successSoft,
   danger: palette.danger,
 };
 
-const light: ColorScheme = DESIGN === 'classic' ? classic : neighborhood;
+const light: ColorScheme =
+  DESIGN === 'classic' ? classic : DESIGN === 'forest' ? forest : neighborhood;
 
 const dark: ColorScheme = {
   background: palette.black,
@@ -157,6 +209,8 @@ const dark: ColorScheme = {
   accent: '#60A5FA',
   accentSoft: '#1E3A8A',
   headerTint: palette.gray800,
+  cta: '#F0997B',
+  ctaSoft: '#4A2118',
   star: palette.star,
   success: '#4ADE80',
   successSoft: '#14532D',
@@ -172,11 +226,14 @@ export const spacing = {
   xxl: 32,
 } as const;
 
-/** Softer, rounder surfaces than the classic look — the neighborhood feel. */
+/**
+ * Softer, rounder surfaces than the classic look — the neighborhood feel. The
+ * forest look tightens cards to 12–16px; chips and buttons stay pills.
+ */
 export const radius = {
   sm: 10,
-  md: 14,
-  lg: 18,
+  md: DESIGN === 'forest' ? 12 : 14,
+  lg: DESIGN === 'forest' ? 16 : 18,
   xl: 24,
   pill: 999,
 } as const;

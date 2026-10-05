@@ -11,6 +11,12 @@
  * (even while their siblings stay subscribed). Every child card can be renamed
  * or split off into its own standalone member.
  *
+ * Two things sit beside the list rather than in it, because they answer
+ * questions the list is the wrong shape for: "who hasn't paid this month" opens
+ * a flat, most-overdue-first screen (`./dues`), and the joining form every new
+ * member fills is edited in Manage (`manage/[businessId]/enroll-form`), whose
+ * answers show up on each request below.
+ *
  * Putting a child on a bus is NOT done here — it lives in Fleet & tracking ›
  * Assign to a vehicle, which works the same enrolment list from the vehicle's
  * side and can fill a whole bus in one pass.
@@ -21,10 +27,13 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import type { Membership, PlanItem, User } from '@/domain/types';
 import { planOfferings } from '@/domain/offerings';
+import { enrollFormFields, missingRequired, toAnswers } from '@/domain/enrollForm';
 import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
+import { EnrollAnswers } from '@/features/memberships/EnrollAnswers';
+import { EnrollFormFill } from '@/features/memberships/EnrollFormFill';
 import {
   Avatar,
   Button,
@@ -124,6 +133,10 @@ export default function WorkspaceMembersScreen() {
   const [enrolleeName, setEnrolleeName] = useState('');
   const [memberPlan, setMemberPlan] = useState('');
   const [memberPrice, setMemberPrice] = useState('');
+  // The joining form, filled at the counter when the business signs someone up
+  // in person — the same questions the customer gets, so a walk-in member ends
+  // up with the same record as one who enrolled from their phone.
+  const [addAnswers, setAddAnswers] = useState<Record<string, string>>({});
   const [addingMember, setAddingMember] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
 
@@ -171,6 +184,17 @@ export default function WorkspaceMembersScreen() {
       </Screen>
     );
   }
+
+  const isOwner = !!currentUser && currentUser.id === business.ownerId;
+  const base = `/workspace/${business.id}`;
+  // Only BILLED plans can owe anything — a standalone member has no account to
+  // charge, so they're left out of both the count and the total.
+  const billed = data.members.filter((m) => !m.standalone && m.payment);
+  const unpaid = billed.filter((m) => m.payment!.status !== 'paid');
+  const unpaidCount = unpaid.length;
+  const unpaidTotal = unpaid.reduce((sum, m) => sum + m.pricePerMonth, 0);
+  const formFields = enrollFormFields(business);
+  const formFieldCount = formFields.length;
 
   const memberSince = (iso: string) => new Date(iso).toDateString().slice(4);
 
@@ -241,6 +265,7 @@ export default function WorkspaceMembersScreen() {
     setEnrolleeName('');
     setMemberPlan('');
     setMemberPrice('');
+    setAddAnswers({});
     setMemberError(null);
   };
 
@@ -263,6 +288,13 @@ export default function WorkspaceMembersScreen() {
     // the payer's own name back in counts as the same thing.
     const enrollee = enrolleeName.trim();
     const forSomeoneElse = !!enrollee && enrollee.toLowerCase() !== payer.name.trim().toLowerCase();
+    // The owner's own compulsory questions apply to the counter too — otherwise
+    // the form means one thing from a phone and nothing from the desk.
+    const missing = missingRequired(formFields, addAnswers);
+    if (missing.length > 0) {
+      setMemberError(`Still needed: ${missing.join(', ')}`);
+      return;
+    }
     setAddingMember(true);
     try {
       await repos.memberships.add({
@@ -272,6 +304,7 @@ export default function WorkspaceMembersScreen() {
         enrolleeName: forSomeoneElse ? enrollee : undefined,
         planName: memberPlan.trim(),
         pricePerMonth: price,
+        formAnswers: toAnswers(formFields, addAnswers),
       });
       resetAddForm();
       setShowAdd(false);
@@ -771,6 +804,16 @@ export default function WorkspaceMembersScreen() {
             onChangeText={(t) => setMemberPrice(sanitizePriceInput(t))}
             keyboardType="numeric"
           />
+          {business.enrollForm ? (
+            <EnrollFormFill
+              form={business.enrollForm}
+              answers={addAnswers}
+              onChange={(fieldId, value) =>
+                setAddAnswers((a) => ({ ...a, [fieldId]: value }))
+              }
+            />
+          ) : null}
+
           {memberError ? (
             <Text variant="caption" tone="danger" style={styles.error}>
               {memberError}
@@ -806,6 +849,14 @@ export default function WorkspaceMembersScreen() {
                       ? `Wants: “${planName}” — set the monthly price.`
                       : 'Wants to enrol — set their plan and price.'}
                 </Text>
+
+                {/* What they filled in on the joining form — read BEFORE
+                    deciding, which is the whole reason it rides on the request. */}
+                {m.formAnswers?.length ? (
+                  <Card style={styles.answersCard}>
+                    <EnrollAnswers answers={m.formAnswers} title="📋 Their details" />
+                  </Card>
+                ) : null}
 
                 {adjust ? (
                   <>
@@ -876,6 +927,62 @@ export default function WorkspaceMembersScreen() {
             );
           })}
         </>
+      ) : null}
+
+      {/* The month's collection, as one line and one tap. The list below is
+          grouped by family and collapsed, which is the right shape for finding
+          a person and the wrong one for finding the money — so the answer to
+          "who still owes me?" gets its own flat screen. */}
+      {billed.length > 0 ? (
+        <Card
+          onPress={() => router.push(`${base}/dues` as Href)}
+          style={StyleSheet.flatten([
+            styles.duesCard,
+            {
+              borderColor: unpaidCount > 0 ? colors.danger : colors.success,
+              backgroundColor: unpaidCount > 0 ? colors.surface : colors.successSoft,
+            },
+          ])}
+        >
+          <View style={styles.topRow}>
+            <View style={styles.flex}>
+              <Text weight="bold" tone={unpaidCount > 0 ? 'danger' : 'success'}>
+                {unpaidCount > 0
+                  ? `⚠ ${unpaidCount} haven’t paid this month`
+                  : '✓ Everyone has paid this month'}
+              </Text>
+              <Text variant="caption" tone="muted" style={styles.hintTop}>
+                {unpaidCount > 0
+                  ? `${formatMoney(unpaidTotal)} outstanding · tap to collect`
+                  : `${billed.length} billed plan${billed.length === 1 ? '' : 's'} settled`}
+              </Text>
+            </View>
+            <Text tone="muted">›</Text>
+          </View>
+        </Card>
+      ) : null}
+
+      {/* The form every new member fills in. Owner-only, because it changes what
+          customers are asked — the editor itself lives in Manage. */}
+      {isOwner ? (
+        <Card
+          onPress={() => router.push(`/manage/${business.id}/enroll-form` as Href)}
+          style={styles.duesCard}
+        >
+          <View style={styles.topRow}>
+            <View style={styles.flex}>
+              <Text weight="semibold">📋 Joining form</Text>
+              <Text variant="caption" tone="muted" style={styles.hintTop}>
+                {formFieldCount > 0
+                  ? `${formFieldCount} question${formFieldCount === 1 ? '' : 's'} asked when someone joins`
+                  : 'Ask new members for a photo, a number, an address — anything you need'}
+              </Text>
+            </View>
+            <Text tone="accent" weight="semibold">
+              {formFieldCount > 0 ? '✎ Edit' : '＋ Create'}
+            </Text>
+          </View>
+        </Card>
       ) : null}
 
       <Text weight="semibold" style={styles.sectionHead}>
@@ -954,6 +1061,8 @@ const styles = StyleSheet.create({
   },
   renameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm },
   renameBtn: { paddingHorizontal: spacing.xs },
+  duesCard: { marginBottom: spacing.sm, borderWidth: 1 },
+  answersCard: { marginTop: spacing.sm, marginBottom: spacing.xs },
   addCard: { marginBottom: spacing.md },
   selected: { marginBottom: spacing.sm, borderWidth: 1 },
   selectedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

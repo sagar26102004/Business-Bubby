@@ -466,3 +466,28 @@ re-derivation from the Supabase diff is required:
 - **Verify:** `npm run typecheck` + `npm run build` in `backend/`; `PATCH /api/users/<me>`
   with `{"isProfilePublic": false}` is accepted and simply ignored (unknown field), and an
   employee with an account is tappable from the business page on `EXPO_PUBLIC_BACKEND=api`.
+
+## [SYNC-048] Joining form: `Business.enrollForm` + `Membership.formAnswers`
+
+- **Area:** MembershipRepository / memberships (`add` + `request`). `Business.enrollForm`
+  needs NO work — both business `update` paths assign the patch generically.
+- **Supabase change:** `src/data/supabase/memberships.ts` — `add()` and `request()` now copy
+  `input.formAnswers` onto the new membership document:
+  `formAnswers: input.formAnswers?.length ? input.formAnswers : undefined`. Nothing else moved;
+  the answers are plain data inside `data jsonb` and are never queried on.
+- **Domain/interface (shared, already done):** `src/domain/types.ts` gained `EnrollFieldType`,
+  `EnrollField`, `EnrollForm`, `EnrollAnswer`, plus `Business.enrollForm?: EnrollForm` and
+  `Membership.formAnswers?: EnrollAnswer[]`. `src/data/repositories.ts` gained
+  `formAnswers?: EnrollAnswer[]` on BOTH `EnrollRequestInput` and `NewMembershipInput`.
+  Vocabulary + helpers live in `src/domain/enrollForm.ts` (frontend only).
+- **Path B — backend/:** in `backend/src/services/memberships.ts`, add the same one line to the
+  `Membership` literal in `add()` (next to `pricePerMonth: input.pricePerMonth`) and in
+  `request()` (next to `enrolleeName`):
+  `formAnswers: input.formAnswers?.length ? input.formAnswers : undefined,`
+  No router change — `POST /memberships` and `POST /memberships/request` already forward
+  `req.body` whole, and authz is unchanged (`requireBusinessMember` / `requireSelf`).
+- **Path B — src/data/api/:** none. `repositories.ts` posts the input object as-is, so
+  `formAnswers` already crosses the wire.
+- **DB/migration:** none — document model, both fields live inside `data jsonb`.
+- **Verify:** `npm run typecheck` in `backend/`; enrol from a business that has a joining form
+  and confirm the pending request on Workspace › Members prints "📋 Their details".

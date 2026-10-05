@@ -22,8 +22,9 @@ import type { Href } from 'expo-router';
 import { canAccessService } from '@/domain/access';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { offersDineIn } from '@/domain/catalog';
-import { AVAILABLE_MODULES, enabledModules } from '@/domain/modules';
+import { AVAILABLE_MODULES, enabledModules, hasModule } from '@/domain/modules';
 import { planOfferings, usesServicesAsPlans } from '@/domain/offerings';
+import { enrollFormFields } from '@/domain/enrollForm';
 import { isFoodShop } from '@/domain/tags';
 import { summarizeHours } from '@/domain/hours';
 import { useAuth, useRepositories } from '@/data/DataProvider';
@@ -165,6 +166,18 @@ export default function ManageScreen() {
           sub: count(planOfferings(business).length, 'plan', 'plans'),
           href: `${base}/plans` as Href,
         },
+        // What everyone joining is asked for. Only worth a tile once enrolling
+        // is actually on — otherwise nobody ever reaches the form.
+        isOwner &&
+          !isStall &&
+          hasModule(business, 'memberships') && {
+            icon: '📋',
+            label: 'Joining form',
+            sub: enrollFormFields(business).length
+              ? count(enrollFormFields(business).length, 'question', 'questions')
+              : 'Nothing asked yet',
+            href: `${base}/enroll-form` as Href,
+          },
         !isStall && {
           icon: '🛠️',
           label: 'Services offered',

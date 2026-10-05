@@ -2845,6 +2845,7 @@ class MockMembershipRepository implements MembershipRepository {
       enrolleeName: input.enrolleeName?.trim() || undefined,
       planName: input.planName,
       pricePerMonth: input.pricePerMonth,
+      formAnswers: input.formAnswers?.length ? input.formAnswers : undefined,
       startedAt: started.toISOString(),
       renewedAt: started.toISOString(),
       expiresAt: addMonths(started, 1).toISOString(),
@@ -2871,6 +2872,9 @@ class MockMembershipRepository implements MembershipRepository {
       requestedPlan: input.requestedPlan?.trim() || undefined,
       requestedPrice: input.requestedPrice,
       enrolleeName: input.enrolleeName?.trim() || undefined,
+      // The joining form, as this enrollee filled it. It rides along from the
+      // request so the business reads it BEFORE deciding, not after.
+      formAnswers: input.formAnswers?.length ? input.formAnswers : undefined,
       pricePerMonth: 0,
       startedAt: now.toISOString(),
       renewedAt: now.toISOString(),

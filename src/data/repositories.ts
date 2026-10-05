@@ -22,6 +22,7 @@ import type {
   ChatMessage,
   Employee,
   EmployeeLevel,
+  EnrollAnswer,
   GeoPoint,
   ListingType,
   LogEntry,
@@ -965,6 +966,8 @@ export interface NewMembershipInput {
   enrolleeName?: string;
   planName: string;
   pricePerMonth: number;
+  /** The joining form, when a member walked in and the counter filled it there. */
+  formAnswers?: EnrollAnswer[];
 }
 
 /** Customer side: request to enroll/subscribe from the business page. */
@@ -978,6 +981,12 @@ export interface EnrollRequestInput {
   requestedPrice?: number;
   /** Who the plan is for, when it isn't the account holder (e.g. a child). */
   enrolleeName?: string;
+  /**
+   * The business's joining form, as this person filled it (`Business.enrollForm`).
+   * One set per enrollee — a parent signing up two children sends two requests,
+   * each with its own answers. Empty when the business asks nothing extra.
+   */
+  formAnswers?: EnrollAnswer[];
 }
 
 /** What the business fills in when accepting a pending enroll request. */
