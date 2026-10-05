@@ -114,7 +114,7 @@ export default function TabsLayout() {
         tabBarLabelPosition: 'below-icon',
         // 10px so "Subscriptions" fits a fifth of a phone without truncating.
         tabBarLabelStyle: { fontSize: 10, marginTop: 2, ...fontFor('bold') },
-        headerStyle: { backgroundColor: colors.surface },
+        headerStyle: { backgroundColor: colors.headerTint },
         headerTitleStyle: { color: colors.text, ...fontFor('bold') },
         headerShadowVisible: false,
         headerTitleAlign: 'center',

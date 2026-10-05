@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, TextInputProps, View } from 'react-native';
 import { radius, spacing, useColors } from '@/theme/theme';
-import { fontFor } from '@/theme/fonts';
+import { NO_WEB_OUTLINE, fontFor } from '@/theme/fonts';
 import { Icon, type IconName } from './Icon';
 import { Text } from './Text';
 
@@ -112,6 +112,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     fontSize: 16,
+    // The sage border + halo IS the focus state — no browser ring on top of it.
+    ...NO_WEB_OUTLINE,
   },
   inputWithToggle: { paddingRight: 46 },
   toggle: {

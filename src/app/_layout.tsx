@@ -132,7 +132,7 @@ function AppHeader({ title, headerRight }: { title: string; headerRight?: Header
   return (
     <View
       style={{
-        backgroundColor: colors.surface,
+        backgroundColor: colors.headerTint, // linen header (One Place)
         paddingTop: insets.top,
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: colors.border,

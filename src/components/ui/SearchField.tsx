@@ -9,7 +9,7 @@
  */
 import { Pressable, StyleProp, StyleSheet, TextInput, View, ViewStyle } from 'react-native';
 import { radius, spacing, useColors } from '@/theme/theme';
-import { fontFor } from '@/theme/fonts';
+import { NO_WEB_OUTLINE, fontFor } from '@/theme/fonts';
 import { Icon } from './Icon';
 import { Text } from './Text';
 
@@ -77,6 +77,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     marginBottom: spacing.lg,
   },
-  input: { flex: 1, fontSize: 16, paddingVertical: spacing.sm },
+  input: { flex: 1, fontSize: 16, paddingVertical: spacing.sm, ...NO_WEB_OUTLINE },
   pressed: { opacity: 0.6 },
 });

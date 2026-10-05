@@ -37,7 +37,7 @@ import {
 } from '@/domain/offerings';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
-import { EmptyView, ErrorView, LoadingView, Text } from '@/components/ui';
+import { EmptyView, ErrorView, Icon, LoadingView, Text } from '@/components/ui';
 import { VegDot } from '@/features/businesses/FoodMenuEditor';
 import { useCart } from '@/features/orders/CartContext';
 import { totalLabel, totalOf } from '@/features/orders/orderUtils';
@@ -213,7 +213,7 @@ function CatalogBody({
           style={[
             styles.bar,
             {
-              backgroundColor: colors.surface,
+              backgroundColor: colors.headerTint,
               borderTopColor: colors.border,
               paddingBottom: insets.bottom + spacing.md,
             },
@@ -230,7 +230,7 @@ function CatalogBody({
             accessibilityRole="button"
             style={({ pressed }) => [
               styles.barBtn,
-              { backgroundColor: colors.brand, opacity: pressed ? 0.85 : 1 },
+              { backgroundColor: enrolling ? colors.brand : colors.cta, opacity: pressed ? 0.85 : 1 },
             ]}
           >
             <Text weight="bold" tone="inverse">
@@ -246,7 +246,7 @@ function CatalogBody({
           style={[
             styles.bar,
             {
-              backgroundColor: colors.surface,
+              backgroundColor: colors.headerTint,
               borderTopColor: colors.border,
               paddingBottom: insets.bottom + spacing.md,
             },
@@ -265,7 +265,7 @@ function CatalogBody({
             accessibilityRole="button"
             style={({ pressed }) => [
               styles.barBtn,
-              { backgroundColor: colors.brand, opacity: pressed ? 0.85 : 1 },
+              { backgroundColor: enrolling ? colors.brand : colors.cta, opacity: pressed ? 0.85 : 1 },
             ]}
           >
             <Text weight="bold" tone="inverse">
@@ -327,17 +327,28 @@ function CatalogGroup({
           <Text
             variant={depth === 0 ? 'subheading' : 'body'}
             weight={depth === 0 ? 'bold' : 'semibold'}
+            style={styles.flexShrink}
           >
-            {node.name}
+            {node.name}{' '}
+            <Text tone="muted" weight="medium">
+              ({count})
+            </Text>
           </Text>
-          <Text tone="muted">
-            {count} · {isOpen ? '▲' : '▼'}
-          </Text>
+          <View style={isOpen ? styles.chevOpen : undefined}>
+            <Icon name="chevronDown" size={18} color={colors.textMuted} />
+          </View>
         </Pressable>
       ) : null}
 
       {isOpen ? (
-        <>
+        // A top-level section's rows sit on one white card (One Place).
+        <View
+          style={
+            depth === 0
+              ? [styles.sectionCard, { backgroundColor: colors.surface, borderColor: colors.border }]
+              : undefined
+          }
+        >
           {node.children.map((child) => (
             <CatalogGroup
               key={child.key}
@@ -361,7 +372,7 @@ function CatalogGroup({
               divider={i < node.items.length - 1}
             />
           ))}
-        </>
+        </View>
       ) : null}
     </View>
   );
@@ -448,7 +459,7 @@ function ItemCard({
             ]}
           >
             <Text weight="bold" tone="brand">
-              ENROLL ›
+              Enroll
             </Text>
           </Pressable>
         ) : quantity === 0 ? (
@@ -465,8 +476,9 @@ function ItemCard({
               },
             ]}
           >
+            <Icon name="plus" size={15} color={colors.brandText} />
             <Text weight="bold" tone="brand">
-              ADD ＋
+              Add
             </Text>
           </Pressable>
         ) : (
@@ -483,9 +495,7 @@ function ItemCard({
               accessibilityRole="button"
               accessibilityLabel={`Remove one ${item.name}`}
             >
-              <Text weight="bold" tone="inverse">
-                −
-              </Text>
+              <Icon name="minus" size={16} color={colors.textInverse} />
             </Pressable>
             <Text weight="bold" tone="inverse">
               {quantity}
@@ -496,9 +506,7 @@ function ItemCard({
               accessibilityRole="button"
               accessibilityLabel={`Add one more ${item.name}`}
             >
-              <Text weight="bold" tone="inverse">
-                ＋
-              </Text>
+              <Icon name="plus" size={16} color={colors.textInverse} />
             </Pressable>
           </View>
         )}
@@ -521,6 +529,9 @@ const styles = StyleSheet.create({
   },
   // Nested folders indent under their parent so the tree reads at a glance.
   nested: { paddingLeft: spacing.md },
+  flexShrink: { flexShrink: 1 },
+  chevOpen: { transform: [{ rotate: '180deg' }] },
+  sectionCard: { borderWidth: 1, borderRadius: radius.lg, paddingHorizontal: spacing.lg },
   item: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.lg },
   itemInfo: { flex: 1, gap: 4 },
   itemName: { fontSize: 17 },
@@ -542,11 +553,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     borderWidth: 1.5,
+    flexDirection: 'row',
+    gap: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 104,
+    minWidth: 96,
   },
   stepper: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   bar: {
@@ -560,12 +573,14 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
   },
   barInfo: { flex: 1 },
   barBtn: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
   },
 });

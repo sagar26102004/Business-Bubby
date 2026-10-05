@@ -18,7 +18,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/plus-jakarta-sans';
 import { useEffect, useState } from 'react';
-import type { TextStyle } from 'react-native';
+import { Platform, type TextStyle } from 'react-native';
 
 /** Never hold the first paint longer than this for a font that won't load. */
 const FONT_MAX_WAIT_MS = 3000;
@@ -66,3 +66,9 @@ export function useAppFonts(): boolean {
   fontsReady = loaded && !error;
   return loaded || !!error || timedOut;
 }
+
+/**
+ * Web only: hide the browser's focus ring on a text field that draws its own
+ * focus state. (RN's style types don't list `outlineStyle: 'none'`, hence the cast.)
+ */
+export const NO_WEB_OUTLINE = (Platform.OS === 'web' ? { outlineStyle: 'none' } : {}) as TextStyle;

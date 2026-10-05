@@ -21,6 +21,7 @@ import { EmptyView, LoadingView, SearchIcon, Text } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { isListedPublicly } from '@/lib/onHold';
+import { NO_WEB_OUTLINE, fontFor } from '@/theme/fonts';
 
 const MAX_SUGGESTIONS = 8;
 
@@ -127,7 +128,7 @@ export default function SearchScreen() {
             ‹
           </Text>
         </Pressable>
-        <View style={[styles.searchBar, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+        <View style={[styles.searchBar, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <SearchIcon size={17} />
           <TextInput
             placeholder="Search businesses, services…"
@@ -138,7 +139,7 @@ export default function SearchScreen() {
             autoFocus
             autoCorrect={false}
             returnKeyType="search"
-            style={[styles.input, { color: colors.text }]}
+            style={[styles.input, { color: colors.text }, fontFor('regular')]}
           />
           {query.length > 0 ? (
             <Pressable
@@ -265,7 +266,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.md,
   },
-  input: { flex: 1, height: 40, fontSize: 15 },
+  // The bar draws its own frame — no browser focus ring inside it on web.
+  input: { flex: 1, height: 40, fontSize: 15, ...NO_WEB_OUTLINE },
   suggestion: {
     flexDirection: 'row',
     alignItems: 'center',
