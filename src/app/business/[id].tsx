@@ -46,6 +46,7 @@ import {
 } from '@/components/ui';
 import { BusinessHero, type HeroAction } from '@/features/businesses/BusinessHero';
 import { useCart } from '@/features/orders/CartContext';
+import { hasShowableCoordinates } from '@/features/businesses/location';
 import { totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { OfferingsSection, type OfferingGroup } from '@/features/businesses/OfferingsSection';
 import { catalogLink } from '@/features/offerings/links';
@@ -265,7 +266,16 @@ export default function BusinessDetailScreen() {
           },
         ]
       : []),
-    { icon: 'directions', label: 'Route', onPress: () => router.push(`/directions/${business.id}`) },
+    // No route to a home-based business whose owner hid the exact address.
+    ...(hasShowableCoordinates(business.location)
+      ? [
+          {
+            icon: 'directions' as IconName,
+            label: 'Route',
+            onPress: () => router.push(`/directions/${business.id}`),
+          },
+        ]
+      : []),
   ];
 
   // The tab strip: every block with something in it, then Reviews.

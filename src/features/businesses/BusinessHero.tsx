@@ -65,7 +65,9 @@ export function BusinessHero({
   const status = openState(business);
   const todayLabel = status.todayLabel ?? business.hours;
   const weekly = business.openingHours ? summarizeHours(business.openingHours) : undefined;
-  const distanceLabel = formatDistance(distanceKm);
+  // Under ~20 m is "here" — "0 m away" reads like a bug, so say nothing.
+  const distanceLabel =
+    typeof distanceKm === 'number' && distanceKm < 0.02 ? undefined : formatDistance(distanceKm);
   const photoCount = (business.portfolio ?? []).filter((p) => p.kind === 'photo').length;
   const tags = business.tags ?? [];
   const emoji = tagEmoji(tags[0] ?? '', getType(business.type)?.icon ?? '🏪');

@@ -17,26 +17,28 @@
  * once (an electrician at the house), landing on the orders desk. One list
  * asked once could only ever be half right.
  *
- *   business: kind → tags → basics → sell? → plans? → services? → rent? → modules → location → team → review
- *   stall:    kind → category → basics → location (first item only) → review
+ * ONE PLACE REDESIGN (2026-10, docs/redesign-one-place/register-*.png): the
+ * business flow is FOUR PHASES, shown as "Step N of 4" by StepHeader:
  *
- * "?" steps are Yes/No questions — answering "No" skips ahead, "Yes" reveals
- * the editor. Items still fold into the user's PERSONAL STALL (one 'item'
- * listing per user; the first item creates it).
+ *   1 Identity  — (owner) → identity: business model, name, #tags, tagline,
+ *                 description, hours
+ *   2 Location  — location: operating model (premises vs mobile/home, which
+ *                 hides the exact address) + map pin + address
+ *   3 Offerings — blocks: ToggleCards for menu/products, plans, services,
+ *                 rentals (they set the same Yes/No answers the old one-question
+ *                 steps did) → catalog: one card per enabled block, holding the
+ *                 existing editors and the paste-a-list importer
+ *   4 Launch    — team → review: live card preview, workspace modules, the
+ *                 phase strip, Publish
  *
- * The "modules" step is the workspace opt-in (domain/modules.ts): the owner
- * picks the tools they'll manage the business with, pre-selected from their
- * earlier answers. Stalls skip it — a stall keeps the default workspace.
+ * The business model (service / shop / rentals) only PRE-TICKS blocks; the
+ * listing type is still derived from what's actually listed.
  *
- * The location step works like a delivery app: pin on a map (LocationPicker,
- * default = current location) + free-text address/city/state. Businesses that
- * don't sell goods or rent things are also asked "Do you have an office?" —
- * brokers/agents do, plumbers travel (kind: 'office' vs 'service_area',
- * which drives "Serves <area>" display).
+ *   stall (ON HOLD — lib/onHold.ts): kind → category → basics → location → review
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   PLAN_BASES,
@@ -65,6 +67,7 @@ import {
   type ModuleId,
 } from '@/domain/modules';
 import type {
+  Business,
   GeoPoint,
   ListingType,
   LocationKind,
@@ -82,7 +85,23 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
 import { useAsync } from '@/lib/useAsync';
 import { clearRegisterDraft, loadRegisterDraft, saveRegisterDraft } from '@/lib/registerDraft';
-import { AutocompleteInput, Button, Card, Input, Screen, Tag, Text } from '@/components/ui';
+import {
+  AutocompleteInput,
+  BottomActionBar,
+  Button,
+  Card,
+  Icon,
+  IconTile,
+  Input,
+  Screen,
+  SectionHeader,
+  StepHeader,
+  Tag,
+  Text,
+  ToggleCard,
+  type IconName,
+} from '@/components/ui';
+import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { EmployeeEditor } from '@/features/businesses/EmployeeEditor';
 import { FoodMenuEditor } from '@/features/businesses/FoodMenuEditor';
 import { LocationPicker } from '@/features/businesses/LocationPicker';
@@ -132,6 +151,9 @@ const KIND_OPTIONS: { id: ListingKind; icon: string; title: string; blurb: strin
 ];
 
 type StepId =
+  | 'identity'
+  | 'blocks'
+  | 'catalog'
   | 'kind'
   | 'owner'
   | 'category'
@@ -144,6 +166,92 @@ type StepId =
   | 'location'
   | 'team'
   | 'review';
+
+/** Draft format for this wizard — see RegisterDraft.version. */
+const DRAFT_VERSION = 2;
+
+/** How the business mainly works. It only PRE-TICKS the matching blocks. */
+type BusinessModel = 'service' | 'shop' | 'rental';
+
+const MODEL_OPTIONS: {
+  id: BusinessModel;
+  icon: IconName;
+  title: string;
+  blurb: string;
+  chips: string[];
+}[] = [
+  {
+    id: 'service',
+    icon: 'tools',
+    title: 'Service / freelancer / contractor',
+    blurb: 'Plumbers, electricians, tutors, salons, mechanics and other mobile professionals.',
+    chips: ['Requests', 'Rate card', 'Calls'],
+  },
+  {
+    id: 'shop',
+    icon: 'store',
+    title: 'Shop / counter store',
+    blurb: 'Cafes, bakeries, kirana, restaurants, showrooms, boutiques.',
+    chips: ['Catalog', 'Dine-in tabs', 'Orders'],
+  },
+  {
+    id: 'rental',
+    icon: 'key',
+    title: 'Rentals',
+    blurb: 'Flats and PGs, vehicles, tents & sound, equipment, costumes.',
+    chips: ['Per-day / per-month', 'Requests'],
+  },
+];
+
+/** The Location phase's operating models — `hasOffice` 'yes' / 'no'. */
+const OPERATING: {
+  id: 'yes' | 'no';
+  icon: IconName;
+  title: string;
+  blurb: string;
+  note: string;
+  noteIcon: IconName;
+}[] = [
+  {
+    id: 'yes',
+    icon: 'store',
+    title: 'Physical shop, showroom or studio',
+    blurb: 'e.g. Cafe, tyre showroom, salon, bakery, coaching centre.',
+    note: 'Customers visit you — your exact pin and full address show on the map.',
+    noteIcon: 'pin',
+  },
+  {
+    id: 'no',
+    icon: 'truck',
+    title: 'Mobile service, or from home',
+    blurb: 'e.g. Plumber, electrician, school van, home tutor, home baker.',
+    note: 'Home address hidden — customers only see your neighborhood area.',
+    noteIcon: 'shield',
+  },
+];
+
+/** The four phases the steps are grouped under (StepHeader's "Step N of 4"). */
+const PHASES = ['Business identity', 'Location & privacy', 'Offerings', 'Review & launch'] as const;
+
+function phaseOf(id: StepId): number {
+  switch (id) {
+    case 'location':
+      return 2;
+    case 'blocks':
+    case 'catalog':
+    case 'sell':
+    case 'plans':
+    case 'services':
+    case 'rent':
+      return 3;
+    case 'modules':
+    case 'team':
+    case 'review':
+      return 4;
+    default:
+      return 1;
+  }
+}
 
 /** Tri-state answer to a Yes/No step: unanswered until the user picks. */
 type Choice = 'yes' | 'no' | null;
@@ -161,7 +269,10 @@ interface VehicleDraft {
  * lose progress. Mirrors the component's form state exactly.
  */
 interface RegisterDraft {
+  /** Draft format — bumped when the step list changes; older drafts are dropped. */
+  version?: number;
   savedAt: number;
+  model?: BusinessModel | null;
   stepIndex: number;
   kind: ListingKind;
   kindChosen: boolean;
@@ -208,6 +319,7 @@ export default function RegisterScreen() {
   const [kind, setKind] = useState<ListingKind>('business');
   // ON HOLD (redesign 2026-10): stall — with only one kind left, it's chosen.
   const [kindChosen, setKindChosen] = useState<boolean>(ON_HOLD.stalls);
+  const [model, setModel] = useState<BusinessModel | null>(null);
   const [name, setName] = useState('');
   const [tagline, setTagline] = useState('');
   const [description, setDescription] = useState('');
@@ -288,13 +400,24 @@ export default function RegisterScreen() {
         ? ['kind', 'category', 'basics', 'review']
         : ['kind', 'category', 'basics', 'location', 'review'];
     }
-    const all: StepId[] = ['kind', 'category', 'basics', 'sell', 'plans', 'services', 'rent', 'modules', 'location', 'team', 'review'];
+    // The four phases. The catalog step only exists once a block is switched on.
+    const anyBlock =
+      sellChoice === 'yes' || plansChoice === 'yes' || servicesChoice === 'yes' || rentChoice === 'yes';
+    const all: StepId[] = [
+      'kind',
+      'identity',
+      'location',
+      'blocks',
+      ...(anyBlock ? (['catalog'] as StepId[]) : []),
+      'team',
+      'review',
+    ];
     // ON HOLD (redesign 2026-10): stall — no "what are you listing?" fork.
     const base = ON_HOLD.stalls ? all.filter((id) => id !== 'kind') : all;
     if (!isSuper) return base;
     const at = ON_HOLD.stalls ? 0 : 1;
     return [...base.slice(0, at), 'owner', ...base.slice(at)] as StepId[];
-  }, [isItem, addingToStall, isSuper]);
+  }, [isItem, addingToStall, isSuper, sellChoice, plansChoice, servicesChoice, rentChoice]);
 
   const safeIndex = Math.min(stepIndex, stepIds.length - 1);
   const step = stepIds[safeIndex];
@@ -317,8 +440,9 @@ export default function RegisterScreen() {
         ? 'service'
         : 'shop';
 
-  // Ask about an office only when there's no shopfront implied by the answers.
-  const askOffice = !isItem && sellChoice !== 'yes' && rentChoice !== 'yes';
+  // Every business picks an operating model on the Location phase — premises
+  // customers visit, or mobile / from home (exact address hidden).
+  const askOffice = !isItem;
 
   const chooseKind = (next: ListingKind) => {
     setKind(next);
@@ -335,7 +459,9 @@ export default function RegisterScreen() {
   const hydratedRef = useRef(false);
 
   const buildSnapshot = (): RegisterDraft => ({
+    version: DRAFT_VERSION,
     savedAt: Date.now(),
+    model,
     stepIndex,
     kind,
     kindChosen,
@@ -374,6 +500,7 @@ export default function RegisterScreen() {
     setStepIndex(d.stepIndex ?? 0);
     setKind(d.kind ?? 'business');
     setKindChosen(d.kindChosen ?? false);
+    setModel(d.model ?? null);
     setName(d.name ?? '');
     setTagline(d.tagline ?? '');
     setDescription(d.description ?? '');
@@ -413,7 +540,13 @@ export default function RegisterScreen() {
       const draft = await loadRegisterDraft<RegisterDraft>();
       if (!active) return;
       // ON HOLD (redesign 2026-10): stall — a saved stall draft is dropped.
-      const usable = draft && draft.kindChosen && !(ON_HOLD.stalls && draft.kind === 'stall');
+      // A draft saved against the old ~11-step list would resume on the wrong
+      // step, so anything older than this wizard's format is dropped.
+      const usable =
+        draft &&
+        draft.version === DRAFT_VERSION &&
+        draft.kindChosen &&
+        !(ON_HOLD.stalls && draft.kind === 'stall');
       if (usable) {
         applySnapshot(draft);
       } else if (params.type && !kindChosen && !ON_HOLD.stalls) {
@@ -440,6 +573,7 @@ export default function RegisterScreen() {
   }, [
     hasProgress,
     stepIndex,
+    model,
     kind,
     kindChosen,
     name,
@@ -477,6 +611,10 @@ export default function RegisterScreen() {
     switch (id) {
       case 'kind':
         return kindChosen;
+      case 'identity':
+        return name.trim().length > 1 && tags.length > 0;
+      case 'catalog':
+        return rentChoice !== 'yes' || (!!rentalBasis && rentalItems.length > 0);
       case 'category':
         return isItem ? !!subcategoryId : tags.length > 0;
       case 'basics':
@@ -506,6 +644,13 @@ export default function RegisterScreen() {
     switch (id) {
       case 'kind':
         return 'Tap one of the options to continue.';
+      case 'identity':
+        return name.trim().length <= 1
+          ? 'Add your business name (at least 2 characters) to continue.'
+          : 'Add at least one tag so customers can find you.';
+      case 'catalog':
+        if (!rentalBasis) return 'Rentals: pick per day or per month.';
+        return 'Rentals: add at least one thing you rent out, or switch Rentals off.';
       case 'category':
         return isItem
           ? 'Pick a category to continue.'
@@ -521,7 +666,7 @@ export default function RegisterScreen() {
       case 'team':
         return 'Choose “I have a team” or “Just me” to continue.';
       case 'location':
-        return 'Tell us if you have an office to continue.';
+        return 'Choose how customers meet you to continue.';
       case 'sell':
       case 'plans':
       case 'services':
@@ -608,18 +753,25 @@ export default function RegisterScreen() {
     if (!canSubmit) {
       // Jump straight to the incomplete step and say what's missing — inline
       // feedback beats a popup here, because it points AT the empty field.
-      const target: StepId = name.trim().length <= 1 ? 'basics' : 'category';
+      const target: StepId = isItem
+        ? name.trim().length <= 1
+          ? 'basics'
+          : 'category'
+        : 'identity';
       jumpTo(target);
       setStepError(missingFor(target));
       return;
     }
 
+    // Mobile / from-home businesses keep their exact address private — only the
+    // area shows (the redesign's "privacy shield").
+    const mobile = !isItem && hasOffice === 'no';
     const locationKind: LocationKind =
-      derivedType === 'service' && hasOffice !== 'yes' ? 'service_area' : 'office';
+      mobile && derivedType === 'service' ? 'service_area' : 'office';
     const location = {
       kind: locationKind,
-      isHome: false,
-      hidePreciseLocation: false,
+      isHome: mobile,
+      hidePreciseLocation: mobile,
       addressLine: addressLine.trim() || undefined,
       city: city.trim() || undefined,
       region: region.trim() || undefined,
@@ -717,6 +869,7 @@ export default function RegisterScreen() {
     setStepIndex(0);
     setKind('business');
     setKindChosen(ON_HOLD.stalls);
+    setModel(null);
     setName('');
     setTagline('');
     setDescription('');
@@ -750,6 +903,24 @@ export default function RegisterScreen() {
         return {
           title: 'What are you listing?',
           subtitle: 'Just this one question — no categories to figure out.',
+        };
+      case 'identity':
+        return {
+          title: 'Tell us about your business',
+          subtitle:
+            'Pick how you work and how people will find you — everything can be changed later from your workspace.',
+        };
+      case 'blocks':
+        return {
+          title: 'What does your business offer?',
+          subtitle:
+            'Switch on the building blocks you run with. Each one adds a list to your page and its tools to your workspace.',
+        };
+      case 'catalog':
+        return {
+          title: 'Add your menu & catalog',
+          subtitle:
+            'Fill each block you switched on — tap from the ready-made library, or paste the whole list at once.',
         };
       case 'owner':
         return {
@@ -813,8 +984,9 @@ export default function RegisterScreen() {
         };
       case 'location':
         return {
-          title: 'Where do you operate?',
-          subtitle: 'Set your pin like in a delivery app, then write the address your way.',
+          title: 'Where do you meet your customers?',
+          subtitle:
+            'Choose your operating model — it decides how your location shows on maps and cards.',
         };
       case 'team':
         return {
@@ -823,16 +995,317 @@ export default function RegisterScreen() {
         };
       case 'review':
         return {
-          title: 'Ready to publish?',
-          subtitle: 'Check everything looks right — tap a row to change it.',
+          title: 'Ready to launch your page?',
+          subtitle: 'Review your setup — tap anything to change it. It can all be edited later.',
         };
     }
   };
 
   const { title, subtitle } = heading();
 
-  const renderStep = () => {
-    switch (step) {
+  // Picking a business model pre-ticks its block — never un-ticks one.
+  const pickModel = (m: BusinessModel) => {
+    setModel(m);
+    setStepError(null);
+    if (m === 'service' && servicesChoice === null) setServicesChoice('yes');
+    if (m === 'shop' && sellChoice === null) setSellChoice('yes');
+    if (m === 'rental' && rentChoice === null) setRentChoice('yes');
+  };
+
+  // The Offerings phase's building blocks. Each switches the same Yes/No answer
+  // the old one-question steps asked, so publishing is unchanged.
+  const foodShopNow = isFoodShop(tags);
+  const BLOCKS: {
+    id: 'sell' | 'plans' | 'services' | 'rent';
+    title: string;
+    blurb: string;
+    icon: IconName;
+    unlocks: string[];
+    value: Choice;
+    set: (c: Choice) => void;
+    count: number;
+  }[] = [
+    {
+      id: 'sell',
+      title: foodShopNow ? 'Food menu & drinks' : 'Products for sale',
+      blurb: foodShopNow
+        ? 'Cafes, restaurants, bakeries, cloud kitchens, juice bars.'
+        : 'Retail, groceries, hardware, spare parts — everything you stock.',
+      icon: foodShopNow ? 'utensils' : 'box',
+      unlocks: foodShopNow ? ['Digital menu', 'Dine-in tabs', 'Orders'] : ['Catalog', 'Orders', 'Billing'],
+      value: sellChoice,
+      set: setSellChoice,
+      count: sellItems.length,
+    },
+    {
+      id: 'services',
+      title: 'Services & repairs',
+      blurb: 'One-off work — a repair, a home visit, a haircut. Customers request it.',
+      icon: 'tools',
+      unlocks: ['Rate card', 'Requests', 'Bookings'],
+      value: servicesChoice,
+      set: setServicesChoice,
+      count: services.length,
+    },
+    {
+      id: 'plans',
+      title: 'Recurring plans & memberships',
+      blurb: 'Gym passes, tuition batches, tiffin or school-bus plans — anything that renews.',
+      icon: 'refresh',
+      unlocks: ['Members', 'Dues', 'Renewals'],
+      value: plansChoice,
+      set: setPlansChoice,
+      count: plans.length,
+    },
+    {
+      id: 'rent',
+      title: 'Rentals',
+      blurb: 'Flats, vehicles, event gear, tools — priced per day or per month.',
+      icon: 'key',
+      unlocks: ['Per day / per month', 'Requests'],
+      value: rentChoice,
+      set: setRentChoice,
+      count: rentalItems.length,
+    },
+  ];
+  const enabledBlocks = BLOCKS.filter((b) => b.value === 'yes');
+
+  // The review step's live preview — a Business shaped from the answers so far.
+  const previewBusiness = {
+    id: 'preview',
+    ownerId: currentUser?.id ?? 'preview',
+    name: name.trim() || 'Your business',
+    tagline: tagline.trim() || undefined,
+    type: derivedType,
+    tags,
+    openingHours,
+    hours: summarizeHours(openingHours),
+    menu: sellChoice === 'yes' && foodShopNow ? sellItems : undefined,
+    products: sellChoice === 'yes' && !foodShopNow ? sellItems : undefined,
+    services: servicesChoice === 'yes' ? services : undefined,
+    plans: plansChoice === 'yes' ? plans : undefined,
+    rentals: rentChoice === 'yes' ? rentalItems : undefined,
+    rentalBasis,
+    modules: chosenModules,
+    location: {
+      kind: 'office',
+      isHome: hasOffice === 'no',
+      hidePreciseLocation: hasOffice === 'no',
+      city: city.trim() || undefined,
+      region: region.trim() || undefined,
+      point,
+    },
+  } as unknown as Business;
+
+  const phase = phaseOf(step);
+  const nextStep = stepIds[safeIndex + 1];
+  const nextLabel =
+    nextStep && phaseOf(nextStep) !== phase ? `Next: ${PHASES[phaseOf(nextStep) - 1]}` : 'Next';
+
+  const renderStep = (id: StepId = step): ReactNode => {
+    switch (id) {
+      case 'identity':
+        return (
+          <>
+            <SectionHeader
+              title="1. How do you mainly work?"
+              subtitle="Pick one — it switches on the right building blocks for you"
+              style={styles.firstHeader}
+            />
+            <View style={styles.optionList}>
+              {MODEL_OPTIONS.map((o) => {
+                const on = model === o.id;
+                return (
+                  <Pressable
+                    key={o.id}
+                    onPress={() => pickModel(o.id)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: on }}
+                    style={({ pressed }) => [
+                      styles.modelCard,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: on ? colors.brand : colors.border,
+                        borderWidth: on ? 1.5 : 1,
+                      },
+                      pressed && styles.pressed,
+                    ]}
+                  >
+                    <View style={styles.modelTop}>
+                      <IconTile icon={o.icon} solid={on} />
+                      <View
+                        style={[
+                          styles.radio,
+                          {
+                            borderColor: on ? colors.brand : colors.border,
+                            backgroundColor: on ? colors.brand : colors.surface,
+                          },
+                        ]}
+                      >
+                        {on ? <Icon name="check" size={14} color={colors.textInverse} /> : null}
+                      </View>
+                    </View>
+                    <Text variant="subheading" weight="bold">
+                      {o.title}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                      {o.blurb}
+                    </Text>
+                    <View style={styles.chipWrap}>
+                      {o.chips.map((c) => (
+                        <Tag key={c} label={c} tone="soft" size="sm" />
+                      ))}
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <SectionHeader
+              title="2. Business identity & discovery tags"
+              subtitle="Shown in neighborhood search and on your page"
+            />
+            <Card>
+              <Input
+                label="Business / trade name *"
+                placeholder="e.g. Sparks Electrical, Meera’s Cafe"
+                value={name}
+                onChangeText={setName}
+              />
+              <Text variant="label" weight="medium" style={styles.fieldLabel}>
+                Category & trade tags *
+              </Text>
+              <Text variant="caption" tone="muted" style={styles.hint}>
+                Add a tag for everything you do — a tyre dealer is “Tyres” + “Wheel alignment” +
+                “Vehicle service”. More tags, easier to find.
+              </Text>
+              <TagPicker value={tags} onChange={setTags} suggestions={SUGGESTED_BUSINESS_TAGS} />
+              <Input
+                label="Short tagline"
+                placeholder="One line about what you offer"
+                value={tagline}
+                onChangeText={setTagline}
+                helper="Shown under your name on search cards"
+              />
+              <Input
+                label="Description (optional)"
+                placeholder="Tell customers more…"
+                value={description}
+                onChangeText={setDescription}
+                multiline
+                style={styles.multiline}
+              />
+            </Card>
+
+            <SectionHeader
+              title="3. Operating hours & calls"
+              subtitle="Let neighbors know when you’re open and how to reach you"
+            />
+            <Card>
+              <OpeningHoursField value={openingHours} onChange={setOpeningHours} />
+            </Card>
+            <Card style={styles.infoCard}>
+              <IconTile icon="phone" size={40} />
+              <View style={styles.flex}>
+                <Text weight="bold">Private in-app voice calls & chat</Text>
+                <Text variant="caption" tone="muted">
+                  Always on. Customers reach you inside One Place — your phone number is never shown.
+                </Text>
+              </View>
+              <Tag label="Included" tone="status" size="sm" />
+            </Card>
+          </>
+        );
+
+      case 'blocks':
+        return (
+          <>
+            <Card>
+              <View style={styles.infoRow}>
+                <IconTile icon="check" size={36} />
+                <View style={styles.flex}>
+                  <Text weight="bold">Always included for every business</Text>
+                  <Text variant="caption" tone="muted">
+                    In-app voice calls, neighborhood chat and directions come with every page.
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.chipWrap}>
+                {['Voice', 'Chat', 'Route'].map((c) => (
+                  <Tag key={c} label={c} tone="soft" size="sm" />
+                ))}
+              </View>
+            </Card>
+            <SectionHeader
+              title="Building blocks"
+              badge={`${enabledBlocks.length} of ${BLOCKS.length} on`}
+            />
+            <View style={styles.optionList}>
+              {BLOCKS.map((b) => (
+                <ToggleCard
+                  key={b.id}
+                  title={b.title}
+                  blurb={b.blurb}
+                  icon={b.icon}
+                  value={b.value === 'yes'}
+                  onChange={(on) => b.set(on ? 'yes' : 'no')}
+                  unlocks={b.unlocks}
+                />
+              ))}
+            </View>
+            {enabledBlocks.length === 0 ? (
+              <Text variant="caption" tone="muted" style={styles.hintTop}>
+                Nothing switched on? That’s fine — your page can be a profile with chat and calls.
+                Add lists anytime from your workspace.
+              </Text>
+            ) : null}
+          </>
+        );
+
+      case 'catalog':
+        return (
+          <>
+            <Card style={styles.blockCard}>
+              <View style={styles.infoRow}>
+                <IconTile icon="grid" size={36} />
+                <View style={styles.flex}>
+                  <Text weight="bold">Active blocks</Text>
+                  <View style={styles.chipWrap}>
+                    {enabledBlocks.map((b) => (
+                      <Tag key={b.id} label={b.title} tone="status" size="sm" dot />
+                    ))}
+                  </View>
+                </View>
+              </View>
+              <Text variant="caption" tone="muted" style={styles.hintTop}>
+                Items land straight on your public page and your orders desk.
+              </Text>
+            </Card>
+            {enabledBlocks.map((b) => (
+              <Card key={b.id} style={styles.blockCard}>
+                <View style={styles.blockHead}>
+                  <IconTile icon={b.icon} />
+                  <View style={styles.flex}>
+                    <Text variant="subheading" weight="bold">
+                      {b.title}
+                    </Text>
+                    <Text variant="caption" tone="muted">
+                      {b.blurb}
+                    </Text>
+                  </View>
+                  <Tag
+                    label={`${b.count} added`}
+                    tone={b.count > 0 ? 'status' : 'default'}
+                    size="sm"
+                  />
+                </View>
+                {renderStep(b.id)}
+              </Card>
+            ))}
+          </>
+        );
+
+
       case 'kind':
         return (
           <View style={styles.optionList}>
@@ -971,12 +1444,12 @@ export default function RegisterScreen() {
         const foodShop = isFoodShop(tags);
         return (
           <>
-            <YesNoRow
+            {step !== 'catalog' ? <YesNoRow
               value={sellChoice}
               yesLabel={foodShop ? 'Yes, add my menu' : 'Yes, I sell products'}
               noLabel={foodShop ? 'No menu' : 'No products'}
               onPick={answer(setSellChoice)}
-            />
+            /> : null}
             {sellChoice === 'yes' ? (
               <>
                 {/* Most owners already have the list written down somewhere —
@@ -1009,12 +1482,12 @@ export default function RegisterScreen() {
       case 'plans':
         return (
           <>
-            <YesNoRow
+            {step !== 'catalog' ? <YesNoRow
               value={plansChoice}
               yesLabel="Yes, I have plans"
               noLabel="Nothing renews"
               onPick={answer(setPlansChoice)}
-            />
+            /> : null}
             {plansChoice === 'yes' ? (
               <>
                 <Text variant="label" weight="semibold" style={styles.sectionLabel}>
@@ -1073,12 +1546,12 @@ export default function RegisterScreen() {
       case 'services':
         return (
           <>
-            <YesNoRow
+            {step !== 'catalog' ? <YesNoRow
               value={servicesChoice}
               yesLabel="Yes, one-off services"
               noLabel="No services"
               onPick={answer(setServicesChoice)}
-            />
+            /> : null}
             {servicesChoice === 'yes' ? (
               <>
                 <OfferingImport
@@ -1111,12 +1584,12 @@ export default function RegisterScreen() {
       case 'rent':
         return (
           <>
-            <YesNoRow
+            {step !== 'catalog' ? <YesNoRow
               value={rentChoice}
               yesLabel="Yes, I rent things out"
               noLabel="Nothing for rent"
               onPick={answer(setRentChoice)}
-            />
+            /> : null}
             {rentChoice === 'yes' ? (
               <>
                 <Text variant="label" weight="semibold" style={styles.sectionLabel}>
@@ -1236,17 +1709,69 @@ export default function RegisterScreen() {
           <>
             {askOffice ? (
               <>
-                <Text variant="label" weight="semibold" style={styles.questionLabel}>
-                  Do you have an office?
-                </Text>
-                <YesNoRow
-                  value={hasOffice}
-                  yesLabel="Yes, we have an office"
-                  noLabel="No, I go to customers"
-                  yesIcon="🏢"
-                  noIcon="🚗"
-                  onPick={setHasOffice}
+                <SectionHeader
+                  title="Operating model & address privacy"
+                  icon="pin"
+                  badge="Required"
+                  style={styles.firstHeader}
                 />
+                <View style={[styles.optionList, styles.blockCard]}>
+                  {OPERATING.map((o) => {
+                    const on = hasOffice === o.id;
+                    return (
+                      <Pressable
+                        key={o.id}
+                        onPress={() => {
+                          setHasOffice(o.id);
+                          setStepError(null);
+                        }}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: on }}
+                        style={({ pressed }) => [
+                          styles.modelCard,
+                          {
+                            backgroundColor: colors.surface,
+                            borderColor: on ? colors.brand : colors.border,
+                            borderWidth: on ? 1.5 : 1,
+                          },
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <View style={styles.modelTop}>
+                          <IconTile icon={o.icon} solid={on} />
+                          <View
+                            style={[
+                              styles.radio,
+                              {
+                                borderColor: on ? colors.brand : colors.border,
+                                backgroundColor: on ? colors.brand : colors.surface,
+                              },
+                            ]}
+                          >
+                            {on ? <Icon name="check" size={14} color={colors.textInverse} /> : null}
+                          </View>
+                        </View>
+                        <Text variant="subheading" weight="bold">
+                          {o.title}
+                        </Text>
+                        <Text variant="caption" tone="muted">
+                          {o.blurb}
+                        </Text>
+                        <View
+                          style={[
+                            styles.noteRow,
+                            { backgroundColor: on ? colors.brandSoft : colors.surfaceAlt },
+                          ]}
+                        >
+                          <Icon name={o.noteIcon} size={14} color={colors.brandText} />
+                          <Text variant="caption" style={styles.flex}>
+                            {o.note}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               </>
             ) : null}
 
@@ -1322,9 +1847,13 @@ export default function RegisterScreen() {
       case 'review': {
         const rows: { id: StepId; label: string; value: string }[] = [
           {
-            id: 'kind',
+            id: isItem ? 'kind' : 'identity',
             label: 'Listing',
-            value: isItem ? '🏷️ Personal stall item' : '🏢 Business',
+            value: isItem
+              ? '🏷️ Personal stall item'
+              : model
+                ? `${MODEL_OPTIONS.find((m) => m.id === model)?.title ?? 'Business'}`
+                : '🏢 Business',
           },
           isItem
             ? {
@@ -1333,11 +1862,15 @@ export default function RegisterScreen() {
                 value: getSubcategory('item', subcategoryId)?.name ?? '— pick one',
               }
             : {
-                id: 'category' as StepId,
+                id: 'identity' as StepId,
                 label: 'Tags',
                 value: tags.length > 0 ? tags.join(' · ') : '— add tags',
               },
-          { id: 'basics', label: isItem ? 'Item' : 'Name', value: name.trim() || '— add a name' },
+          {
+            id: isItem ? 'basics' : 'identity',
+            label: isItem ? 'Item' : 'Name',
+            value: name.trim() || '— add a name',
+          },
         ];
         if (stepIds.includes('owner')) {
           rows.splice(1, 0, {
@@ -1349,10 +1882,10 @@ export default function RegisterScreen() {
         if (isItem && priceLabel.trim())
           rows.push({ id: 'basics', label: 'Price', value: priceLabel.trim() });
         if (!isItem && hasUsableHours(openingHours))
-          rows.push({ id: 'basics', label: 'Hours', value: summarizeHours(openingHours) ?? '' });
-        if (stepIds.includes('sell')) {
+          rows.push({ id: 'identity', label: 'Hours', value: summarizeHours(openingHours) ?? '' });
+        if (!isItem) {
           rows.push({
-            id: 'sell',
+            id: sellChoice === 'yes' ? 'catalog' : 'blocks',
             label: isFoodShop(tags) ? 'Menu' : 'Products',
             value:
               sellChoice !== 'no' && sellItems.length > 0
@@ -1360,24 +1893,24 @@ export default function RegisterScreen() {
                 : 'None',
           });
         }
-        if (stepIds.includes('plans')) {
+        if (!isItem) {
           rows.push({
-            id: 'plans',
+            id: plansChoice === 'yes' ? 'catalog' : 'blocks',
             label: 'Plans',
             value: plansChoice !== 'no' && plans.length > 0 ? `${plans.length} listed` : 'None',
           });
         }
-        if (stepIds.includes('services')) {
+        if (!isItem) {
           rows.push({
-            id: 'services',
+            id: servicesChoice === 'yes' ? 'catalog' : 'blocks',
             label: 'Services',
             value:
               servicesChoice !== 'no' && services.length > 0 ? `${services.length} listed` : 'None',
           });
         }
-        if (stepIds.includes('rent')) {
+        if (!isItem) {
           rows.push({
-            id: 'rent',
+            id: rentChoice === 'yes' ? 'catalog' : 'blocks',
             label: 'For rent',
             value:
               rentChoice === 'yes'
@@ -1390,9 +1923,9 @@ export default function RegisterScreen() {
                 : 'Nothing',
           });
         }
-        if (stepIds.includes('modules')) {
+        if (!isItem) {
           rows.push({
-            id: 'modules',
+            id: 'review',
             label: 'Workspace',
             value:
               chosenModules.length > 0
@@ -1401,7 +1934,7 @@ export default function RegisterScreen() {
           });
           if (chosenModules.includes('tracking') && vehicleDrafts.length > 0) {
             rows.push({
-              id: 'modules',
+              id: 'review',
               label: 'Fleet',
               value: `${vehicleDrafts.length} vehicle${vehicleDrafts.length === 1 ? '' : 's'}`,
             });
@@ -1415,8 +1948,10 @@ export default function RegisterScreen() {
             : [
                 askOffice
                   ? hasOffice === 'yes'
-                    ? '🏢 Office'
-                    : '🚗 Goes to customers'
+                    ? '🏪 Customers visit'
+                    : hasOffice === 'no'
+                      ? '🛡️ Mobile · address hidden'
+                      : undefined
                   : undefined,
                 city.trim() || undefined,
                 point ? '📍 pin set' : undefined,
@@ -1454,6 +1989,92 @@ export default function RegisterScreen() {
               </Card>
             ) : null}
 
+            {!isItem ? (
+              <>
+                <SectionHeader
+                  title="Live customer preview"
+                  subtitle="How neighbors will see you in their feed"
+                  style={styles.firstHeader}
+                />
+                {/* A picture of the card, not a working one — nothing to open yet. */}
+                <View pointerEvents="none">
+                  <BusinessCard business={previewBusiness} />
+                </View>
+
+                <SectionHeader
+                  title="Your workspace"
+                  subtitle="Back-office tools, ready the moment you publish"
+                  badge={`${chosenModules.length} on`}
+                />
+                <View style={styles.optionList}>
+                  {AVAILABLE_MODULES.map((m) => (
+                    <ToggleCard
+                      key={m.id}
+                      title={m.label}
+                      blurb={m.description}
+                      emoji={m.icon}
+                      value={chosenModules.includes(m.id)}
+                      onChange={() => toggleModule(m.id)}
+                    />
+                  ))}
+                </View>
+                {chosenModules.includes('tracking') ? (
+                  <>
+                    <Text variant="label" weight="semibold" style={styles.sectionLabel}>
+                      🚌 Your vehicles
+                    </Text>
+                    <Text variant="caption" tone="muted" style={styles.hint}>
+                      Add each vehicle by its number — pin drivers to them later in Fleet
+                      &amp; tracking. You can also skip this and add them there.
+                    </Text>
+                    <VehicleDraftEditor value={vehicleDrafts} onChange={setVehicleDrafts} />
+                  </>
+                ) : null}
+                <View style={styles.chipWrapTop}>
+                  <Text variant="caption" tone="muted">
+                    Coming soon:
+                  </Text>
+                  {COMING_SOON_MODULES.map((m) => (
+                    <Tag key={m.id} label={m.label} icon={m.icon} size="sm" />
+                  ))}
+                </View>
+                <Text variant="caption" tone="muted" style={styles.hintTop}>
+                  You can switch any tool on or off later in your workspace.
+                </Text>
+
+                <SectionHeader title="Onboarding steps" />
+                <View style={styles.phaseRow}>
+                  {PHASES.map((ph, i) => {
+                    const first = stepIds.find((sid) => phaseOf(sid) === i + 1);
+                    const current = i === PHASES.length - 1;
+                    return (
+                      <Pressable
+                        key={ph}
+                        onPress={() => (first ? jumpTo(first) : undefined)}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Step ${i + 1}: ${ph}`}
+                        style={[
+                          styles.phaseCell,
+                          {
+                            backgroundColor: current ? colors.brand : colors.surface,
+                            borderColor: current ? colors.brand : colors.border,
+                          },
+                        ]}
+                      >
+                        <Text variant="caption" weight="bold" tone={current ? 'inverse' : 'default'}>
+                          Step {i + 1}
+                        </Text>
+                        <Text variant="caption" tone={current ? 'inverse' : 'muted'} numberOfLines={1}>
+                          {ph.split(' ')[0]}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </>
+            ) : null}
+
+            <SectionHeader title="Everything you entered" subtitle="Tap a row to change it" />
             <Card>
               {rows.map((row, i) => (
                 <Pressable
@@ -1479,10 +2100,16 @@ export default function RegisterScreen() {
 
   return (
     <Screen padded={false}>
-      {/* Step body — keyed by step so navigating always starts at the top.
-          The progress header scrolls WITH the body (nothing is pinned up top):
-          on long steps like the menu editor a sticky header would eat the
-          screen just as the list grows. */}
+      {/* The wizard draws its own header: "Step N of 4 · Phase" + progress. */}
+      <Stack.Screen options={{ headerShown: false }} />
+      <StepHeader
+        step={phase}
+        total={PHASES.length}
+        phase={PHASES[phase - 1]}
+        title="List a business"
+        onBack={safeIndex > 0 ? goBack : () => router.back()}
+      />
+      {/* Step body — keyed by step so navigating always starts at the top. */}
       <ScrollView
         key={step}
         style={styles.flex}
@@ -1490,17 +2117,7 @@ export default function RegisterScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <View style={[styles.progressTrack, { backgroundColor: colors.surfaceAlt }]}>
-            <View
-              style={[
-                styles.progressFill,
-                { backgroundColor: colors.accent, width: `${((safeIndex + 1) / stepIds.length) * 100}%` },
-              ]}
-            />
-          </View>
-          <Text variant="caption" tone="muted" style={styles.stepCounter}>
-            Step {safeIndex + 1} of {stepIds.length}
-          </Text>
+          <Tag label={PHASES[phase - 1]} tone="soft" size="sm" lineIcon="sparkle" style={styles.eyebrow} />
           <Text variant="title" weight="bold">
             {title}
           </Text>
@@ -1514,42 +2131,32 @@ export default function RegisterScreen() {
         {renderStep()}
       </ScrollView>
 
-      {/* Footer: Back + Next / Publish */}
-      <View
-        style={[
-          styles.footer,
-          { borderTopColor: colors.border, paddingBottom: insets.bottom + spacing.md },
-        ]}
+      {/* Footer: ← Back + Next / Publish */}
+      <BottomActionBar
+        onBack={safeIndex > 0 ? goBack : undefined}
+        primary={
+          isLastStep
+            ? {
+                title: isGuest
+                  ? 'Sign in to publish'
+                  : isItem
+                    ? myStall
+                      ? 'Add to my stall'
+                      : 'Publish my stall'
+                    : 'Publish business page',
+                icon: 'sparkle',
+                onPress: submit,
+                loading: submitting,
+              }
+            : { title: nextLabel, onPress: handleNext }
+        }
       >
         {stepError && (isLastStep || !stepValid(step)) ? (
           <Text variant="caption" tone="danger" style={styles.footerError}>
             {stepError}
           </Text>
         ) : null}
-        <View style={styles.footerButtons}>
-          {safeIndex > 0 ? (
-            <Button title="Back" variant="secondary" onPress={goBack} style={styles.backButton} />
-          ) : null}
-          {isLastStep ? (
-            <Button
-              title={
-                isGuest
-                  ? 'Sign in to publish'
-                  : isItem
-                    ? myStall
-                      ? 'Add to my stall'
-                      : 'Publish my stall'
-                    : 'Publish listing'
-              }
-              onPress={submit}
-              loading={submitting}
-              style={styles.nextButton}
-            />
-          ) : (
-            <Button title="Next" onPress={handleNext} style={styles.nextButton} />
-          )}
-        </View>
-      </View>
+      </BottomActionBar>
     </Screen>
   );
 }
@@ -1775,7 +2382,56 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  footerError: { marginBottom: spacing.sm, textAlign: 'center' },
+  footerError: { textAlign: 'center' },
+  // — One Place wizard (2026-10) —
+  firstHeader: { marginTop: 0 },
+  eyebrow: { marginBottom: spacing.sm },
+  pressed: { opacity: 0.8 },
+  modelCard: { borderRadius: radius.lg, padding: spacing.lg, gap: spacing.xs },
+  modelTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: spacing.sm,
+  },
+  radio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.sm },
+  chipWrapTop: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+  },
+  fieldLabel: { marginBottom: spacing.xs },
+  infoCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  hintTop: { marginTop: spacing.md },
+  noteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: radius.sm,
+    padding: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  blockCard: { marginBottom: spacing.lg },
+  blockHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  phaseRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+  phaseCell: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
   footerButtons: { flexDirection: 'row', gap: spacing.md },
   backButton: { flex: 1 },
   nextButton: { flex: 2 },
