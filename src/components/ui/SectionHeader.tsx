@@ -78,7 +78,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   main: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  // No wrap: the emoji/icon must stay beside the title, which shrinks instead.
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   emoji: { fontSize: 20, lineHeight: 26 },
   title: { flexShrink: 1 },
   subtitle: { marginTop: 2 },

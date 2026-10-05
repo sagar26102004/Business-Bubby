@@ -112,7 +112,8 @@ export default function TabsLayout() {
         // Always under the icon — beside it (React Navigation's wide-screen
         // default) the active pill runs into the label.
         tabBarLabelPosition: 'below-icon',
-        tabBarLabelStyle: { fontSize: 11, marginTop: 2, ...fontFor('bold') },
+        // 10px so "Subscriptions" fits a fifth of a phone without truncating.
+        tabBarLabelStyle: { fontSize: 10, marginTop: 2, ...fontFor('bold') },
         headerStyle: { backgroundColor: colors.surface },
         headerTitleStyle: { color: colors.text, ...fontFor('bold') },
         headerShadowVisible: false,

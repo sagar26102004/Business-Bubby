@@ -1,25 +1,25 @@
 /**
- * Section 1 of the business page: who this business is, at a glance.
+ * Section 1 of the business page (One Place redesign —
+ * docs/redesign-one-place/business.html): who this business is, at a glance.
  *
- * The block is built around ONE optional display picture the owner uploads —
- * the shopfront, the cafe interior, a logo. When it's there the name, tagline
- * and status sit on top of it behind a scrim; when it isn't, the same block
- * renders on a soft tint so the layout never changes shape.
- *
- * Location lives here too, and deliberately small: one line of address and ONE
- * button — Get directions — with the distance from the viewer right beside it,
- * instead of the old heading + card + separate button stack.
+ *  - A wide COVER — the owner's display picture, or a sage panel with the
+ *    business's emoji — carrying three overlay chips: open state / today's
+ *    hours, distance, and how many showcase photos there are.
+ *  - The identity block on plain paper: name, tagline, ★ rating with the
+ *    review count, #tag chips, and the address row with "Get directions ›".
+ *  - The ACTION ROW: four equal tiles — Call · Chat · the business's own door
+ *    (Order / Request / Enroll…) · Route — passed in by the page.
+ *  - Description, weekly hours and the home-based / rental-distance notes.
  */
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import type { Business, PlaceKind, SavedPlace } from '@/domain/types';
-import { formatDistance } from '@/domain/catalog';
+import { formatDistance, getType } from '@/domain/catalog';
 import { openState, summarizeHours } from '@/domain/hours';
+import { tagEmoji } from '@/domain/intents';
 import { haversineKm } from '@/lib/geo';
-import { Card, Icon, Stars, Tag, Text } from '@/components/ui';
+import { Icon, Tag, Text, type IconName } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { hasShowableCoordinates, locationSummary } from './location';
-import { StatusChip } from './StatusChip';
 
 const PLACE_ICONS: Record<PlaceKind, string> = {
   current: '🧭',
@@ -28,7 +28,15 @@ const PLACE_ICONS: Record<PlaceKind, string> = {
   custom: '📌',
 };
 
-const COVER_H = 200;
+const COVER_H = 210;
+
+export interface HeroAction {
+  icon: IconName;
+  label: string;
+  onPress: () => void;
+  /** The one highlighted tile — the business's own door. */
+  primary?: boolean;
+}
 
 export interface BusinessHeroProps {
   business: Business;
@@ -39,6 +47,8 @@ export interface BusinessHeroProps {
   onDirections: () => void;
   /** Owner only — adds or replaces the display picture. */
   onEditCover?: () => void;
+  /** The four tiles under the identity block. */
+  actions?: HeroAction[];
 }
 
 export function BusinessHero({
@@ -47,77 +57,73 @@ export function BusinessHero({
   places = [],
   onDirections,
   onEditCover,
+  actions = [],
 }: BusinessHeroProps) {
   const colors = useColors();
   const cover = business.coverImageUrl;
-  const onPhoto = !!cover;
-  const tone = onPhoto ? ('inverse' as const) : ('default' as const);
-  const mutedTone = onPhoto ? ('inverse' as const) : ('muted' as const);
 
   const status = openState(business);
   const todayLabel = status.todayLabel ?? business.hours;
   const weekly = business.openingHours ? summarizeHours(business.openingHours) : undefined;
   const distanceLabel = formatDistance(distanceKm);
+  const photoCount = (business.portfolio ?? []).filter((p) => p.kind === 'photo').length;
+  const tags = business.tags ?? [];
+  const emoji = tagEmoji(tags[0] ?? '', getType(business.type)?.icon ?? '🏪');
+
+  const openChip = business.rentalStatus
+    ? business.rentalStatus === 'available'
+      ? 'Available now'
+      : 'Rented out'
+    : typeof status.open === 'boolean'
+      ? status.open
+        ? todayLabel
+          ? `Open · ${todayLabel}`
+          : 'Open now'
+        : 'Closed now'
+      : todayLabel;
+  const openPositive = business.rentalStatus ? business.rentalStatus === 'available' : status.open;
 
   return (
-    <Card padded={false} style={styles.card}>
-      {/* Identity — over the display picture when there is one. */}
-      <View
-        style={[
-          styles.top,
-          onPhoto ? styles.topPhoto : { backgroundColor: colors.brandSoft },
-        ]}
-      >
+    <View style={styles.wrap}>
+      {/* Cover — bleeds to the screen edges. */}
+      <View style={[styles.cover, { backgroundColor: colors.brandSoft }]}>
         {cover ? (
-          <>
-            <Image source={{ uri: cover }} style={styles.cover} resizeMode="cover" />
-            <LinearGradient
-              colors={['rgba(0,0,0,0.05)', 'rgba(0,0,0,0.72)']}
-              style={StyleSheet.absoluteFill}
-            />
-          </>
-        ) : null}
-
-        <View style={[styles.identity, onPhoto && styles.identityOnPhoto]}>
-          <Text variant="title" weight="bold" tone={tone}>
-            {business.name}
-          </Text>
-          {business.providerType ? (
-            <Text variant="label" weight="semibold" tone={mutedTone} style={styles.provider}>
-              {business.providerType}
-            </Text>
-          ) : null}
-          {business.tagline ? (
-            <Text variant="label" tone={mutedTone} style={styles.tagline}>
-              {business.tagline}
-            </Text>
-          ) : null}
-
-          <View style={styles.metaRow}>
-            {typeof business.ratingAvg === 'number' ? (
-              <View style={[styles.ratingPill, { backgroundColor: colors.surface }]}>
-                <Stars rating={business.ratingAvg} count={business.ratingCount} size={13} />
-              </View>
-            ) : null}
-            {business.rentalStatus ? (
-              <StatusChip
-                label={business.rentalStatus === 'available' ? 'Available' : 'Rented'}
-                positive={business.rentalStatus === 'available'}
+          <Image source={{ uri: cover }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : (
+          <Text style={styles.coverEmoji}>{emoji}</Text>
+        )}
+        <View style={styles.overlayRow}>
+          {openChip ? (
+            <View style={[styles.overlayChip, { backgroundColor: colors.surface }]}>
+              <View
+                style={[
+                  styles.dot,
+                  { backgroundColor: openPositive ? colors.success : colors.danger },
+                ]}
               />
-            ) : typeof status.open === 'boolean' ? (
-              <StatusChip label={status.open ? 'Open now' : 'Closed'} positive={status.open} />
-            ) : null}
-            {todayLabel ? (
-              <View style={[styles.hoursPill, { backgroundColor: colors.surface }]}>
-                <Icon name="clock" size={12} color={colors.textMuted} strokeWidth={2.2} />
-                <Text variant="caption" weight="semibold" tone="muted">
-                  {todayLabel}
-                </Text>
-              </View>
-            ) : null}
-          </View>
+              <Text variant="caption" weight="bold" numberOfLines={1}>
+                {openChip}
+              </Text>
+            </View>
+          ) : null}
+          {distanceLabel ? (
+            <View style={[styles.overlayChip, { backgroundColor: colors.surface }]}>
+              <Icon name="directions" size={12} color={colors.brand} />
+              <Text variant="caption" weight="bold">
+                {distanceLabel} away
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.flex} />
+          {photoCount > 0 ? (
+            <View style={[styles.overlayChip, { backgroundColor: 'rgba(0,0,0,0.6)' }]}>
+              <Icon name="image" size={12} color="#FFFFFF" />
+              <Text variant="caption" weight="bold" tone="inverse">
+                {photoCount} photo{photoCount === 1 ? '' : 's'}
+              </Text>
+            </View>
+          ) : null}
         </View>
-
         {onEditCover ? (
           <Pressable
             onPress={onEditCover}
@@ -125,150 +131,210 @@ export function BusinessHero({
             accessibilityRole="button"
             accessibilityLabel={cover ? 'Change display picture' : 'Add a display picture'}
           >
-            <Text variant="caption" weight="semibold">
-              📷 {cover ? 'Change photo' : 'Add photo'}
+            <Icon name="camera" size={14} color={colors.text} />
+            <Text variant="caption" weight="bold">
+              {cover ? 'Change photo' : 'Add photo'}
             </Text>
           </Pressable>
         ) : null}
       </View>
 
-      {/* Everything below the picture reads on plain surface. */}
-      <View style={styles.body}>
-        {business.tags && business.tags.length > 0 ? (
+      {/* Identity */}
+      <View style={styles.identity}>
+        <Text variant="title" weight="bold">
+          {business.name}
+        </Text>
+        {business.tagline || business.providerType ? (
+          <Text tone="muted" style={styles.tagline}>
+            {business.tagline ?? business.providerType}
+          </Text>
+        ) : null}
+
+        <View style={styles.metaRow}>
+          {typeof business.ratingAvg === 'number' && (business.ratingCount ?? 0) > 0 ? (
+            <View style={styles.rating}>
+              <Icon name="star" size={16} color={colors.star} filled />
+              <Text weight="bold">{business.ratingAvg.toFixed(1)}</Text>
+              <Text tone="muted" variant="label">
+                ({business.ratingCount} review{business.ratingCount === 1 ? '' : 's'})
+              </Text>
+            </View>
+          ) : (
+            <Tag label="New on One Place" tone="cta" size="sm" />
+          )}
+          {business.providerType && business.tagline ? (
+            <Tag label={business.providerType} tone="soft" size="sm" lineIcon="shield" />
+          ) : null}
+        </View>
+
+        {tags.length > 0 ? (
           <View style={styles.tags}>
-            {business.tags.map((t) => (
-              <Tag key={t} label={t} />
+            {tags.map((t) => (
+              <Tag key={t} label={`#${t.replace(/\s+/g, '')}`} tone="soft" size="sm" />
             ))}
           </View>
         ) : null}
 
-        {business.description ? (
-          <Text style={styles.description}>{business.description}</Text>
-        ) : null}
-
-        {weekly ? (
-          <Text variant="caption" tone="muted" style={styles.weekly}>
-            🕒 {weekly}
-            {business.openingHours?.note ? ` · ${business.openingHours.note}` : ''}
+        {/* Address row */}
+        <View style={styles.addressRow}>
+          <Icon name="pin" size={16} color={colors.cta} />
+          <Text variant="label" tone="muted" style={styles.flex} numberOfLines={2}>
+            {locationSummary(business.location)}
           </Text>
-        ) : null}
-
-        {/* Location: one line, then one button with the distance beside it. */}
-        <View style={[styles.locationBlock, { borderTopColor: colors.border }]}>
-          <Text weight="medium">📍 {locationSummary(business.location)}</Text>
-          {business.location.isHome ? (
-            <Text variant="caption" tone="muted" style={styles.locNote}>
-              {business.location.hidePreciseLocation
-                ? 'Runs from home — exact address hidden by the owner'
-                : 'Home-based business'}
-            </Text>
-          ) : null}
-          {business.type === 'rental' && business.location.point
-            ? places.map((p) => {
-                const km = formatDistance(haversineKm(business.location.point!, p.point));
-                if (!km) return null;
-                return (
-                  <Text key={p.id} variant="caption" tone="muted" style={styles.locNote}>
-                    {PLACE_ICONS[p.kind]} {km} from{' '}
-                    {p.kind === 'current' ? 'your current location' : p.label}
-                  </Text>
-                );
-              })
-            : null}
-
           {hasShowableCoordinates(business.location) ? (
-            <View style={styles.directionsRow}>
-              <Pressable
-                onPress={onDirections}
-                style={({ pressed }) => [
-                  styles.directionsBtn,
-                  { backgroundColor: colors.brand },
-                  pressed && styles.pressed,
-                ]}
-                accessibilityRole="button"
-              >
-                <Text variant="label" weight="bold" tone="inverse">
-                  🧭 Get directions
-                </Text>
-              </Pressable>
-              {distanceLabel ? (
-                <Text variant="label" weight="semibold" tone="muted">
-                  {distanceLabel} away
-                </Text>
-              ) : null}
-            </View>
-          ) : distanceLabel ? (
-            <Text variant="label" weight="semibold" tone="muted" style={styles.locNote}>
-              {distanceLabel} away
-            </Text>
+            <Pressable
+              onPress={onDirections}
+              hitSlop={8}
+              accessibilityRole="button"
+              style={styles.directions}
+            >
+              <Text variant="label" weight="bold" tone="brand">
+                Get directions
+              </Text>
+              <Icon name="arrowRight" size={14} color={colors.brandText} />
+            </Pressable>
           ) : null}
         </View>
+        {business.location.isHome ? (
+          <Text variant="caption" tone="muted" style={styles.note}>
+            {business.location.hidePreciseLocation
+              ? 'Runs from home — exact address hidden by the owner'
+              : 'Home-based business'}
+          </Text>
+        ) : null}
+        {business.type === 'rental' && business.location.point
+          ? places.map((p) => {
+              const km = formatDistance(haversineKm(business.location.point!, p.point));
+              if (!km) return null;
+              return (
+                <Text key={p.id} variant="caption" tone="muted" style={styles.note}>
+                  {PLACE_ICONS[p.kind]} {km} from{' '}
+                  {p.kind === 'current' ? 'your current location' : p.label}
+                </Text>
+              );
+            })
+          : null}
       </View>
-    </Card>
+
+      {/* Action row */}
+      {actions.length > 0 ? (
+        <View style={styles.actions}>
+          {actions.map((a) => (
+            <Pressable
+              key={a.label}
+              onPress={a.onPress}
+              accessibilityRole="button"
+              accessibilityLabel={a.label}
+              style={({ pressed }) => [
+                styles.action,
+                a.primary
+                  ? { backgroundColor: colors.cta, borderColor: colors.cta }
+                  : { backgroundColor: colors.surface, borderColor: colors.border },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Icon name={a.icon} size={20} color={a.primary ? colors.textInverse : colors.brand} />
+              <Text
+                variant="caption"
+                weight="bold"
+                tone={a.primary ? 'inverse' : 'default'}
+                numberOfLines={1}
+              >
+                {a.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {business.description ? <Text style={styles.description}>{business.description}</Text> : null}
+      {weekly ? (
+        <View style={styles.weekly}>
+          <Icon name="clock" size={14} color={colors.textMuted} />
+          <Text variant="caption" tone="muted" style={styles.flex}>
+            {weekly}
+            {business.openingHours?.note ? ` · ${business.openingHours.note}` : ''}
+          </Text>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom: spacing.lg },
-  top: { justifyContent: 'flex-end' },
-  // Only a real display picture gets the tall frame — an empty tint block that
-  // size would just be a grey void at the top of the page.
-  topPhoto: { minHeight: COVER_H },
-  cover: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
-  identity: { padding: spacing.lg },
-  identityOnPhoto: { paddingTop: spacing.xxl },
-  provider: { marginTop: 2 },
+  wrap: { marginBottom: spacing.sm },
+  flex: { flex: 1, minWidth: 0 },
+  // The cover bleeds past the Screen's side padding and sits flush under the header.
+  cover: {
+    height: COVER_H,
+    marginHorizontal: -spacing.lg,
+    marginTop: -spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  coverEmoji: { fontSize: 72, lineHeight: 84 },
+  overlayRow: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  overlayChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 5,
+    borderRadius: radius.pill,
+    maxWidth: '60%',
+  },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  coverBtn: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+  },
+  identity: { marginTop: spacing.lg },
   tagline: { marginTop: 2 },
   metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  ratingPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-  },
-  hoursPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm + 2,
-    paddingVertical: 4,
-    borderRadius: radius.pill,
-  },
-  coverBtn: {
-    position: 'absolute',
-    top: spacing.md,
-    right: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-  },
-  body: { padding: spacing.lg, paddingTop: spacing.md },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
-  description: { marginBottom: spacing.sm },
-  weekly: { marginBottom: spacing.sm },
-  locationBlock: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing.md,
     marginTop: spacing.sm,
   },
-  locNote: { marginTop: spacing.xs },
-  directionsRow: {
+  rating: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs + 2, marginTop: spacing.md },
+  addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
+    gap: spacing.sm,
     marginTop: spacing.md,
   },
-  directionsBtn: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radius.pill,
+  directions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  note: { marginTop: spacing.xs },
+  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  action: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    minHeight: 64,
   },
   pressed: { opacity: 0.75 },
+  description: { marginTop: spacing.lg },
+  weekly: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: spacing.sm },
 });

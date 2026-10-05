@@ -1,8 +1,9 @@
 /**
- * Business detail — organised as four sections, top to bottom:
+ * Business detail (One Place redesign — docs/redesign-one-place/business.html),
+ * organised as four sections, top to bottom:
  *
- *  1. WHO THEY ARE — the display picture, name, tagline, description, status
- *     and location with a single "Get directions" button + the distance.
+ *  1. WHO THEY ARE — cover, name, rating, #tags, address + "Get directions",
+ *     and the action row (Call · Chat · their own door · Route).
  *  2. WHAT THEY OFFER — menu, services, rentals and products side by side, all
  *     four built from the one offering model (`domain/offerings.ts`) so they
  *     open, fold and read identically, with the action buttons (order, book,
@@ -11,12 +12,14 @@
  *  4. RATINGS & REVIEWS — the star breakdown, filterable, over a rotating
  *     slider of what customers wrote.
  *
- * Call, Chat and the QR code live in the top bar beside the back button, so the
- * three things you always want are one tap away wherever you've scrolled to.
- * The page closes with the owner and the member-only tools.
+ * Under the hero a strip of TABS — one per offering block, plus Reviews —
+ * scrolls the page to that section. Rows can be added to the cart in place
+ * (the same cart as the full catalog), and a sticky order bar appears once
+ * something is picked. The page closes with the owner and the member-only tools.
  */
-import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import type { Business, TrackedItem, User } from '@/domain/types';
 import { commerceVocab, getSubcategory, offersDineIn, rentalBasisLabel } from '@/domain/catalog';
@@ -33,12 +36,17 @@ import {
   EmptyView,
   ErrorView,
   Icon,
+  IconTile,
   LoadingView,
   Screen,
+  SectionHeader,
+  Tag,
   Text,
   type IconName,
 } from '@/components/ui';
-import { BusinessHero } from '@/features/businesses/BusinessHero';
+import { BusinessHero, type HeroAction } from '@/features/businesses/BusinessHero';
+import { useCart } from '@/features/orders/CartContext';
+import { totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { OfferingsSection, type OfferingGroup } from '@/features/businesses/OfferingsSection';
 import { catalogLink } from '@/features/offerings/links';
 import { OffersSection } from '@/features/businesses/OffersSection';
@@ -48,7 +56,7 @@ import { PortfolioGallery } from '@/features/businesses/PortfolioGallery';
 import { ShowcaseLinks } from '@/features/businesses/ShowcaseLinks';
 import { ReviewsSection } from '@/features/businesses/ReviewsSection';
 import { OwnerPicker } from '@/features/businesses/OwnerPicker';
-import { spacing, useColors } from '@/theme/theme';
+import { radius, spacing, useColors } from '@/theme/theme';
 import { ON_HOLD } from '@/lib/onHold';
 
 export default function BusinessDetailScreen() {
@@ -60,6 +68,13 @@ export default function BusinessDetailScreen() {
   // anonymous identity (gained by calling or chatting) — neither can own a
   // rating or a membership, so both are sent to sign-in for those.
   const { currentUser, isGuest } = useAuth();
+  const insets = useSafeAreaInsets();
+  // The tab strip scrolls the page to a section: where each one sits.
+  const scrollRef = useRef<ScrollView>(null);
+  const offsetsRef = useRef<Record<string, number>>({});
+  const offeringsTopRef = useRef(0);
+  // The shared cart (the catalog screen's) — rows on this page add to it too.
+  const cart = useCart(id);
 
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(id);
@@ -158,6 +173,17 @@ export default function BusinessDetailScreen() {
     .filter((view) => !(isStall && view.bucket === 'products'))
     .map((view) => ({
       key: view.bucket,
+      // Picked in place, on the shared cart — only when the request can land.
+      addable: view.bucket !== 'plans' && hasModule(business, view.module),
+      onEnroll:
+        view.bucket === 'plans' && hasModule(business, 'memberships')
+          ? (item: { name: string }) =>
+              isGuest
+                ? router.push('/sign-in')
+                : router.push(
+                    `/enroll/${business.id}?plan=${encodeURIComponent(item.name)}`,
+                  )
+          : undefined,
       title: view.title,
       subtitle:
         view.bucket === 'rentals'
@@ -175,6 +201,7 @@ export default function BusinessDetailScreen() {
         path: item.path,
         imageUrl: item.imageUrl,
         badge: item.badge,
+        item,
       })),
       seeAll: {
         label: view.seeAllLabel,
@@ -222,34 +249,64 @@ export default function BusinessDetailScreen() {
   const showcase = business.portfolio ?? [];
   const showcaseLinks = business.showcaseLinks ?? [];
 
+  // The hero's action row: Call · Chat · the lead block's own door · Route.
+  const lead = groups.find((g) => g.action);
+  const heroActions: HeroAction[] = [
+    { icon: 'phone', label: 'Call', onPress: () => router.push(`/call/${business.id}`) },
+    { icon: 'chat', label: 'Chat', onPress: () => router.push(`/chat/${business.id}`) },
+    ...(lead?.action
+      ? [
+          {
+            icon: doorIcon(lead.key),
+            // "🛒 Order" → "Order": the tile carries its own icon.
+            label: lead.action.label.replace(/^\S+\s/, ''),
+            onPress: lead.action.onPress,
+            primary: true,
+          },
+        ]
+      : []),
+    { icon: 'directions', label: 'Route', onPress: () => router.push(`/directions/${business.id}`) },
+  ];
+
+  // The tab strip: every block with something in it, then Reviews.
+  const tabs = [
+    ...groups
+      .filter((g) => g.entries.length > 0)
+      .map((g) => ({ key: g.key, label: `${g.title} (${g.entries.length})` })),
+    ...(showcase.length > 0 || showcaseLinks.length > 0
+      ? [{ key: 'showcase', label: 'Showcase' }]
+      : []),
+    { key: 'reviews', label: 'Reviews' },
+  ];
+  const jumpTo = (key: string) => {
+    const y = offsetsRef.current[key];
+    if (typeof y === 'number') scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing.md), animated: true });
+  };
+  const markSection = (key: string) => (e: { nativeEvent: { layout: { y: number } } }) => {
+    offsetsRef.current[key] = e.nativeEvent.layout.y;
+  };
+
+  const cartTotal = totalOf(cart.lines.map((l) => ({ price: l.item.price, quantity: l.quantity })));
+
   return (
-    <Screen scroll>
+    <View style={styles.root}>
+    <Screen scroll scrollRef={scrollRef} contentStyle={cart.itemCount > 0 ? styles.roomForBar : undefined}>
       <Stack.Screen
         options={{
           title: business.name,
-          // Call / Chat / QR live in the top bar — always reachable.
-          headerRight: () => (
-            <View style={styles.headerActions}>
-              <HeaderAction
-                icon="phone"
-                label="Call this business"
-                onPress={() => router.push(`/call/${business.id}`)}
-              />
-              <HeaderAction
-                icon="chat"
-                label="Chat with this business"
-                onPress={() => router.push(`/chat/${business.id}`)}
-              />
-              {/* ON HOLD (redesign 2026-10): business-qr — the QR/share button. */}
-              {!ON_HOLD.businessQr ? (
-                <HeaderAction
-                  icon="scan"
-                  label="QR code and share link"
-                  onPress={() => router.push(`/qr/${business.id}`)}
-                />
-              ) : null}
-            </View>
-          ),
+          // ON HOLD (redesign 2026-10): business-qr — the QR/share button. Call
+          // and Chat moved into the hero's action row.
+          headerRight: !ON_HOLD.businessQr
+            ? () => (
+                <View style={styles.headerActions}>
+                  <HeaderAction
+                    icon="scan"
+                    label="QR code and share link"
+                    onPress={() => router.push(`/qr/${business.id}`)}
+                  />
+                </View>
+              )
+            : undefined,
         }}
       />
 
@@ -262,7 +319,22 @@ export default function BusinessDetailScreen() {
         onEditCover={
           isOwner && !isStall ? () => router.push(`/manage/${business.id}`) : undefined
         }
+        actions={heroActions}
       />
+
+      {/* Tabs — jump to a section. */}
+      {tabs.length > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabsBleed}
+          contentContainerStyle={styles.tabs}
+        >
+          {tabs.map((t, i) => (
+            <Tag key={t.key} label={t.label} selected={i === 0} onPress={() => jumpTo(t.key)} />
+          ))}
+        </ScrollView>
+      ) : null}
 
       {/* Offers — the business's own promotions, straight under the
           description so they're the first thing read after the intro. Tapping
@@ -278,9 +350,28 @@ export default function BusinessDetailScreen() {
       />
 
       {/* ——— 2. What they offer ——— */}
-      {hasOfferings ? <SectionTitle>What we offer</SectionTitle> : null}
+      {hasOfferings ? (
+        <SectionHeader
+          title="What we offer"
+          subtitle={
+            groups.some((g) => g.addable) ? 'Add items here, then place one order' : undefined
+          }
+        />
+      ) : null}
 
-      <OfferingsSection groups={groups} />
+      <View
+        onLayout={(e) => {
+          offeringsTopRef.current = e.nativeEvent.layout.y;
+        }}
+      >
+        <OfferingsSection
+          groups={groups}
+          businessId={business.id}
+          onLayoutGroup={(key, y) => {
+            offsetsRef.current[key] = offeringsTopRef.current + y;
+          }}
+        />
+      </View>
 
       {/* A personal stall shows its items picture-first, exactly like the
           Stalls feed — every tile opens that item's own page (photos + the
@@ -311,7 +402,7 @@ export default function BusinessDetailScreen() {
       {myOrders.length > 0 ? (
         <Card onPress={() => router.push(`/orders/${business.id}`)} style={styles.ordersCard}>
           <View style={styles.rowCard}>
-            <Text style={styles.rowIcon}>📦</Text>
+            <IconTile icon="bag" size={40} />
             <View style={styles.rowInfo}>
               <Text weight="semibold">My {vocab.requestNoun}s</Text>
               <Text variant="caption" tone="muted">
@@ -320,7 +411,7 @@ export default function BusinessDetailScreen() {
                 {openTab ? ' · 1 open now' : ''}
               </Text>
             </View>
-            <Text tone="muted">›</Text>
+            <Icon name="chevronRight" size={18} color={colors.textMuted} />
           </View>
         </Card>
       ) : null}
@@ -381,8 +472,13 @@ export default function BusinessDetailScreen() {
 
       {/* ——— 3. Showcase ——— */}
       {showcase.length > 0 || showcaseLinks.length > 0 || isMember ? (
-        <>
-          <SectionTitle>Work showcase</SectionTitle>
+        <View onLayout={markSection('showcase')}>
+          <SectionHeader
+            emoji="📸"
+            title="Work showcase"
+            subtitle="Past work, photos & reels"
+            badge={showcase.length ? `${showcase.length} item${showcase.length === 1 ? '' : 's'}` : undefined}
+          />
           {showcase.length > 0 ? (
             <PortfolioGallery items={showcase} />
           ) : showcaseLinks.length === 0 ? (
@@ -400,11 +496,13 @@ export default function BusinessDetailScreen() {
               style={styles.showcaseBtn}
             />
           ) : null}
-        </>
+        </View>
       ) : null}
 
       {/* ——— 4. Ratings & reviews ——— */}
-      <SectionTitle>Ratings &amp; reviews</SectionTitle>
+      <View onLayout={markSection('reviews')}>
+        <SectionHeader emoji="⭐" title="Ratings & reviews" />
+      </View>
       <ReviewsSection
         ratingAvg={business.ratingAvg}
         ratingCount={business.ratingCount}
@@ -418,7 +516,7 @@ export default function BusinessDetailScreen() {
           workspace, not the customer-facing page. */}
       <Card style={styles.ownerCard}>
         <View style={styles.rowCard}>
-          <Text style={styles.rowIcon}>👤</Text>
+          <IconTile icon="user" size={40} />
           <View style={styles.rowInfo}>
             <Text variant="caption" weight="semibold" tone="muted" style={styles.ownerLabel}>
               OWNER
@@ -520,7 +618,47 @@ export default function BusinessDetailScreen() {
         </Card>
       ) : null}
     </Screen>
+
+      {/* Sticky order bar — appears once something is picked on this page or
+          the catalog screen (they share one cart). */}
+      {cart.itemCount > 0 ? (
+        <View
+          style={[
+            styles.bar,
+            {
+              backgroundColor: colors.headerTint,
+              borderTopColor: colors.border,
+              paddingBottom: insets.bottom + spacing.md,
+            },
+          ]}
+        >
+          <View style={styles.rowInfo}>
+            <Text weight="bold">
+              {cart.itemCount} item{cart.itemCount === 1 ? '' : 's'}
+            </Text>
+            <Text variant="caption" tone="muted">
+              {totalLabel(cartTotal)}
+            </Text>
+          </View>
+          <Button
+            title="Place order"
+            icon="cart"
+            variant="cta"
+            onPress={() => router.push(`/cart/${business.id}`)}
+          />
+        </View>
+      ) : null}
+    </View>
   );
+}
+
+/** The icon for a block's own door on the action row. */
+function doorIcon(bucket: string): IconName {
+  if (bucket === 'menu') return 'cart';
+  if (bucket === 'products') return 'bag';
+  if (bucket === 'rentals') return 'key';
+  if (bucket === 'plans') return 'ticket';
+  return 'calendar';
 }
 
 /** One of the round icon buttons in the top bar. */
@@ -563,15 +701,25 @@ function trackLabel(items: TrackedItem[]): string {
   return '📍 Track my goods';
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <Text variant="subheading" weight="bold" style={styles.sectionTitle}>
-      {children}
-    </Text>
-  );
-}
-
 const styles = StyleSheet.create({
+  root: { flex: 1 },
+  roomForBar: { paddingBottom: 110 },
+  tabsBleed: { marginHorizontal: -spacing.lg, marginTop: spacing.lg },
+  tabs: { paddingHorizontal: spacing.lg, gap: spacing.sm },
+  bar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+  },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerBtn: {
     width: 34,
@@ -580,7 +728,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  sectionTitle: { marginTop: spacing.xl, marginBottom: spacing.md },
   rowCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -588,7 +735,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   rowInfo: { flex: 1 },
-  rowIcon: { fontSize: 22 },
   ordersCard: { marginTop: spacing.md },
   stallGrid: {
     flexDirection: 'row',

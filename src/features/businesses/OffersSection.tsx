@@ -13,7 +13,7 @@
  */
 import { ScrollView, StyleSheet, View } from 'react-native';
 import type { Offer } from '@/domain/types';
-import { Card, Tag, Text } from '@/components/ui';
+import { Card, SectionHeader, Tag, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { offerLineLabel, offerSavingPercent } from './offerUtils';
 
@@ -28,16 +28,19 @@ export interface OffersSectionProps {
 export function OffersSection({
   offers,
   onPress,
-  actionLabel = 'Order this offer →',
+  actionLabel = 'Claim offer',
 }: OffersSectionProps) {
   const colors = useColors();
   if (offers.length === 0) return null;
 
   return (
     <View style={styles.wrap}>
-      <Text variant="subheading" weight="bold" style={styles.heading}>
-        🎉 Offers
-      </Text>
+      <SectionHeader
+        emoji="🏷️"
+        title="Special offers & combos"
+        badge={`${offers.length} active`}
+        badgeTone="cta"
+      />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -48,13 +51,13 @@ export function OffersSection({
           return (
             <Card
               key={offer.id}
-              style={{ ...styles.card, borderColor: colors.brand }}
+              style={styles.card}
               onPress={onPress ? () => onPress(offer) : undefined}
               accessibilityLabel={onPress ? `${offer.title} — ${actionLabel}` : undefined}
             >
               <View style={styles.top}>
                 <Text variant="heading">{offer.emoji ?? '🎉'}</Text>
-                {offer.tag ? <Tag label={offer.tag} tone="brand" /> : null}
+                {offer.tag ? <Tag label={offer.tag} tone="cta" size="sm" /> : null}
               </View>
 
               <Text weight="bold" numberOfLines={2}>
@@ -102,9 +105,11 @@ export function OffersSection({
               {/* Says out loud that the card does something — a price alone
                   reads as a poster, not a button. */}
               {onPress ? (
-                <Text variant="caption" weight="bold" tone="brand" style={styles.action}>
-                  {actionLabel}
-                </Text>
+                <View style={[styles.action, { backgroundColor: colors.cta }]}>
+                  <Text variant="caption" weight="bold" tone="inverse">
+                    {actionLabel}
+                  </Text>
+                </View>
               ) : null}
             </Card>
           );
@@ -115,10 +120,9 @@ export function OffersSection({
 }
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: spacing.lg },
-  heading: { marginBottom: spacing.sm },
+  wrap: { marginBottom: spacing.sm },
   row: { gap: spacing.md, paddingRight: spacing.md },
-  card: { width: 240, borderWidth: 1, borderRadius: radius.md },
+  card: { width: 270 },
   top: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -126,7 +130,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   description: { marginTop: 2 },
-  action: { marginTop: spacing.sm },
+  // Drawn as a pill, not a Button — the whole card is already the button.
+  action: {
+    marginTop: spacing.md,
+    alignSelf: 'flex-start',
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 7,
+  },
   lines: { marginTop: spacing.sm, gap: 2 },
   priceRow: {
     flexDirection: 'row',

@@ -22,10 +22,24 @@
  * "Full menu ›" link at the top stays: it is the same destination, found by
  * people who scan headings rather than scroll to the end.)
  */
-import { useMemo, useState } from 'react';
+import { createContext, useContext, useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { Button, Card, Text } from '@/components/ui';
+import type { CatalogItem } from '@/domain/offerings';
+import { Button, Card, Icon, Text } from '@/components/ui';
+import { useCart } from '@/features/orders/CartContext';
 import { radius, spacing, useColors } from '@/theme/theme';
+
+/**
+ * One Place redesign: a row whose entry carries its `item` can be picked
+ * straight from the page — "+ Add" turns into a −/n/+ stepper on the SAME cart
+ * the full catalog screen uses (CartContext), and the page's order bar takes it
+ * from there. Plans never enter a cart; their rows carry an Enroll pill.
+ */
+const PickContext = createContext<{
+  businessId?: string;
+  addable: boolean;
+  onEnroll?: (item: CatalogItem) => void;
+}>({ addable: false });
 
 /** Normalised offering row — menu items, services, rentals and products all map to this. */
 export interface CatalogEntry {
@@ -52,6 +66,8 @@ export interface CatalogEntry {
    * while the scooter is daily.
    */
   badge?: string;
+  /** The catalog item behind this row — lets the row be picked into the cart. */
+  item?: CatalogItem;
 }
 
 /** Items listed inline before the block defers to its full screen. */
@@ -74,15 +90,44 @@ export interface OfferingGroup {
    * "🛠️ Request", "🎟️ Enroll". Shown as a button at the foot of the block.
    */
   action?: { label: string; onPress: () => void };
+  /** Rows can be added to the cart right here (orders module on, not plans). */
+  addable?: boolean;
+  /** Plans: each row's Enroll pill. */
+  onEnroll?: (item: CatalogItem) => void;
 }
 
-export function OfferingsSection({ groups }: { groups: OfferingGroup[] }) {
+export function OfferingsSection({
+  groups,
+  businessId,
+  onLayoutGroup,
+}: {
+  groups: OfferingGroup[];
+  /** Needed for the inline add-to-cart steppers. */
+  businessId?: string;
+  /** Reports each block's y offset inside this section — for the page's tab strip. */
+  onLayoutGroup?: (key: string, y: number) => void;
+}) {
   const visible = groups.filter((g) => g.entries.length > 0);
   if (visible.length === 0) return null;
   return (
     <View style={styles.section}>
       {visible.map((group) => (
-        <OfferingBlock key={group.key} group={group} />
+        <View
+          key={group.key}
+          onLayout={
+            onLayoutGroup ? (e) => onLayoutGroup(group.key, e.nativeEvent.layout.y) : undefined
+          }
+        >
+          <PickContext.Provider
+            value={{
+              businessId,
+              addable: !!group.addable && !!businessId,
+              onEnroll: group.onEnroll,
+            }}
+          >
+            <OfferingBlock group={group} />
+          </PickContext.Provider>
+        </View>
       ))}
     </View>
   );
@@ -126,6 +171,11 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
 
   const head = (
     <View style={styles.head}>
+      {icon ? (
+        <View style={[styles.headIcon, { backgroundColor: colors.brandSoft }]}>
+          <Text style={styles.headEmoji}>{icon}</Text>
+        </View>
+      ) : null}
       <View style={styles.headInfo}>
         <Text variant="subheading" weight="bold">
           {group.title}
@@ -137,10 +187,16 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
         ) : null}
       </View>
       {group.seeAll ? (
-        <Pressable onPress={group.seeAll.onPress} hitSlop={8} accessibilityRole="button">
-          <Text variant="label" weight="semibold" tone="accent">
-            {group.seeAll.label} ›
+        <Pressable
+          onPress={group.seeAll.onPress}
+          hitSlop={8}
+          accessibilityRole="button"
+          style={styles.seeAll}
+        >
+          <Text variant="label" weight="bold" tone="brand">
+            {group.seeAll.label}
           </Text>
+          <Icon name="chevronRight" size={16} color={colors.brandText} />
         </Pressable>
       ) : null}
     </View>
@@ -184,10 +240,15 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
                 accessibilityState={{ expanded: open }}
                 accessibilityLabel={`${cat.name}, ${cat.entries.length} items`}
               >
-                <Text weight="semibold">{cat.name}</Text>
-                <Text tone="muted">
-                  {cat.entries.length} · {open ? '▲' : '▼'}
+                <Text weight="bold">
+                  {cat.name}{' '}
+                  <Text tone="muted" weight="medium">
+                    ({cat.entries.length})
+                  </Text>
                 </Text>
+                <View style={open ? styles.chevOpen : undefined}>
+                  <Icon name="chevronDown" size={18} color={colors.textMuted} />
+                </View>
               </Pressable>
               {open ? (
                 <FolderContents
@@ -309,11 +370,14 @@ function SubFolder({
         accessibilityLabel={`${name}, ${entries.length} items`}
       >
         <Text variant="label" weight="semibold">
-          {name}
+          {name}{' '}
+          <Text variant="caption" tone="muted">
+            ({entries.length})
+          </Text>
         </Text>
-        <Text variant="caption" tone="muted">
-          {entries.length} · {open ? '▲' : '▼'}
-        </Text>
+        <View style={open ? styles.chevOpen : undefined}>
+          <Icon name="chevronDown" size={16} color={colors.textMuted} />
+        </View>
       </Pressable>
       {open ? (
         <FolderContents entries={entries} depth={depth} label={name} icon={icon} seeAll={seeAll} />
@@ -343,7 +407,8 @@ function EntryRows({ entries, icon }: { entries: CatalogEntry[]; icon?: string }
             </View>
           ) : null}
           <View style={styles.rowInfo}>
-            <Text weight="medium">{entry.name}</Text>
+            {typeof entry.item?.isVeg === 'boolean' ? <VegDot veg={entry.item.isVeg} /> : null}
+            <Text weight="bold">{entry.name}</Text>
             {entry.subcategory ? (
               <Text variant="caption" tone="muted">
                 {entry.subcategory}
@@ -355,11 +420,9 @@ function EntryRows({ entries, icon }: { entries: CatalogEntry[]; icon?: string }
               </Text>
             ) : null}
           </View>
-          {entry.price ? (
+          {entry.price || entry.item ? (
             <View style={styles.priceCol}>
-              <Text weight="semibold" tone="brand">
-                {entry.price}
-              </Text>
+              {entry.price ? <Text weight="bold">{entry.price}</Text> : null}
               {entry.badge ? (
                 <Text
                   variant="caption"
@@ -369,6 +432,7 @@ function EntryRows({ entries, icon }: { entries: CatalogEntry[]; icon?: string }
                   {entry.badge}
                 </Text>
               ) : null}
+              {entry.item ? <PickControl item={entry.item} /> : null}
             </View>
           ) : null}
         </View>
@@ -377,12 +441,112 @@ function EntryRows({ entries, icon }: { entries: CatalogEntry[]; icon?: string }
   );
 }
 
+/** The small veg / non-veg square every Indian menu prints. */
+function VegDot({ veg }: { veg: boolean }) {
+  const c = veg ? '#15803D' : '#B91C1C';
+  return (
+    <View
+      style={[styles.veg, { borderColor: c }]}
+      accessibilityLabel={veg ? 'Vegetarian' : 'Non-vegetarian'}
+    >
+      <View style={[styles.vegDot, { backgroundColor: c }]} />
+    </View>
+  );
+}
+
+/** "+ Add" → −/n/+ on the shared cart; an Enroll pill for plans. */
+function PickControl({ item }: { item: CatalogItem }) {
+  const { businessId, addable, onEnroll } = useContext(PickContext);
+  if (item.bucket === 'plans') {
+    return onEnroll ? (
+      <Button title="Enroll" size="sm" variant="outline" onPress={() => onEnroll(item)} />
+    ) : null;
+  }
+  if (!addable || !businessId) return null;
+  return <Stepper businessId={businessId} item={item} />;
+}
+
+function Stepper({ businessId, item }: { businessId: string; item: CatalogItem }) {
+  const colors = useColors();
+  const cart = useCart(businessId);
+  const qty = cart.quantityOf(item);
+  if (qty === 0) {
+    return (
+      <Button
+        title="Add"
+        icon="plus"
+        size="sm"
+        variant="outline"
+        onPress={() => cart.bump(item, 1)}
+        accessibilityLabel={`Add ${item.name}`}
+        style={styles.addBtn}
+      />
+    );
+  }
+  return (
+    <View style={[styles.stepper, { backgroundColor: colors.brand }]}>
+      <Pressable
+        onPress={() => cart.bump(item, -1)}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove one ${item.name}`}
+        style={styles.stepBtn}
+      >
+        <Icon name="minus" size={16} color={colors.textInverse} />
+      </Pressable>
+      <Text weight="bold" tone="inverse">
+        {qty}
+      </Text>
+      <Pressable
+        onPress={() => cart.bump(item, 1)}
+        hitSlop={6}
+        accessibilityRole="button"
+        accessibilityLabel={`Add one more ${item.name}`}
+        style={styles.stepBtn}
+      >
+        <Icon name="plus" size={16} color={colors.textInverse} />
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  headIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headEmoji: { fontSize: 20, lineHeight: 26 },
+  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  chevOpen: { transform: [{ rotate: '180deg' }] },
+  veg: {
+    width: 14,
+    height: 14,
+    borderWidth: 1.5,
+    borderRadius: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 3,
+  },
+  vegDot: { width: 6, height: 6, borderRadius: 3 },
+  addBtn: { minHeight: 34, paddingHorizontal: spacing.md },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: radius.pill,
+    minHeight: 34,
+    paddingHorizontal: 4,
+  },
+  stepBtn: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
+
   section: { gap: spacing.md },
   block: { paddingVertical: spacing.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headInfo: { flex: 1 },
-  thumb: { width: 44, height: 44, borderRadius: radius.sm },
+  thumb: { width: 56, height: 56, borderRadius: radius.md },
   thumbBlank: { alignItems: 'center', justifyContent: 'center' },
   thumbIcon: { fontSize: 20 },
   dropdowns: { marginTop: spacing.sm },
@@ -394,7 +558,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
-  priceCol: { alignItems: 'flex-end', gap: 2 },
+  priceCol: { alignItems: 'flex-end', gap: spacing.xs },
   badge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 1,
