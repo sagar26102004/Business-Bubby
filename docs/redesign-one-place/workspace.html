@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Master Workspace Hub - Business Buddy</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@100..900&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "inverse-surface": "#28332c",
+            "primary-fixed": "#bceecf",
+            "surface-dim": "#d0ddd2",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-low": "#eaf7ec",
+            "surface-tint": "#3a674f",
+            "secondary-fixed-dim": "#ffb4a3",
+            "tertiary-container": "#6f4a00",
+            "secondary": "#a13e28",
+            "surface-container-highest": "#d9e6db",
+            "primary-fixed-dim": "#a1d1b4",
+            "surface": "#f0fdf1",
+            "tertiary-fixed-dim": "#ffba44",
+            "on-secondary": "#ffffff",
+            "secondary-container": "#fd8367",
+            "surface-container": "#e4f1e6",
+            "primary": "#14422d",
+            "on-tertiary-container": "#ffb739",
+            "inverse-on-surface": "#e7f4e9",
+            "on-primary-container": "#9fcfb2",
+            "on-primary-fixed-variant": "#224f39",
+            "on-primary-fixed": "#002112",
+            "error-container": "#ffdad6",
+            "on-primary": "#ffffff",
+            "on-error": "#ffffff",
+            "on-tertiary-fixed": "#281800",
+            "surface-bright": "#f0fdf1",
+            "on-background": "#131e17",
+            "on-secondary-fixed": "#3d0600",
+            "background": "#f0fdf1",
+            "on-secondary-container": "#721c09",
+            "tertiary-fixed": "#ffddaf",
+            "on-secondary-fixed-variant": "#822714",
+            "outline-variant": "#c0c9c1",
+            "on-error-container": "#93000a",
+            "on-tertiary-fixed-variant": "#614000",
+            "error": "#ba1a1a",
+            "tertiary": "#513500",
+            "secondary-fixed": "#ffdad2",
+            "on-surface-variant": "#414943",
+            "surface-variant": "#d9e6db",
+            "primary-container": "#2d5a43",
+            "inverse-primary": "#a1d1b4",
+            "on-tertiary": "#ffffff",
+            "outline": "#717973",
+            "on-surface": "#131e17",
+            "surface-container-high": "#dfebe0"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-lg": "1rem",
+            "space-xl": "1.5rem",
+            "space-xs": "0.25rem",
+            "space-md": "0.75rem",
+            "space-sm": "0.5rem",
+            "gutter": "1rem",
+            "margin": "1rem"
+          },
+          "fontFamily": {
+            "button-label": ["Plus Jakarta Sans"],
+            "heading-lg-mobile": ["Plus Jakarta Sans"],
+            "display-title": ["Plus Jakarta Sans"],
+            "heading-lg": ["Plus Jakarta Sans"],
+            "display-title-mobile": ["Plus Jakarta Sans"],
+            "label-sm": ["Plus Jakarta Sans"],
+            "caption-xs": ["Plus Jakarta Sans"],
+            "subheading-md": ["Plus Jakarta Sans"],
+            "caption-bold": ["Plus Jakarta Sans"],
+            "body-base": ["Plus Jakarta Sans"],
+            "body-medium": ["Plus Jakarta Sans"],
+            "label-bold": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "button-label": ["15px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "heading-lg-mobile": ["20px", { "lineHeight": "26px", "fontWeight": "700" }],
+            "display-title": ["28px", { "lineHeight": "34px", "fontWeight": "700" }],
+            "heading-lg": ["22px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "display-title-mobile": ["24px", { "lineHeight": "30px", "fontWeight": "700" }],
+            "label-sm": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+            "caption-xs": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "subheading-md": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "caption-bold": ["12px", { "lineHeight": "16px", "fontWeight": "700" }],
+            "body-base": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "body-medium": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+            "label-bold": ["14px", { "lineHeight": "20px", "fontWeight": "700" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined[data-weight="fill"],
+    .icon-fill {
+      font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Subtle touch feedback matching brand style */
+    .tactile-press {
+      transition: opacity 0.15s ease, transform 0.1s ease;
+    }
+    .tactile-press:active {
+      opacity: 0.75;
+      transform: scale(0.985);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased selection:bg-primary-fixed selection:text-on-primary-fixed min-h-screen pb-24">
+<!-- TOP APP BAR (Shared Component Anchor) -->
+<header class="sticky top-0 z-40 bg-surface-container-low border-b border-outline-variant">
+<div class="flex justify-between items-center w-full px-4 h-16 max-w-7xl mx-auto">
+<!-- Leading: Identity avatar & switcher -->
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center shadow-sm font-heading-lg text-heading-lg">
+<span class="material-symbols-outlined text-primary-fixed" data-icon="storefront">storefront</span>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1.5 cursor-pointer tactile-press">
+<span class="font-heading-lg-mobile text-heading-lg-mobile md:font-heading-lg md:text-heading-lg font-bold text-primary tracking-tight">Apex Business Suite</span>
+<span class="material-symbols-outlined text-on-surface-variant text-base" data-icon="expand_more">expand_more</span>
+</div>
+<span class="font-caption-xs text-caption-xs text-on-surface-variant font-medium">One Place • Central Hub</span>
+</div>
+</div>
+<!-- Center: Operational Status Toggle -->
+<div class="hidden sm:flex items-center bg-surface-container-lowest border border-outline-variant rounded-full px-3 py-1 shadow-sm gap-2">
+<span class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-container opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary-container"></span>
+</span>
+<span class="font-caption-bold text-caption-bold text-primary">Open & Accepting Orders</span>
+<button class="w-7 h-4 bg-primary-container rounded-full relative flex items-center p-0.5 ml-1 transition-colors" type="button">
+<span class="w-3 h-3 bg-surface-container-lowest rounded-full transform translate-x-3 transition-transform"></span>
+</button>
+</div>
+<!-- Trailing: QR & Notifications -->
+<div class="flex items-center gap-2">
+<!-- Storefront Dynamic UPI QR icon button -->
+<button class="w-10 h-10 rounded-full bg-surface-container-lowest border border-outline-variant flex items-center justify-center text-primary tactile-press hover:bg-surface-container-highest" title="Dynamic Storefront QR" type="button">
+<span class="material-symbols-outlined" data-icon="qr_code_2">qr_code_2</span>
+</button>
+<!-- Notifications Bell with unread badge -->
+<button class="w-10 h-10 rounded-full bg-surface-container-lowest border border-outline-variant flex items-center justify-center text-on-surface relative tactile-press hover:bg-surface-container-highest" title="Notifications" type="button">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2.5 h-2.5 bg-secondary rounded-full ring-2 ring-surface-container-low"></span>
+</button>
+</div>
+</div>
+</header>
+<!-- MAIN CANVAS CONTAINER -->
+<main class="max-w-7xl mx-auto px-4 pt-5 pb-8 space-y-6">
+<!-- Operational Status Pill (Mobile Banner View) -->
+<div class="sm:hidden flex items-center justify-between bg-surface-container-lowest border border-outline-variant rounded-xl p-3">
+<div class="flex items-center gap-2.5">
+<span class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+</span>
+<div>
+<p class="font-label-bold text-label-bold text-primary">Open & Accepting Orders</p>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">Live to all nearby customers</p>
+</div>
+</div>
+<div class="w-9 h-5 bg-primary-container rounded-full relative flex items-center p-0.5">
+<div class="w-4 h-4 bg-surface-container-lowest rounded-full transform translate-x-4 transition-transform shadow-sm"></div>
+</div>
+</div>
+<!-- 1. TODAY'S REAL-TIME PULSE / OPERATIONAL METRICS STRIP -->
+<section aria-label="Today's Operational Pulse">
+<div class="flex items-center justify-between mb-2.5">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="pace">pace</span>
+<h2 class="font-label-bold text-label-bold text-primary uppercase tracking-wider text-xs">Today's Real-time Pulse</h2>
+</div>
+<span class="font-caption-xs text-caption-xs text-on-surface-variant font-medium">Updated 1 min ago • Live</span>
+</div>
+<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+<!-- Metric 1: Revenue -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary-container">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="font-caption-bold text-caption-bold text-on-surface-variant">Today's Revenue</span>
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-lg" data-icon="currency_rupee">currency_rupee</span>
+</div>
+</div>
+<div>
+<div class="font-display-title-mobile md:font-display-title text-display-title-mobile md:text-display-title text-primary font-bold">₹18,450</div>
+<div class="flex items-center gap-1 mt-1 text-primary-container font-caption-bold text-caption-bold">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+<span>+14.8% vs yesterday</span>
+</div>
+</div>
+</div>
+<!-- Metric 2: Live Queue -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary-container">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="font-caption-bold text-caption-bold text-on-surface-variant">Live Queue</span>
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-lg" data-icon="conveyor_belt">conveyor_belt</span>
+</div>
+</div>
+<div>
+<div class="font-display-title-mobile md:font-display-title text-display-title-mobile md:text-display-title text-primary font-bold">8 Active</div>
+<div class="flex items-center gap-1 mt-1 text-on-surface-variant font-caption-xs text-caption-xs">
+<span class="w-2 h-2 rounded-full bg-secondary-container"></span>
+<span>Orders / Jobs in-flight</span>
+</div>
+</div>
+</div>
+<!-- Metric 3: Dine-in / Bay Occupancy -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary-container">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="font-caption-bold text-caption-bold text-on-surface-variant">Dine-in / Bays</span>
+<div class="w-7 h-7 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-lg" data-icon="table_restaurant">table_restaurant</span>
+</div>
+</div>
+<div>
+<div class="font-display-title-mobile md:font-display-title text-display-title-mobile md:text-display-title text-primary font-bold">4 Running</div>
+<div class="flex items-center gap-1 mt-1 text-on-surface-variant font-caption-xs text-caption-xs">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="chair">chair</span>
+<span>Tabs open • 85% capacity</span>
+</div>
+</div>
+</div>
+<!-- Metric 4: Dues / Pending -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-secondary">
+<div class="flex items-center justify-between text-on-surface-variant mb-2">
+<span class="font-caption-bold text-caption-bold text-on-surface-variant">Dues / Pending</span>
+<div class="w-7 h-7 rounded-lg bg-error-container flex items-center justify-center text-error">
+<span class="material-symbols-outlined text-lg" data-icon="pending_actions">pending_actions</span>
+</div>
+</div>
+<div>
+<div class="font-display-title-mobile md:font-display-title text-display-title-mobile md:text-display-title text-secondary font-bold">₹1,240</div>
+<div class="flex items-center gap-1 mt-1 text-secondary font-caption-bold text-caption-bold">
+<span class="material-symbols-outlined text-sm" data-icon="warning">warning</span>
+<span>3 Uncollected tabs</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- 2. PRIMARY RAPID ACTION BAR (Front-Counter Operations) -->
+<section class="bg-surface-container-low border border-outline-variant rounded-2xl p-4 md:p-5 shadow-sm">
+<div class="flex flex-col md:flex-row gap-3">
+<!-- Touch Target 1: New Counter Bill / Order -->
+<button class="flex-1 bg-primary text-on-primary rounded-xl px-5 py-4 flex items-center justify-between tactile-press shadow hover:bg-primary-container" type="button">
+<div class="flex items-center gap-3.5 text-left">
+<div class="w-11 h-11 rounded-lg bg-primary-container flex items-center justify-center text-primary-fixed">
+<span class="material-symbols-outlined text-2xl" data-icon="receipt_long">receipt_long</span>
+</div>
+<div>
+<span class="block font-heading-lg-mobile md:font-heading-lg text-heading-lg-mobile md:text-heading-lg font-bold">New Counter Bill / Order</span>
+<span class="block font-caption-xs text-caption-xs text-on-primary-container">Quick-fire items, custom rate, takeaway or dine-in</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-xl text-primary-fixed" data-icon="arrow_forward">arrow_forward</span>
+</button>
+<!-- Touch Target 2: Dynamic QR Collect -->
+<button class="flex-1 bg-secondary text-on-secondary rounded-xl px-5 py-4 flex items-center justify-between tactile-press shadow hover:opacity-90" type="button">
+<div class="flex items-center gap-3.5 text-left">
+<div class="w-11 h-11 rounded-lg bg-secondary-container flex items-center justify-center text-on-secondary">
+<span class="material-symbols-outlined text-2xl" data-icon="qr_code_scanner">qr_code_scanner</span>
+</div>
+<div>
+<span class="block font-heading-lg-mobile md:font-heading-lg text-heading-lg-mobile md:text-heading-lg font-bold">Dynamic QR Collect</span>
+<span class="block font-caption-xs text-caption-xs text-secondary-fixed">Instant UPI soundbox trigger & auto receipt</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-xl text-secondary-fixed" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<!-- Secondary Quick Pills -->
+<div class="flex flex-wrap items-center gap-2.5 mt-3.5 pt-3 border-t border-outline-variant">
+<span class="font-caption-bold text-caption-bold text-on-surface-variant mr-1">Quick entries:</span>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-lowest border border-outline-variant rounded-full text-on-surface font-label-sm text-label-sm hover:border-primary tactile-press" type="button">
+<span class="material-symbols-outlined text-base text-primary" data-icon="person_add">person_add</span>
+<span>+ Add Walk-in Customer</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-lowest border border-outline-variant rounded-full text-on-surface font-label-sm text-label-sm hover:border-primary tactile-press" type="button">
+<span class="material-symbols-outlined text-base text-primary" data-icon="payments">payments</span>
+<span>Record Cash Entry</span>
+</button>
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-surface-container-lowest border border-outline-variant rounded-full text-on-surface font-label-sm text-label-sm hover:border-primary tactile-press" type="button">
+<span class="material-symbols-outlined text-base text-primary" data-icon="local_shipping">local_shipping</span>
+<span>Assign Delivery Rider</span>
+</button>
+</div>
+</section>
+<!-- 3. CATEGORIZED FEATURE CLUSTERS -->
+<!-- CLUSTER A: ⚡ Live Operations & Desk -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-subheading-md text-subheading-md font-bold text-primary">Live Operations & Desk</span>
+<span class="px-2.5 py-0.5 rounded-full bg-surface-container font-caption-bold text-caption-bold text-primary-container border border-primary-fixed-dim">
+            4 Active Systems
+          </span>
+</div>
+<span class="font-caption-xs text-caption-xs text-on-surface-variant font-medium">Front-of-house & dispatch</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+<!-- Tool 1: Orders & Requests Desk -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div>
+<div class="flex items-center justify-between mb-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-xl" data-icon="inbox">inbox</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-caption-bold text-caption-bold">3 Urgent</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface">Orders & Requests Desk</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Unified queue for food orders, service visits, takeaway & rentals.</p>
+</div>
+<div class="mt-4 pt-3 border-t border-outline-variant flex items-center justify-between">
+<span class="font-caption-xs text-caption-xs text-primary font-bold">Open Queue (8)</span>
+<span class="material-symbols-outlined text-sm text-primary" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<!-- Tool 2: Billing POS & Counter -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div>
+<div class="flex items-center justify-between mb-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-xl" data-icon="point_of_sale">point_of_sale</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-primary font-caption-bold text-caption-bold">Active</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface">Billing POS & Counter</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Walk-in checkout, split bill, instant thermal receipt & Bluetooth printer.</p>
+</div>
+<div class="mt-4 pt-3 border-t border-outline-variant flex items-center justify-between">
+<span class="font-caption-xs text-caption-xs text-primary font-bold">Open Terminal</span>
+<span class="material-symbols-outlined text-sm text-primary" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<!-- Tool 3: Dine-in Tabs & Bays -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div>
+<div class="flex items-center justify-between mb-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-xl" data-icon="dashboard_customize">dashboard_customize</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-primary font-caption-bold text-caption-bold">4 Open</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface">Dine-in Tabs & Bays</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Table floorplan, garage service bays, running guest tabs & seat timers.</p>
+</div>
+<div class="mt-4 pt-3 border-t border-outline-variant flex items-center justify-between">
+<span class="font-caption-xs text-caption-xs text-primary font-bold">View Layout</span>
+<span class="material-symbols-outlined text-sm text-primary" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+<!-- Tool 4: Appointments & Visits -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div>
+<div class="flex items-center justify-between mb-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-xl" data-icon="calendar_month">calendar_month</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-caption-bold text-caption-bold">2 Today</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface">Appointments & Visits</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Calendar schedule, home inspection slots, booking acceptance & reminder.</p>
+</div>
+<div class="mt-4 pt-3 border-t border-outline-variant flex items-center justify-between">
+<span class="font-caption-xs text-caption-xs text-primary font-bold">Open Diary</span>
+<span class="material-symbols-outlined text-sm text-primary" data-icon="chevron_right">chevron_right</span>
+</div>
+</div>
+</div>
+</section>
+<!-- CLUSTER B: 📦 Catalog, Inventory & Offerings -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-subheading-md text-subheading-md font-bold text-primary">Catalog, Inventory & Offerings</h2>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">All-in-One Catalog Architecture</p>
+</div>
+<button class="inline-flex items-center gap-1 text-primary font-label-bold text-label-bold hover:underline tactile-press" type="button">
+<span class="material-symbols-outlined text-base" data-icon="add_circle">add_circle</span>
+<span>New Offering</span>
+</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+<!-- Item 1: Menu & Product Stock -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div>
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-xl" data-icon="inventory_2">inventory_2</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface font-caption-bold text-caption-bold">248 Items</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface mt-3">Menu & Product Stock</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Item variants, out-of-stock toggles, low stock alerts (4 critical).</p>
+</div>
+<div class="mt-4 flex items-center justify-between pt-2">
+<span class="px-2 py-0.5 rounded bg-error-container text-on-error-container font-caption-bold text-caption-bold">4 OOS Alerts</span>
+<span class="font-caption-bold text-caption-bold text-primary">Edit Stock →</span>
+</div>
+</div>
+<!-- Item 2: Services & Rate Cards -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div>
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-xl" data-icon="handyman">handyman</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface font-caption-bold text-caption-bold">16 Cards</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface mt-3">Services & Rate Cards</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Standard visit charges, repair rates, package bundles & technician time.</p>
+</div>
+<div class="mt-4 flex items-center justify-between pt-2">
+<span class="font-caption-xs text-caption-xs text-on-surface-variant">Tiered pricing active</span>
+<span class="font-caption-bold text-caption-bold text-primary">Configure →</span>
+</div>
+</div>
+<!-- Item 3: Rentals & Asset Fleet -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div>
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-xl" data-icon="car_rental">car_rental</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface font-caption-bold text-caption-bold">12 Assets</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface mt-3">Rentals & Asset Fleet</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Per-day / per-month equipment, camera gear, security deposits & returns.</p>
+</div>
+<div class="mt-4 flex items-center justify-between pt-2">
+<span class="font-caption-xs text-caption-xs text-primary-container font-semibold">9/12 Rented out</span>
+<span class="font-caption-bold text-caption-bold text-primary">Fleet Log →</span>
+</div>
+</div>
+<!-- Item 4: Bulk Paste & CSV Importer -->
+<div class="bg-surface-container-lowest border border-dashed border-outline rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary hover:bg-surface-container-low shadow-sm">
+<div>
+<div class="flex items-center justify-between">
+<div class="w-10 h-10 rounded-xl bg-primary-fixed text-primary flex items-center justify-center">
+<span class="material-symbols-outlined text-xl" data-icon="upload_file">upload_file</span>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-primary-container text-on-primary font-caption-bold text-caption-bold">1-Click</span>
+</div>
+<h3 class="font-label-bold text-label-bold text-on-surface mt-3">Bulk Paste & CSV</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Copy-paste WhatsApp item lists or upload Excel/CSV inventory directly.</p>
+</div>
+<div class="mt-4 flex items-center justify-between pt-2">
+<span class="font-caption-xs text-caption-xs text-primary font-bold">Import Spreadsheet</span>
+<span class="material-symbols-outlined text-base text-primary" data-icon="cloud_upload">cloud_upload</span>
+</div>
+</div>
+</div>
+</section>
+<!-- CLUSTER C & D IN 2-COLUMN DESKTOP SPLIT -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+<!-- CLUSTER C: 🔄 Recurring Plans & Subscriptions -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-subheading-md text-subheading-md font-bold text-primary">Recurring Plans & Subscriptions</h2>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">Predictable recurring neighborhood revenue</p>
+</div>
+<span class="material-symbols-outlined text-primary text-xl" data-icon="autorenew">autorenew</span>
+</div>
+<div class="space-y-3">
+<!-- Card 1: Memberships & Batches -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 tactile-press hover:border-primary flex items-start justify-between shadow-sm">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined" data-icon="card_membership">card_membership</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-label-bold text-label-bold text-on-surface">Memberships & Batches</h3>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-primary font-caption-bold text-caption-bold">64 Subscribers</span>
+</div>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Coaching batches, gym passes, milk/tiffin daily routes & morning schedules.</p>
+<div class="flex items-center gap-3 mt-2 text-xs font-semibold text-primary">
+<span>₹42,800/mo MRR</span>
+<span>•</span>
+<span>Next renewal: 1st of month</span>
+</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="chevron_right">chevron_right</span>
+</div>
+<!-- Card 2: Dues & Auto-Reminders -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 tactile-press hover:border-primary flex items-start justify-between shadow-sm">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-secondary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined" data-icon="mark_chat_unread">mark_chat_unread</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-label-bold text-label-bold text-on-surface">Dues & Auto-Reminders</h3>
+<span class="px-2 py-0.5 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-caption-bold text-caption-bold">WhatsApp Linked</span>
+</div>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">1-tap WhatsApp payment links with verified UPI QR, grace period rules.</p>
+<div class="flex items-center gap-3 mt-2 text-xs font-semibold text-secondary">
+<span>5 Pending nudges ready to send</span>
+</div>
+</div>
+</div>
+<button class="px-3 py-1 bg-surface-container-low text-primary font-label-sm text-label-sm rounded-full border border-outline-variant" type="button">
+              Send All
+            </button>
+</div>
+</div>
+</section>
+<!-- CLUSTER D: 📣 Customer Growth & Showcase -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-subheading-md text-subheading-md font-bold text-primary">Customer Growth & Showcase</h2>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">Neighborhood reach & customer trust</p>
+</div>
+<span class="material-symbols-outlined text-primary text-xl" data-icon="campaign">campaign</span>
+</div>
+<div class="space-y-3">
+<!-- Card 1: Work Showcase & Video Reel -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 tactile-press hover:border-primary flex items-start justify-between shadow-sm">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container text-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined" data-icon="video_library">video_library</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-label-bold text-label-bold text-on-surface">Work Showcase & ≤60s Reel</h3>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-bold">Live on Feed</span>
+</div>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-1">Upload verified shop clip, kitchen prep, or finished artisan gallery proof.</p>
+<div class="flex items-center gap-2 mt-2 text-xs font-medium text-on-surface-variant">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="visibility">visibility</span>
+<span>1.4k views this week from 2km radius</span>
+</div>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-primary" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span>
+</button>
+</div>
+<!-- Card 2: Neighborhood Offers & Reviews Split -->
+<div class="grid grid-cols-2 gap-3">
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3 tactile-press hover:border-primary shadow-sm">
+<div class="flex items-center gap-2 text-primary mb-1">
+<span class="material-symbols-outlined text-base" data-icon="local_offer">local_offer</span>
+<span class="font-label-bold text-label-bold">Offers & Deals</span>
+</div>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">2 active combo discounts</p>
+<div class="mt-3 flex justify-between items-center text-xs font-bold text-primary">
+<span>Manage</span>
+<span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-3 tactile-press hover:border-primary shadow-sm">
+<div class="flex items-center gap-2 text-tertiary-container mb-1">
+<span class="material-symbols-outlined text-base icon-fill text-tertiary-fixed-dim" data-icon="star">star</span>
+<span class="font-label-bold text-label-bold text-on-surface">4.9 Ratings</span>
+</div>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">128 verified local reviews</p>
+<div class="mt-3 flex justify-between items-center text-xs font-bold text-primary">
+<span>Reply (2)</span>
+<span class="material-symbols-outlined text-sm" data-icon="arrow_forward">arrow_forward</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+<!-- CLUSTER E: 👥 Team, Fleet & Store Controls -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-subheading-md text-subheading-md font-bold text-primary">Team, Fleet & Store Controls</h2>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">Administrative backbone, permissions and payouts</p>
+</div>
+<span class="material-symbols-outlined text-primary text-xl" data-icon="shield_person">shield_person</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+<!-- Control 1: Staff Roles & Team -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low text-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-xl" data-icon="group">group</span>
+</div>
+<div>
+<h3 class="font-label-bold text-label-bold text-on-surface">Staff Roles & Team</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-0.5">Owner, Manager & Cashier PIN security hierarchy.</p>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-outline-variant flex items-center justify-between text-xs">
+<span class="font-caption-bold text-caption-bold text-primary">4 Staff Linked</span>
+<span class="material-symbols-outlined text-sm text-primary" data-icon="settings">settings</span>
+</div>
+</div>
+<!-- Control 2: Fleet & Live GPS Tracking -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low text-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-xl" data-icon="two_wheeler">two_wheeler</span>
+</div>
+<div>
+<h3 class="font-label-bold text-label-bold text-on-surface">Fleet & Live GPS</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-0.5">Track delivery riders live on neighborhood map.</p>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-outline-variant flex items-center justify-between text-xs">
+<span class="font-caption-bold text-caption-bold text-primary">2 Active Trips</span>
+<span class="material-symbols-outlined text-sm text-primary" data-icon="map">map</span>
+</div>
+</div>
+<!-- Control 3: Store Profile & Hours -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low text-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-xl" data-icon="schedule">schedule</span>
+</div>
+<div>
+<h3 class="font-label-bold text-label-bold text-on-surface">Store Profile & Hours</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-0.5">Privacy shield, landmark pin, break hours.</p>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-outline-variant flex items-center justify-between text-xs">
+<span class="font-caption-bold text-caption-bold text-primary">09:00 - 22:00</span>
+<span class="material-symbols-outlined text-sm text-primary" data-icon="edit">edit</span>
+</div>
+</div>
+<!-- Control 4: Bank & Ledger Settlement -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-2xl p-4 flex flex-col justify-between tactile-press hover:border-primary shadow-sm">
+<div class="flex items-start gap-3">
+<div class="w-10 h-10 rounded-xl bg-surface-container-low text-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-xl" data-icon="account_balance">account_balance</span>
+</div>
+<div>
+<h3 class="font-label-bold text-label-bold text-on-surface">Bank & Settlement</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant mt-0.5">UPI VPA settings, automatic daily bank payout.</p>
+</div>
+</div>
+<div class="mt-3 pt-2.5 border-t border-outline-variant flex items-center justify-between text-xs">
+<span class="font-caption-bold text-caption-bold text-primary">Auto-settle 23:30</span>
+<span class="material-symbols-outlined text-sm text-primary" data-icon="receipt">receipt</span>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- 5. STANDARD BOTTOM NAVIGATION (Shared Component Anchor) -->
+<nav aria-label="Bottom Navigation" class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-1.5 h-16 bg-surface-container-low border-t border-outline-variant">
+<!-- Tab 1: Explore -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-2 py-1 tactile-press" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="explore">explore</span>
+<span class="font-caption-xs text-caption-xs mt-0.5">Explore</span>
+</a>
+<!-- Tab 2: Orders -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-2 py-1 tactile-press relative" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="receipt_long">receipt_long</span>
+<span class="font-caption-xs text-caption-xs mt-0.5">Orders</span>
+<span class="absolute top-1 right-2 w-2 h-2 rounded-full bg-secondary"></span>
+</a>
+<!-- Tab 3: Chats -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-2 py-1 tactile-press" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="chat">chat</span>
+<span class="font-caption-xs text-caption-xs mt-0.5">Chats</span>
+</a>
+<!-- Tab 4: Workspace (ACTIVE STATE - Locked per Semantic Mandate) -->
+<a aria-current="page" class="flex flex-col items-center justify-center bg-primary text-on-primary rounded-full px-4 py-1 tactile-press shadow-sm" href="#">
+<span class="material-symbols-outlined text-2xl text-primary-fixed icon-fill" data-icon="grid_view" data-weight="fill">grid_view</span>
+<span class="font-caption-bold text-caption-bold mt-0.5 text-primary-fixed">Workspace</span>
+</a>
+<!-- Tab 5: Account -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant px-2 py-1 tactile-press" href="#">
+<span class="material-symbols-outlined text-2xl" data-icon="person">person</span>
+<span class="font-caption-xs text-caption-xs mt-0.5">Account</span>
+</a>
+</nav>
+</body></html>

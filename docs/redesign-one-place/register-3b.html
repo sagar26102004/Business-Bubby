@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>List a Business - Step 3: Menu &amp; Catalog Item Intake</title>
+<!-- Google Fonts: Plus Jakarta Sans -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "primary-fixed": "#bceecf",
+            "outline": "#717973",
+            "on-tertiary": "#ffffff",
+            "outline-variant": "#c0c9c1",
+            "surface-bright": "#f0fdf1",
+            "tertiary": "#513500",
+            "surface-container-low": "#eaf7ec",
+            "on-tertiary-fixed-variant": "#614000",
+            "secondary-fixed-dim": "#ffb4a3",
+            "on-primary-fixed-variant": "#224f39",
+            "error": "#ba1a1a",
+            "on-tertiary-fixed": "#281800",
+            "tertiary-fixed-dim": "#ffba44",
+            "on-secondary-fixed": "#3d0600",
+            "on-primary": "#ffffff",
+            "surface-tint": "#3a674f",
+            "secondary-container": "#fd8367",
+            "on-secondary-container": "#721c09",
+            "primary": "#14422d",
+            "inverse-primary": "#a1d1b4",
+            "surface-dim": "#d0ddd2",
+            "inverse-surface": "#28332c",
+            "on-primary-fixed": "#002112",
+            "primary-fixed-dim": "#a1d1b4",
+            "on-secondary-fixed-variant": "#822714",
+            "surface-variant": "#d9e6db",
+            "surface": "#f0fdf1",
+            "secondary-fixed": "#ffdad2",
+            "on-primary-container": "#9fcfb2",
+            "surface-container-lowest": "#ffffff",
+            "on-error-container": "#93000a",
+            "on-surface-variant": "#414943",
+            "on-secondary": "#ffffff",
+            "on-surface": "#131e17",
+            "on-background": "#131e17",
+            "surface-container-high": "#dfebe0",
+            "secondary": "#a13e28",
+            "tertiary-container": "#6f4a00",
+            "surface-container": "#e4f1e6",
+            "on-error": "#ffffff",
+            "background": "#f0fdf1",
+            "inverse-on-surface": "#e7f4e9",
+            "primary-container": "#2d5a43",
+            "surface-container-highest": "#d9e6db",
+            "error-container": "#ffdad6",
+            "on-tertiary-container": "#ffb739",
+            "tertiary-fixed": "#ffddaf"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-xl": "1.5rem",
+            "margin": "1rem",
+            "space-xs": "0.25rem",
+            "gutter": "1rem",
+            "space-lg": "1rem",
+            "space-md": "0.75rem",
+            "space-sm": "0.5rem"
+          },
+          "fontFamily": {
+            "subheading-md": ["Plus Jakarta Sans"],
+            "body-medium": ["Plus Jakarta Sans"],
+            "heading-lg": ["Plus Jakarta Sans"],
+            "heading-lg-mobile": ["Plus Jakarta Sans"],
+            "label-sm": ["Plus Jakarta Sans"],
+            "body-base": ["Plus Jakarta Sans"],
+            "display-title-mobile": ["Plus Jakarta Sans"],
+            "caption-xs": ["Plus Jakarta Sans"],
+            "caption-bold": ["Plus Jakarta Sans"],
+            "button-label": ["Plus Jakarta Sans"],
+            "display-title": ["Plus Jakarta Sans"],
+            "label-bold": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "subheading-md": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "body-medium": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+            "heading-lg": ["22px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "heading-lg-mobile": ["20px", { "lineHeight": "26px", "fontWeight": "700" }],
+            "label-sm": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+            "body-base": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "display-title-mobile": ["24px", { "lineHeight": "30px", "fontWeight": "700" }],
+            "caption-xs": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "caption-bold": ["12px", { "lineHeight": "16px", "fontWeight": "700" }],
+            "button-label": ["15px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "display-title": ["28px", { "lineHeight": "34px", "fontWeight": "700" }],
+            "label-bold": ["14px", { "lineHeight": "20px", "fontWeight": "700" }]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    body {
+      background-color: #f0fdf1;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      color: #131e17;
+      -webkit-font-smoothing: antialiased;
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+    .material-symbols-outlined[data-weight="fill"] {
+      font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24;
+    }
+    /* Hide scrollbars for crisp horizontal filter pill tracks */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-background min-h-screen flex flex-col items-center justify-start text-on-surface antialiased selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- Mobile Screen Container -->
+<div class="w-full max-w-md min-h-screen flex flex-col bg-background relative shadow-sm pb-28">
+<!-- TOP APP BAR (Shared Component Anchor) -->
+<header class="bg-surface-container-low docked full-width top-0 sticky z-40">
+<div class="flex justify-between items-center w-full px-space-lg py-space-sm max-w-7xl mx-auto">
+<!-- Leading Action: Back (Task journey context) -->
+<button aria-label="Go Back" class="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-surface-container-highest active:opacity-75 transition-all active:scale-95 duration-150" type="button">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<!-- Step / Screen Title -->
+<div class="flex flex-col items-center text-center">
+<span class="text-caption-bold font-caption-bold text-primary-container tracking-wider uppercase">Step 3 of 4</span>
+<h1 class="text-heading-lg-mobile font-heading-lg-mobile text-primary tracking-tight">Add Menu &amp; Catalog</h1>
+</div>
+<!-- Trailing Action: Save Draft -->
+<button aria-label="Save draft" class="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-surface-container-highest active:opacity-75 transition-all active:scale-95 duration-150" title="Save Progress Draft" type="button">
+<span class="material-symbols-outlined" data-icon="bookmark">bookmark</span>
+</button>
+</div>
+<!-- Segmented Progress Bar indicator (Step 3 of 4 = 75%) -->
+<div class="w-full bg-surface-container h-1 px-4">
+<div class="bg-primary-container h-1 rounded-full w-3/4 transition-all duration-300"></div>
+</div>
+</header>
+<!-- MAIN SCROLLABLE CONTENT CANVAS -->
+<main class="px-4 py-4 flex-1 flex flex-col gap-4">
+<!-- Context Announcement Banner -->
+<section class="bg-surface-container-low border border-outline-variant/60 rounded-xl p-3.5 shadow-none">
+<div class="flex items-start gap-2.5">
+<div class="w-8 h-8 rounded-full bg-primary-fixed text-primary flex items-center justify-center shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-subheading-md" data-icon="storefront">storefront</span>
+</div>
+<div class="flex-1">
+<div class="flex flex-wrap items-center gap-1.5 mb-1">
+<span class="text-caption-bold font-caption-bold text-on-surface">Active blocks:</span>
+<span class="inline-flex items-center gap-1 bg-[#DCFCE7] text-[#15803D] text-[11px] font-bold px-2 py-0.5 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-[#15803D]"></span> Food &amp; Drinks
+              </span>
+<span class="inline-flex items-center gap-1 bg-surface-container text-on-surface-variant text-[11px] font-bold px-2 py-0.5 rounded-full border border-outline-variant/50">
+                Products for Sale
+              </span>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant leading-relaxed">
+              Add items for each building block you enabled, or import your entire catalog at once.
+            </p>
+</div>
+</div>
+</section>
+<!-- SECTION 1: Food Menu & Drinks Intake (Primary Expanded Module) -->
+<section class="bg-surface-container-lowest border border-outline-variant/70 rounded-xl p-4 shadow-none">
+<!-- Section Header -->
+<div class="flex items-center justify-between pb-3 border-b border-outline-variant/30">
+<div class="flex items-center gap-2">
+<span class="text-xl">☕</span>
+<div>
+<h2 class="text-subheading-md font-subheading-md text-on-surface tracking-tight">Food Menu &amp; Drinks Intake</h2>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">Configured for in-store &amp; online delivery</p>
+</div>
+</div>
+<span class="text-caption-bold font-caption-bold bg-surface-container px-2 py-1 rounded-md text-primary">
+            2 items added
+          </span>
+</div>
+<!-- Quick 1-Tap Bulk Action Row -->
+<div class="grid grid-cols-2 gap-2 mt-3.5">
+<button class="flex items-center justify-center gap-1.5 py-2.5 px-2 bg-surface-container-low hover:bg-surface-container text-primary rounded-xl border border-outline-variant/50 active:scale-95 transition-all" type="button">
+<span class="text-sm">📋</span>
+<span class="text-caption-bold font-caption-bold">1-Tap Paste Menu</span>
+</button>
+<button class="flex items-center justify-center gap-1.5 py-2.5 px-2 bg-surface-container-low hover:bg-surface-container text-primary rounded-xl border border-outline-variant/50 active:scale-95 transition-all" type="button">
+<span class="text-sm">📷</span>
+<span class="text-caption-bold font-caption-bold">Scan Menu Card</span>
+</button>
+</div>
+<!-- Category Filter Track / Section Tabs -->
+<div class="flex items-center gap-1.5 mt-3.5 overflow-x-auto no-scrollbar pb-1">
+<button class="bg-primary text-on-primary px-3 py-1.5 rounded-full text-caption-bold font-caption-bold shrink-0 shadow-none">
+            Beverages (4)
+          </button>
+<button class="bg-surface-container-low text-on-surface-variant border border-outline-variant/50 px-3 py-1.5 rounded-full text-caption-bold font-caption-bold shrink-0 hover:bg-surface-container">
+            Snacks &amp; Starters (6)
+          </button>
+<button class="bg-surface-container-low text-on-surface-variant border border-outline-variant/50 px-3 py-1.5 rounded-full text-caption-bold font-caption-bold shrink-0 hover:bg-surface-container">
+            Main Course
+          </button>
+<button class="bg-transparent text-primary border border-dashed border-outline px-2.5 py-1.5 rounded-full text-caption-bold font-caption-bold shrink-0 flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">add</span> New Section
+          </button>
+</div>
+<!-- Pre-filled Sample Items List (Stationery card style) -->
+<div class="space-y-2.5 mt-3">
+<!-- Item 1: Espresso Cold Brew -->
+<div class="p-3 rounded-lg border border-outline-variant/60 bg-surface-container-low/30 hover:border-primary-container transition-colors">
+<div class="flex items-start justify-between">
+<div class="flex-1 pr-2">
+<div class="flex items-center gap-1.5">
+<!-- Veg indicator badge (green border with green dot) -->
+<span class="w-3.5 h-3.5 border border-green-700 p-0.5 rounded-sm flex items-center justify-center shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-green-700"></span>
+</span>
+<span class="text-body-medium font-subheading-md text-on-surface">Espresso Cold Brew</span>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-0.5">Slow-steeped Arabica with oat milk option</p>
+<div class="flex items-center gap-3 mt-1.5">
+<span class="text-label-bold font-label-bold text-primary">₹140</span>
+<span class="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Available Now</span>
+</div>
+</div>
+<!-- Quick Item Controls -->
+<div class="flex items-center gap-1">
+<button aria-label="Edit item" class="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-primary hover:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+<button aria-label="Delete item" class="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-error hover:bg-error-container/30" type="button">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Item 2: Artisan Paneer Sourdough Melt -->
+<div class="p-3 rounded-lg border border-outline-variant/60 bg-surface-container-low/30 hover:border-primary-container transition-colors">
+<div class="flex items-start justify-between">
+<div class="flex-1 pr-2">
+<div class="flex items-center gap-1.5">
+<span class="w-3.5 h-3.5 border border-green-700 p-0.5 rounded-sm flex items-center justify-center shrink-0">
+<span class="w-1.5 h-1.5 rounded-full bg-green-700"></span>
+</span>
+<span class="text-body-medium font-subheading-md text-on-surface">Artisan Paneer Sourdough Melt</span>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-0.5">Grilled sourdough with smoked paprika paneer</p>
+<div class="flex items-center gap-3 mt-1.5">
+<span class="text-label-bold font-label-bold text-primary">₹220</span>
+<span class="text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Available Now</span>
+</div>
+</div>
+<!-- Quick Item Controls -->
+<div class="flex items-center gap-1">
+<button aria-label="Edit item" class="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-primary hover:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-sm">edit</span>
+</button>
+<button aria-label="Delete item" class="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-error hover:bg-error-container/30" type="button">
+<span class="material-symbols-outlined text-sm">delete</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Inline Quick Add Drawer / Accordion Trigger -->
+<div class="mt-3.5 border-t border-dashed border-outline-variant/70 pt-3">
+<button class="w-full py-2.5 px-3 bg-surface-container-low hover:bg-surface-container text-primary-container font-label-bold text-label-sm rounded-xl border border-outline-variant/60 flex items-center justify-center gap-1.5 transition-all" type="button">
+<span class="material-symbols-outlined text-lg">add_circle</span>
+<span>+ Add Dish / Beverage</span>
+</button>
+</div>
+</section>
+<!-- SECTION 2: Products & Goods Catalog Intake -->
+<section class="bg-surface-container-lowest border border-outline-variant/70 rounded-xl p-4 shadow-none">
+<div class="flex items-center justify-between pb-3 border-b border-outline-variant/30">
+<div class="flex items-center gap-2">
+<span class="text-xl">📦</span>
+<div>
+<h2 class="text-subheading-md font-subheading-md text-on-surface tracking-tight">Products &amp; Goods Catalog Intake</h2>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">Packaged items, inventory &amp; retail SKUs</p>
+</div>
+</div>
+<span class="text-caption-bold font-caption-bold bg-surface-container px-2 py-1 rounded-md text-primary">
+            1 item added
+          </span>
+</div>
+<!-- Bulk Action Button -->
+<div class="mt-3.5">
+<button class="w-full flex items-center justify-center gap-2 py-2 px-3 bg-surface-container-low hover:bg-surface-container text-on-surface-variant rounded-xl border border-outline-variant/50 text-label-sm font-label-sm active:scale-95 transition-all" type="button">
+<span>📋</span>
+<span>Bulk Paste Product List (Text or CSV)</span>
+</button>
+</div>
+<!-- Pre-configured product sample item -->
+<div class="p-3 rounded-lg border border-outline-variant/60 bg-surface-container-low/30 mt-3 flex items-center justify-between">
+<div>
+<div class="flex items-center gap-2">
+<span class="text-body-medium font-subheading-md text-on-surface">Castrol Activ 4T 20W-40 (1L)</span>
+<span class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.2 rounded bg-surface-container-highest text-on-surface-variant">SKU-402</span>
+</div>
+<div class="flex items-center gap-3 mt-1">
+<span class="text-label-bold font-label-bold text-primary">₹380</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">In Stock · 24 units</span>
+</div>
+</div>
+<button class="w-8 h-8 rounded-full flex items-center justify-center text-outline hover:text-primary" type="button">
+<span class="material-symbols-outlined text-sm">more_vert</span>
+</button>
+</div>
+<!-- Add New Product Button -->
+<button class="w-full mt-3 py-2 px-3 bg-surface-container-low hover:bg-surface-container text-primary-container font-label-bold text-label-sm rounded-xl border border-outline-variant/60 flex items-center justify-center gap-1.5 transition-all" type="button">
+<span class="material-symbols-outlined text-base">add</span>
+<span>+ Add New Product / Stock Item</span>
+</button>
+</section>
+<!-- SECTION 3: Services & Rate Cards (Collapsed Module) -->
+<section class="bg-surface-container-lowest border border-outline-variant/70 rounded-xl p-3.5 shadow-none flex items-center justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant">
+<span class="material-symbols-outlined text-xl">handyman</span>
+</div>
+<div>
+<h3 class="text-label-bold font-label-bold text-on-surface">Services &amp; Rate Cards</h3>
+<p class="text-caption-xs font-caption-xs text-outline">3 services configured (Haircut, Shave, Facial)</p>
+</div>
+</div>
+<button class="text-caption-bold font-caption-bold text-primary flex items-center gap-0.5 hover:underline" type="button">
+<span>+ Add</span>
+<span class="material-symbols-outlined text-base">expand_more</span>
+</button>
+</section>
+<!-- Reassurance Micro-banner -->
+<div class="flex items-center gap-2 px-2 py-1 text-center justify-center">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle">check_circle</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">
+          Items populate directly into your public storefront and Table POS / Orders desk.
+        </span>
+</div>
+</main>
+<!-- STICKY BOTTOM TASK BAR (Linear Onboarding Navigation) -->
+<!-- Prohibits bottom navigation shell due to linear onboarding flow with Back and Save actions -->
+<div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto z-40 bg-surface-container-low/95 backdrop-blur-sm border-t border-outline-variant px-4 py-3 flex items-center gap-3">
+<!-- Back Pill Button -->
+<button class="flex-1 py-3 px-4 rounded-full bg-surface-container text-on-surface text-button-label font-button-label text-center border border-outline-variant/60 hover:bg-surface-container-high active:scale-95 transition-all" type="button">
+        Back
+      </button>
+<!-- Save & Continue Pill (Primary Conversion) -->
+<button class="flex-[2] py-3 px-5 rounded-full bg-primary-container text-on-primary text-button-label font-button-label flex items-center justify-center gap-2 shadow-sm hover:opacity-95 active:scale-95 transition-all" type="button">
+<span>Save &amp; Continue</span>
+<span class="material-symbols-outlined text-base">arrow_forward</span>
+</button>
+</div>
+</div>
+</body></html>

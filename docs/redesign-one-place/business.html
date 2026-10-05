@@ -1,0 +1,796 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>Green Valley Artisan Market &amp; Cafe - Neighborhood Market</title>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Plus Jakarta Sans Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect">
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-tertiary-fixed": "#281800",
+            "inverse-surface": "#28332c",
+            "error-container": "#ffdad6",
+            "secondary-container": "#fd8367",
+            "on-secondary-fixed-variant": "#822714",
+            "on-secondary-container": "#721c09",
+            "primary-fixed-dim": "#a1d1b4",
+            "on-error-container": "#93000a",
+            "inverse-primary": "#a1d1b4",
+            "inverse-on-surface": "#e7f4e9",
+            "outline": "#717973",
+            "on-surface": "#131e17",
+            "surface-bright": "#f0fdf1",
+            "on-primary-container": "#9fcfb2",
+            "on-secondary": "#ffffff",
+            "primary-container": "#2d5a43",
+            "surface-dim": "#d0ddd2",
+            "on-background": "#131e17",
+            "secondary-fixed-dim": "#ffb4a3",
+            "surface-variant": "#d9e6db",
+            "secondary-fixed": "#ffdad2",
+            "on-error": "#ffffff",
+            "surface-container-highest": "#d9e6db",
+            "secondary": "#a13e28",
+            "background": "#f0fdf1",
+            "surface-tint": "#3a674f",
+            "error": "#ba1a1a",
+            "tertiary-container": "#6f4a00",
+            "on-tertiary": "#ffffff",
+            "tertiary": "#513500",
+            "on-tertiary-fixed-variant": "#614000",
+            "on-tertiary-container": "#ffb739",
+            "on-secondary-fixed": "#3d0600",
+            "primary": "#14422d",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-high": "#dfebe0",
+            "primary-fixed": "#bceecf",
+            "on-primary": "#ffffff",
+            "tertiary-fixed-dim": "#ffba44",
+            "on-primary-fixed-variant": "#224f39",
+            "surface-container-low": "#eaf7ec",
+            "tertiary-fixed": "#ffddaf",
+            "on-primary-fixed": "#002112",
+            "on-surface-variant": "#414943",
+            "surface": "#f0fdf1",
+            "surface-container": "#e4f1e6",
+            "outline-variant": "#c0c9c1"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-sm": "0.5rem",
+            "gutter": "1rem",
+            "space-xs": "0.25rem",
+            "space-md": "0.75rem",
+            "margin": "1rem",
+            "space-xl": "1.5rem",
+            "space-lg": "1rem"
+          },
+          "fontFamily": {
+            "heading-lg-mobile": ["Plus Jakarta Sans"],
+            "display-title-mobile": ["Plus Jakarta Sans"],
+            "caption-bold": ["Plus Jakarta Sans"],
+            "label-bold": ["Plus Jakarta Sans"],
+            "caption-xs": ["Plus Jakarta Sans"],
+            "subheading-md": ["Plus Jakarta Sans"],
+            "label-sm": ["Plus Jakarta Sans"],
+            "body-medium": ["Plus Jakarta Sans"],
+            "body-base": ["Plus Jakarta Sans"],
+            "button-label": ["Plus Jakarta Sans"],
+            "heading-lg": ["Plus Jakarta Sans"],
+            "display-title": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "heading-lg-mobile": ["20px", {"lineHeight": "26px", "fontWeight": "700"}],
+            "display-title-mobile": ["24px", {"lineHeight": "30px", "fontWeight": "700"}],
+            "caption-bold": ["12px", {"lineHeight": "16px", "fontWeight": "700"}],
+            "label-bold": ["14px", {"lineHeight": "20px", "fontWeight": "700"}],
+            "caption-xs": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+            "subheading-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+            "label-sm": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+            "body-medium": ["16px", {"lineHeight": "24px", "fontWeight": "500"}],
+            "body-base": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+            "button-label": ["15px", {"lineHeight": "20px", "fontWeight": "700"}],
+            "heading-lg": ["22px", {"lineHeight": "28px", "fontWeight": "700"}],
+            "display-title": ["28px", {"lineHeight": "34px", "fontWeight": "700"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .material-symbols-outlined.fill-icon {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body-base antialiased min-h-screen pb-32 selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- 1. Top Bar (Shared Component Anchored) -->
+<header class="bg-surface-container-low dark:bg-surface-container docked full-width top-0 sticky z-40 border-b border-outline-variant dark:border-outline flat no shadows">
+<div class="flex justify-between items-center w-full px-space-lg py-space-sm max-w-7xl mx-auto">
+<div class="flex items-center gap-space-md">
+<button aria-label="Go back" class="p-space-xs rounded-full hover:bg-surface-container-highest active:scale-95 transition-all text-primary dark:text-inverse-primary flex items-center justify-center" type="button">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<span class="text-heading-lg-mobile font-heading-lg-mobile text-primary dark:text-inverse-primary tracking-tight">Neighborhood Market</span>
+</div>
+<div class="flex items-center gap-space-xs">
+<button aria-label="Share" class="p-space-xs rounded-full hover:bg-surface-container-highest active:scale-95 transition-all text-on-surface-variant flex items-center justify-center" type="button">
+<span class="material-symbols-outlined text-[22px]">share</span>
+</button>
+<button aria-label="Save listing" class="p-space-xs rounded-full hover:bg-surface-container-highest active:scale-95 transition-all text-primary dark:text-inverse-primary flex items-center justify-center" type="button">
+<span class="material-symbols-outlined fill-icon text-[24px]">bookmark</span>
+</button>
+</div>
+</div>
+</header>
+<!-- Main Container -->
+<main class="max-w-4xl mx-auto px-margin md:px-space-xl space-y-space-xl pt-space-md">
+<!-- 2. Hero Media Section -->
+<section class="relative w-full rounded-2xl overflow-hidden border border-outline-variant bg-surface-container-lowest shadow-sm">
+<div class="relative h-64 md:h-80 w-full overflow-hidden">
+<img class="w-full h-full object-cover transform hover:scale-105 transition-transform duration-700 ease-out" data-alt="A warm, sunlit artisanal neighborhood cafe and organic grocery store interior featuring rustic wooden shelving, lush indoor trailing plants, unbleached linen accents, and a polished espresso bar illuminated by golden morning light with deep sage green details." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDVRnZLpxwM5wiGX86v4DxnbNKcY-QUlDCGmgxByYADuHmxaXpgsCcDeOaa3xDLTp_Qo81ejbookYeAjucP_UhW1-stFDMbe2VW8fqTkmeSnBcc3zNernh0WVS01lY5mDGPb7zrU7K9KtK3mb4-W8IwerFLKngWunfOIRl5G6M4ScptL6k-pIMo-2HT_aYU3J2zLQIS-PvPj9CSvsTpnobp6sr9exicUN-Vkg4ULLriqH7AhkJ01QqI">
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent"></div>
+<!-- Overlays -->
+<div class="absolute top-space-md left-space-md flex flex-wrap items-center gap-space-xs">
+<!-- Operational Status Chip -->
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-caption-bold font-caption-bold border border-emerald-300 backdrop-blur-md">
+<span class="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+<span class="">Open until 10:00 PM</span>
+</div>
+<!-- Distance Badge -->
+<div class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-surface-container-lowest/90 backdrop-blur-md text-on-surface text-caption-bold font-caption-bold border border-outline-variant">
+<span class="material-symbols-outlined text-[16px] text-primary">near_me</span>
+<span class="">450m away</span>
+</div>
+</div>
+<!-- Photo Count Badge -->
+<div class="absolute bottom-space-md right-space-md">
+<button class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-inverse-surface/80 text-inverse-on-surface backdrop-blur-md text-caption-bold font-caption-bold hover:bg-inverse-surface transition-all active:scale-95" type="button">
+<span class="material-symbols-outlined text-[16px]">photo_library</span>
+<span class="">12 Photos</span>
+</button>
+</div>
+</div>
+</section>
+<!-- 3. Business Identity Block -->
+<section class="bg-surface-container-lowest rounded-2xl p-space-lg md:p-space-xl border border-outline-variant shadow-sm space-y-space-md">
+<div class="flex flex-col md:flex-row md:items-start justify-between gap-space-sm">
+<div class="space-y-space-xs">
+<div class="flex items-center gap-2">
+<h1 class="text-display-title-mobile md:text-display-title font-display-title-mobile md:font-display-title text-on-surface tracking-tight">
+              Green Valley Artisan Market &amp; Cafe
+            </h1>
+<span class="material-symbols-outlined fill-icon text-primary text-[24px]" title="Verified Local Merchant">verified</span>
+</div>
+<p class="text-body-medium font-body-medium text-on-surface-variant">
+            Handcrafted treats, fresh organic pantry &amp; home barista services
+          </p>
+</div>
+</div>
+<!-- Rating & Categories Row -->
+<div class="flex flex-wrap items-center gap-y-2 gap-x-space-md pt-space-xs border-t border-surface-container-high">
+<div class="flex items-center gap-1.5 bg-tertiary-fixed/30 px-2.5 py-1 rounded-full">
+<span class="material-symbols-outlined fill-icon text-tertiary-container text-[18px]">star</span>
+<span class="text-caption-bold font-caption-bold text-on-tertiary-fixed">4.8</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">(240 reviews)</span>
+</div>
+<span class="inline-flex items-center gap-1 text-caption-bold font-caption-bold text-primary bg-surface-container-low px-2.5 py-1 rounded-full border border-outline-variant">
+<span class="material-symbols-outlined text-[16px]">verified_user</span>
+          Verified Neighbor Merchant
+        </span>
+<div class="flex items-center gap-1.5">
+<span class="text-caption-xs font-caption-xs text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-md font-medium">#Cafe</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-md font-medium">#OrganicGrocery</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-md font-medium">#Service</span>
+</div>
+</div>
+<!-- Address / Location Line -->
+<div class="flex items-start gap-2 pt-space-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">location_on</span>
+<div class="text-label-sm font-label-sm">
+<span class="">Stall 4B, Central Artisan Arcade, 14th Elmway Lane • </span>
+<a class="text-primary font-bold hover:underline inline-flex items-center gap-0.5" href="#map">
+            Get Directions
+            <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</a>
+</div>
+</div>
+</section>
+<!-- 4. Universal Action Bar (Standardized 4-Action Grid) -->
+<section class="grid grid-cols-2 sm:grid-cols-4 gap-space-sm">
+<!-- Call Button -->
+<button class="flex flex-col sm:flex-row items-center justify-center gap-2 p-3.5 rounded-xl border border-primary-container bg-surface-container-lowest text-primary hover:bg-surface-container-low active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[22px]">phone_in_talk</span>
+<span class="text-label-bold font-label-bold">Call Store</span>
+</button>
+<!-- Chat Button -->
+<button class="flex flex-col sm:flex-row items-center justify-center gap-2 p-3.5 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container-low active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[22px] text-primary">chat</span>
+<span class="text-label-bold font-label-bold">Chat</span>
+</button>
+<!-- Book Appointment Button -->
+<button class="flex flex-col sm:flex-row items-center justify-center gap-2 p-3.5 rounded-xl bg-primary text-on-primary shadow-sm hover:bg-primary/90 active:scale-95 transition-all col-span-1" type="button">
+<span class="material-symbols-outlined fill-icon text-[22px]">event_available</span>
+<span class="text-label-bold font-label-bold">Book Slot</span>
+</button>
+<!-- Share / Directions Button -->
+<button class="flex flex-col sm:flex-row items-center justify-center gap-2 p-3.5 rounded-xl border border-outline-variant bg-surface-container-lowest text-on-surface hover:bg-surface-container-low active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-[22px] text-primary">directions</span>
+<span class="text-label-bold font-label-bold">Route</span>
+</button>
+</section><section class="bg-surface-container-lowest rounded-2xl p-space-lg md:p-space-xl border border-outline-variant shadow-sm space-y-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="text-2xl">🏷️</span>
+<h2 class="text-heading-lg-mobile md:text-heading-lg font-heading-lg-mobile md:font-heading-lg text-on-surface">Special Offers &amp; Combos</h2>
+</div>
+<span class="text-caption-bold font-caption-bold text-primary bg-surface-container-low px-2.5 py-1 rounded-full border border-outline-variant">2 Active Offers</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<div class="p-space-md rounded-xl border border-dashed border-primary/50 bg-surface-bright flex flex-col justify-between space-y-space-sm relative overflow-hidden">
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between gap-2">
+<span class="text-caption-bold font-caption-bold text-secondary bg-secondary-fixed/50 px-2 py-0.5 rounded-full">Supper Combo / Festive Special</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant font-medium">Today only</span>
+</div>
+<h3 class="text-subheading-md font-subheading-md text-on-surface pt-1">Flat 20% Off on Artisan Breads &amp; Bakes</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">Valid on fresh bakery and artisanal whole sourdough orders above ₹399.</p>
+</div>
+<div class="flex items-center justify-between pt-space-xs border-t border-surface-container-high">
+<div class="inline-flex items-center gap-1.5 bg-surface-container-low px-2.5 py-1 rounded-md border border-outline-variant text-caption-bold font-caption-bold text-primary font-mono">NEIGHBOR20</div>
+<button class="px-3.5 py-1 rounded-full bg-primary text-on-primary text-caption-bold font-caption-bold hover:bg-primary/90 active:scale-95 transition-all" type="button">Claim Offer</button>
+</div>
+</div>
+<div class="p-space-md rounded-xl border border-outline-variant bg-surface-bright flex flex-col justify-between space-y-space-sm relative overflow-hidden">
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between gap-2">
+<span class="text-caption-bold font-caption-bold text-primary bg-primary-fixed/40 px-2 py-0.5 rounded-full">Free Delivery / Coffee Tasting</span>
+<span class="text-caption-xs font-caption-xs text-emerald-800 font-bold bg-emerald-100 px-2 py-0.5 rounded-full">Auto-applied</span>
+</div>
+<h3 class="text-subheading-md font-subheading-md text-on-surface pt-1">Complimentary Cold Brew with Gourmet Sandwich</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">Get an 18-hour single origin cold brew free with any artisanal savory melt or sandwich combo.</p>
+</div>
+<div class="flex items-center justify-between pt-space-xs border-t border-surface-container-high">
+<span class="text-caption-xs font-caption-xs text-on-surface-variant italic">Applies automatically at checkout</span>
+<button class="px-3.5 py-1 rounded-full border border-primary text-primary hover:bg-primary hover:text-on-primary text-caption-bold font-caption-bold active:scale-95 transition-all" type="button">View Combos</button>
+</div>
+</div>
+</div>
+</section>
+<!-- 5. Offering Switcher Navigation Tabs (Sticky Segment Bar) -->
+<div class="sticky top-[57px] z-30 bg-surface/95 backdrop-blur-md py-space-xs -mx-margin px-margin md:mx-0 md:px-0">
+<div class="flex items-center gap-space-xs overflow-x-auto no-scrollbar py-1">
+<a class="shrink-0 px-4 py-2 rounded-full bg-primary text-on-primary text-label-bold font-label-bold shadow-sm transition-all" href="#menu-drinks">
+          Menu &amp; Drinks (48)
+        </a>
+<a class="shrink-0 px-4 py-2 rounded-full bg-surface-container-lowest text-on-surface hover:bg-surface-container-high border border-outline-variant text-label-bold font-label-bold transition-all" href="#store-products">
+          Store Products (120)
+        </a>
+<a class="shrink-0 px-4 py-2 rounded-full bg-surface-container-lowest text-on-surface hover:bg-surface-container-high border border-outline-variant text-label-bold font-label-bold transition-all" href="#services-care">
+          Services &amp; Care (6)
+        </a>
+<a class="shrink-0 px-4 py-2 rounded-full bg-surface-container-lowest text-on-surface hover:bg-surface-container-high border border-outline-variant text-label-bold font-label-bold transition-all" href="#reviews">
+          Reviews &amp; Feedback
+        </a>
+</div>
+</div>
+<!-- 6. Organized Offering Catalog -->
+<div class="space-y-space-xl">
+<!-- CATEGORY 1: Beverages & Drinks -->
+<section class="bg-surface-container-lowest rounded-2xl p-space-lg md:p-space-xl border border-outline-variant shadow-sm space-y-space-lg" id="menu-drinks">
+<div class="flex items-center justify-between border-b border-surface-container-high pb-space-sm">
+<div class="flex items-center gap-2">
+<span class="text-2xl">☕</span>
+<h2 class="text-heading-lg-mobile md:text-heading-lg font-heading-lg-mobile md:font-heading-lg text-on-surface">
+              Beverages &amp; Drinks <span class="text-on-surface-variant font-normal text-subheading-md">(24)</span>
+</h2>
+</div>
+<button class="p-1 rounded-full hover:bg-surface-container text-on-surface-variant" type="button">
+<span class="material-symbols-outlined text-[24px]">expand_less</span>
+</button>
+</div>
+<!-- Subcategory Pills Filter -->
+<div class="flex items-center gap-space-xs overflow-x-auto no-scrollbar pb-1">
+<button class="shrink-0 px-3.5 py-1 rounded-full bg-primary-container text-on-primary-container text-caption-bold font-caption-bold" type="button">
+            All Beverages
+          </button>
+<button class="shrink-0 px-3.5 py-1 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high text-caption-bold font-caption-bold" type="button">
+            Cold Brews &amp; Iced
+          </button>
+<button class="shrink-0 px-3.5 py-1 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high text-caption-bold font-caption-bold" type="button">
+            Hot Coffees
+          </button>
+<button class="shrink-0 px-3.5 py-1 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high text-caption-bold font-caption-bold" type="button">
+            Artisan Teas
+          </button>
+<button class="shrink-0 px-3.5 py-1 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high text-caption-bold font-caption-bold" type="button">
+            Fresh Juices
+          </button>
+</div>
+<!-- Items Bento / Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<!-- Item 1 -->
+<div class="p-space-md rounded-xl border border-outline-variant bg-surface-bright flex justify-between gap-space-md hover:border-primary transition-all">
+<div class="space-y-space-xs flex-1">
+<div class="flex items-center gap-1.5">
+<span class="w-3.5 h-3.5 border border-emerald-600 flex items-center justify-center p-0.5 rounded-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+</span>
+<span class="text-caption-bold font-caption-bold text-emerald-800">Vegetarian</span>
+</div>
+<h3 class="text-subheading-md font-subheading-md text-on-surface">Vanilla Cold Foam Cold Brew</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant line-clamp-2">
+                18-hour steeped single-origin Chikmagalur beans topped with whipped Madagascar vanilla cream.
+              </p>
+<div class="text-label-bold font-label-bold text-primary pt-1">₹180</div>
+</div>
+<div class="flex flex-col items-center justify-between">
+<div class="w-20 h-20 rounded-lg overflow-hidden border border-outline-variant bg-surface-container shrink-0">
+<img class="w-full h-full object-cover" data-alt="A glass of refreshing layered iced cold brew coffee topped with thick frothy vanilla cold foam, set against an unbleached linen surface with rustic coffee beans scattered gently around in warm morning light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA96RrHKWG0nAWXWkGX7wBZ0P53BRqOl7G0AWQE2kUz9M7dW8XNuiBfL6k5JgmJ5seE6f_1bKzqMKmXow9QVMkfdrg8cuvf9rv9kBqDJfl3KmH17lxS_9xzu3DS_XZ_LWbWXUxT0cEWtiixVnf58CfeZOvxeo_Nlxbb0Kq6gp6i04i4h8HrSdo9lMjmFWKmo14FXCaYaOFn29JCrqS-gwmy2BpfiNJpyiGIu9rYqewRtHmerIdfohYP">
+</div>
+<button class="w-20 mt-2 py-1 px-2 rounded-full border border-primary text-primary hover:bg-primary hover:text-on-primary text-caption-bold font-caption-bold active:scale-95 transition-all text-center" type="button">
+                + Add
+              </button>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="p-space-md rounded-xl border border-outline-variant bg-surface-bright flex justify-between gap-space-md hover:border-primary transition-all">
+<div class="space-y-space-xs flex-1">
+<div class="flex items-center gap-1.5">
+<span class="w-3.5 h-3.5 border border-emerald-600 flex items-center justify-center p-0.5 rounded-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+</span>
+<span class="text-caption-bold font-caption-bold text-emerald-800">Vegetarian</span>
+</div>
+<h3 class="text-subheading-md font-subheading-md text-on-surface">Estate Cortado</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant line-clamp-2">
+                Equal parts velvety steamed farm-fresh A2 milk and double shot dark roast espresso.
+              </p>
+<div class="text-label-bold font-label-bold text-primary pt-1">₹150</div>
+</div>
+<div class="flex flex-col items-center justify-between">
+<div class="w-20 h-20 rounded-lg overflow-hidden border border-outline-variant bg-surface-container shrink-0">
+<img class="w-full h-full object-cover" data-alt="A small textured ceramic glass filled with a double shot cortado featuring intricate latte art on a smooth wooden tray with earthy sage tones and gentle morning ambient illumination." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCFUeOH2C1NoaluZjkSGdds8DBssEfJTLANNS_cUXfIGUuCZIA9eZJND8RB7O_qKABc4RL0_9_p1tGuP-QfhzT2ojPU0XY6IKiFBGpIgFyAkSRHatxil6tC2eBxPUx4Q-9ZXDSyNaVOH-V2TOktqJmBZXgHbK6cPdY82_-JwrK6oyRQ2WFS5w43gKXYyrkwbTNXYES3ew4Zh3z9_CQHalG1JIV4g4h8hdFiY3spUiTtjKZqe-Gw-jLu">
+</div>
+<!-- Added Counter State -->
+<div class="w-20 mt-2 py-0.5 px-1 rounded-full bg-primary text-on-primary flex items-center justify-between text-caption-bold font-caption-bold">
+<button class="px-1 text-on-primary hover:opacity-75" type="button">-</button>
+<span class="">1</span>
+<button class="px-1 text-on-primary hover:opacity-75" type="button">+</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CATEGORY 2: Fresh Bakery & Savouries -->
+<section class="bg-surface-container-lowest rounded-2xl p-space-lg md:p-space-xl border border-outline-variant shadow-sm space-y-space-lg">
+<div class="flex items-center justify-between border-b border-surface-container-high pb-space-sm">
+<div class="flex items-center gap-2">
+<span class="text-2xl">🥐</span>
+<h2 class="text-heading-lg-mobile md:text-heading-lg font-heading-lg-mobile md:font-heading-lg text-on-surface">
+              Fresh Bakery &amp; Savouries <span class="text-on-surface-variant font-normal text-subheading-md">(16)</span>
+</h2>
+</div>
+<button class="p-1 rounded-full hover:bg-surface-container text-on-surface-variant" type="button">
+<span class="material-symbols-outlined text-[24px]">expand_less</span>
+</button>
+</div>
+<!-- Nested Sub-category chips -->
+<div class="flex items-center gap-space-xs overflow-x-auto no-scrollbar pb-1">
+<button class="shrink-0 px-3.5 py-1 rounded-full bg-primary-container text-on-primary-container text-caption-bold font-caption-bold" type="button">
+            All Baked Goods
+          </button>
+<button class="shrink-0 px-3.5 py-1 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high text-caption-bold font-caption-bold" type="button">
+            Sourdough Breads
+          </button>
+<button class="shrink-0 px-3.5 py-1 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high text-caption-bold font-caption-bold" type="button">
+            Croissants
+          </button>
+<button class="shrink-0 px-3.5 py-1 rounded-full bg-surface-container text-on-surface-variant hover:bg-surface-container-high text-caption-bold font-caption-bold" type="button">
+            Savory Melts
+          </button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<div class="p-space-md rounded-xl border border-outline-variant bg-surface-bright flex justify-between gap-space-md hover:border-primary transition-all">
+<div class="space-y-space-xs flex-1">
+<div class="flex items-center gap-1.5">
+<span class="w-3.5 h-3.5 border border-emerald-600 flex items-center justify-center p-0.5 rounded-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+</span>
+<span class="text-caption-bold font-caption-bold text-emerald-800">Vegetarian</span>
+</div>
+<h3 class="text-subheading-md font-subheading-md text-on-surface">Country Sourdough Loaf (Whole)</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant line-clamp-2">
+                Naturally fermented for 36 hours with stone-ground wild wheat flour and flaky sea salt.
+              </p>
+<div class="text-label-bold font-label-bold text-primary pt-1">₹210</div>
+</div>
+<div class="flex flex-col items-center justify-between">
+<div class="w-20 h-20 rounded-lg overflow-hidden border border-outline-variant bg-surface-container shrink-0">
+<img class="w-full h-full object-cover" data-alt="A rustic golden-crusted artisan sourdough bread loaf sliced cleanly on a dark wooden breadboard with crumbs and unbleached baker's linen in natural earthy sunlight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2pEbH5bIkWzu9UfMb9vP7cpw5un14IB0HKinkHBLTFr_pamoboi68VUFhk53uqsLZAekEP0Lbq72CcEBOcaWcgb5yfe-81nQoIFg-h0juJ0msSUQleDM562c2PcfZpfaCRFsvQNjAcHYPZo-IJ_dwWar7vnS13YHb1KU-Uwp6fJFYNvn4SuHTK-Y1L7g5UpLQOnOay7ZDg7F0q3n9aGAzAeZ8mbiGPiiXz7oRdqppphgoLzV3-Lnj">
+</div>
+<!-- Added Counter State -->
+<div class="w-20 mt-2 py-0.5 px-1 rounded-full bg-primary text-on-primary flex items-center justify-between text-caption-bold font-caption-bold">
+<button class="px-1 text-on-primary hover:opacity-75" type="button">-</button>
+<span class="">1</span>
+<button class="px-1 text-on-primary hover:opacity-75" type="button">+</button>
+</div>
+</div>
+</div>
+<div class="p-space-md rounded-xl border border-outline-variant bg-surface-bright flex justify-between gap-space-md hover:border-primary transition-all">
+<div class="space-y-space-xs flex-1">
+<div class="flex items-center gap-1.5">
+<span class="w-3.5 h-3.5 border border-emerald-600 flex items-center justify-center p-0.5 rounded-sm">
+<span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+</span>
+<span class="text-caption-bold font-caption-bold text-emerald-800">Vegetarian</span>
+</div>
+<h3 class="text-subheading-md font-subheading-md text-on-surface">Almond Butter Frangipane</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant line-clamp-2">
+                Twice-baked butter croissant loaded with roasted almond cream and toasted nut slivers.
+              </p>
+<div class="text-label-bold font-label-bold text-primary pt-1">₹160</div>
+</div>
+<div class="flex flex-col items-center justify-between">
+<div class="w-20 h-20 rounded-lg overflow-hidden border border-outline-variant bg-surface-container shrink-0">
+<img class="w-full h-full object-cover" data-alt="A flaky almond croissant dusted with powdered sugar and toasted shaved almonds placed on vintage parchment paper in soft cafe daylight." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCo9QbDqhT_e54uvtqEwVj99YiMJ9WnLefe020fcZ3ozhR10vHDSlRHW2abQIqz4BMhsIrsp6z0yTl3Llp7X96junDncXn8HXDANbRV8pkqt9_kfGROhec90FHmRXJjsiAYsCoOyVVHXnswQ7ZBMLbVGjQmMpnxyyOlKPh6T-lxuhNlk3VKrv8s54rRVPTnptdAlePv-uF8f4dAQNBt4rhSwv1lwwzRZ-nB3RfxG_YXkS11u2CgUrhx">
+</div>
+<button class="w-20 mt-2 py-1 px-2 rounded-full border border-primary text-primary hover:bg-primary hover:text-on-primary text-caption-bold font-caption-bold active:scale-95 transition-all text-center" type="button">
+                + Add
+              </button>
+</div>
+</div>
+</div>
+</section>
+<!-- CATEGORY 3: Store Products (High-Volume Pantry & Staples) -->
+<section class="bg-surface-container-lowest rounded-2xl p-space-lg md:p-space-xl border border-outline-variant shadow-sm space-y-space-lg" id="store-products">
+<div class="flex items-center justify-between border-b border-surface-container-high pb-space-sm">
+<div class="flex items-center gap-2">
+<span class="text-2xl">🌾</span>
+<div>
+<h2 class="text-heading-lg-mobile md:text-heading-lg font-heading-lg-mobile md:font-heading-lg text-on-surface">
+                Store Products &amp; Pantry
+              </h2>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">Locally sourced farm goods and artisan dry pantry</p>
+</div>
+</div>
+<span class="text-label-bold font-label-bold text-primary bg-surface-container-low px-3 py-1 rounded-full border border-outline-variant">
+            120 Items
+          </span>
+</div>
+<!-- Nested Organization Bento Cards -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<!-- Card A: Organic Staples -->
+<div class="rounded-xl border border-outline-variant p-space-md bg-surface-bright space-y-space-sm">
+<div class="flex items-center justify-between">
+<h3 class="text-label-bold font-label-bold text-on-surface">Organic Staples</h3>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">32 items</span>
+</div>
+<div class="space-y-space-xs divide-y divide-surface-container">
+<div class="pt-space-xs flex items-center justify-between">
+<div>
+<div class="text-label-sm font-label-sm text-on-surface">Wild Khapli Wheat</div>
+<div class="text-caption-xs font-caption-xs text-on-surface-variant">1 kg • ₹140</div>
+</div>
+<button class="px-2.5 py-1 text-caption-bold font-caption-bold rounded-lg border border-primary text-primary hover:bg-primary hover:text-on-primary transition-all" type="button">
+                  + Add
+                </button>
+</div>
+<div class="pt-space-xs flex items-center justify-between">
+<div>
+<div class="text-label-sm font-label-sm text-on-surface">Unpolished Brown Rice</div>
+<div class="text-caption-xs font-caption-xs text-on-surface-variant">1 kg • ₹115</div>
+</div>
+<button class="px-2.5 py-1 text-caption-bold font-caption-bold rounded-lg border border-primary text-primary hover:bg-primary hover:text-on-primary transition-all" type="button">
+                  + Add
+                </button>
+</div>
+</div>
+</div>
+<!-- Card B: Pantry & Spices -->
+<div class="rounded-xl border border-outline-variant p-space-md bg-surface-bright space-y-space-sm">
+<div class="flex items-center justify-between">
+<h3 class="text-label-bold font-label-bold text-on-surface">Pantry &amp; Spices</h3>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">45 items</span>
+</div>
+<div class="space-y-space-xs divide-y divide-surface-container">
+<div class="pt-space-xs flex items-center justify-between">
+<div>
+<div class="text-label-sm font-label-sm text-on-surface">Small-Batch Raw Honey</div>
+<div class="text-caption-xs font-caption-xs text-on-surface-variant">500g • ₹380</div>
+</div>
+<button class="px-2.5 py-1 text-caption-bold font-caption-bold rounded-lg border border-primary text-primary hover:bg-primary hover:text-on-primary transition-all" type="button">
+                  + Add
+                </button>
+</div>
+<div class="pt-space-xs flex items-center justify-between">
+<div>
+<div class="text-label-sm font-label-sm text-on-surface">Wayanad Black Peppercorn</div>
+<div class="text-caption-xs font-caption-xs text-on-surface-variant">150g • ₹190</div>
+</div>
+<button class="px-2.5 py-1 text-caption-bold font-caption-bold rounded-lg border border-primary text-primary hover:bg-primary hover:text-on-primary transition-all" type="button">
+                  + Add
+                </button>
+</div>
+</div>
+</div>
+<!-- Card C: Dairy & Eggs -->
+<div class="rounded-xl border border-outline-variant p-space-md bg-surface-bright space-y-space-sm">
+<div class="flex items-center justify-between">
+<h3 class="text-label-bold font-label-bold text-on-surface">Dairy &amp; Eggs</h3>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">18 items</span>
+</div>
+<div class="space-y-space-xs divide-y divide-surface-container">
+<div class="pt-space-xs flex items-center justify-between">
+<div>
+<div class="text-label-sm font-label-sm text-on-surface">Pastured Free-Range Eggs</div>
+<div class="text-caption-xs font-caption-xs text-on-surface-variant">Pack of 6 • ₹95</div>
+</div>
+<button class="px-2.5 py-1 text-caption-bold font-caption-bold rounded-lg border border-primary text-primary hover:bg-primary hover:text-on-primary transition-all" type="button">
+                  + Add
+                </button>
+</div>
+<div class="pt-space-xs flex items-center justify-between">
+<div>
+<div class="text-label-sm font-label-sm text-on-surface">Cultured A2 Cow Butter</div>
+<div class="text-caption-xs font-caption-xs text-on-surface-variant">250g • ₹260</div>
+</div>
+<button class="px-2.5 py-1 text-caption-bold font-caption-bold rounded-lg border border-primary text-primary hover:bg-primary hover:text-on-primary transition-all" type="button">
+                  + Add
+                </button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CATEGORY 4: Services & Care -->
+<section class="bg-surface-container-lowest rounded-2xl p-space-lg md:p-space-xl border border-outline-variant shadow-sm space-y-space-lg" id="services-care">
+<div class="flex items-center justify-between border-b border-surface-container-high pb-space-sm">
+<div class="flex items-center gap-2">
+<span class="text-2xl">🛠️</span>
+<div>
+<h2 class="text-heading-lg-mobile md:text-heading-lg font-heading-lg-mobile md:font-heading-lg text-on-surface">
+                Services &amp; Barista Care
+              </h2>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">Professional maintenance &amp; private coffee education</p>
+</div>
+</div>
+<span class="text-caption-bold font-caption-bold text-on-surface-variant">6 Available</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<!-- Service Card 1 -->
+<div class="p-space-md rounded-xl border border-outline-variant bg-surface-container-low flex flex-col justify-between space-y-space-md">
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1 text-caption-xs font-caption-xs text-primary font-bold bg-surface-container px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-[14px]">schedule</span> 45 mins
+                </span>
+<span class="text-caption-bold font-caption-bold text-on-surface">In-Shop / Home Visit</span>
+</div>
+<h3 class="text-subheading-md font-subheading-md text-on-surface">Espresso Machine Tune-up &amp; Descale</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">
+                Full group head service, pressure calibration, boiler flushing and fresh gasket seal replacement for home espresso units.
+              </p>
+</div>
+<div class="flex items-center justify-between pt-space-xs border-t border-outline-variant/60">
+<div class="text-label-bold font-label-bold text-primary">₹499</div>
+<button class="px-4 py-1.5 rounded-full bg-primary text-on-primary text-caption-bold font-caption-bold hover:bg-primary/90 active:scale-95 transition-all" type="button">
+                + Book Slot
+              </button>
+</div>
+</div>
+<!-- Service Card 2 -->
+<div class="p-space-md rounded-xl border border-outline-variant bg-surface-container-low flex flex-col justify-between space-y-space-md">
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1 text-caption-xs font-caption-xs text-primary font-bold bg-surface-container px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-[14px]">schedule</span> 2 Hours
+                </span>
+<span class="text-caption-bold font-caption-bold text-on-surface">Max 4 Persons</span>
+</div>
+<h3 class="text-subheading-md font-subheading-md text-on-surface">Home Coffee Tasting &amp; Brew Workshop</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">
+                Hands-on pour-over and AeroPress masterclass led by our head roaster. Includes 2 sample bags of micro-lot estate beans.
+              </p>
+</div>
+<div class="flex items-center justify-between pt-space-xs border-t border-outline-variant/60">
+<div class="text-label-bold font-label-bold text-primary">₹1,200</div>
+<button class="px-4 py-1.5 rounded-full bg-primary text-on-primary text-caption-bold font-caption-bold hover:bg-primary/90 active:scale-95 transition-all" type="button">
+                + Book Slot
+              </button>
+</div>
+</div>
+</div>
+</section><section class="bg-surface-container-lowest rounded-2xl p-space-lg md:p-space-xl border border-outline-variant shadow-sm space-y-space-lg" id="work-showcase">
+<div class="flex items-center justify-between border-b border-surface-container-high pb-space-sm">
+<div class="flex items-center gap-2">
+<span class="text-2xl">📸</span>
+<div>
+<h2 class="text-heading-lg-mobile md:text-heading-lg font-heading-lg-mobile md:font-heading-lg text-on-surface">Work Showcase &amp; Past Setups</h2>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">Visual proofs, private events &amp; craft workshop highlights</p>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="text-caption-bold font-caption-bold text-primary bg-surface-container-low px-2.5 py-1 rounded-full border border-outline-variant">8 Photos &amp; Reels</span>
+<button class="text-label-bold font-label-bold text-primary hover:underline text-caption-bold" type="button">View All</button>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-md">
+<div class="rounded-xl border border-outline-variant bg-surface-bright overflow-hidden group hover:border-primary transition-all">
+<div class="relative h-44 w-full overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Artisan espresso bar setup with commercial dual group machine and custom wooden accessories at a private neighborhood gathering." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDVRnZLpxwM5wiGX86v4DxnbNKcY-QUlDCGmgxByYADuHmxaXpgsCcDeOaa3xDLTp_Qo81ejbookYeAjucP_UhW1-stFDMbe2VW8fqTkmeSnBcc3zNernh0WVS01lY5mDGPb7zrU7K9KtK3mb4-W8IwerFLKngWunfOIRl5G6M4ScptL6k-pIMo-2HT_aYU3J2zLQIS-PvPj9CSvsTpnobp6sr9exicUN-Vkg4ULLriqH7AhkJ01QqI">
+<div class="absolute top-space-xs right-space-xs bg-inverse-surface/80 text-inverse-on-surface px-2 py-0.5 rounded-full text-caption-xs backdrop-blur-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">fullscreen</span> Zoom
+</div>
+</div>
+<div class="p-space-sm space-y-space-xs">
+<div class="flex items-center justify-between text-caption-xs text-on-surface-variant">
+<span class="font-medium text-primary">On-site Pop-up</span>
+<span class="">Last Weekend</span>
+</div>
+<h3 class="text-label-bold font-label-bold text-on-surface">Mobile Espresso Bar Setup</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant line-clamp-2">Craft catering &amp; single-origin espresso station for a 60-guest garden brunch.</p>
+</div>
+</div>
+<div class="rounded-xl border border-outline-variant bg-surface-bright overflow-hidden group hover:border-primary transition-all">
+<div class="relative h-44 w-full overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Freshly baked artisan sourdough loaves cooling on rustic wooden shelves straight out of stone hearth ovens." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2pEbH5bIkWzu9UfMb9vP7cpw5un14IB0HKinkHBLTFr_pamoboi68VUFhk53uqsLZAekEP0Lbq72CcEBOcaWcgb5yfe-81nQoIFg-h0juJ0msSUQleDM562c2PcfZpfaCRFsvQNjAcHYPZo-IJ_dwWar7vnS13YHb1KU-Uwp6fJFYNvn4SuHTK-Y1L7g5UpLQOnOay7ZDg7F0q3n9aGAzAeZ8mbiGPiiXz7oRdqppphgoLzV3-Lnj">
+<div class="absolute top-space-xs right-space-xs bg-inverse-surface/80 text-inverse-on-surface px-2 py-0.5 rounded-full text-caption-xs backdrop-blur-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">play_circle</span> Reel
+</div>
+</div>
+<div class="p-space-sm space-y-space-xs">
+<div class="flex items-center justify-between text-caption-xs text-on-surface-variant">
+<span class="font-medium text-primary">Bakehouse Batch</span>
+<span class="">3 Days Ago</span>
+</div>
+<h3 class="text-label-bold font-label-bold text-on-surface">Artisan Hearth Morning Bake</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant line-clamp-2">Early 5:00 AM stone-deck bake of our 36-hour fermented wild wheat loaves.</p>
+</div>
+</div>
+<div class="rounded-xl border border-outline-variant bg-surface-bright overflow-hidden group hover:border-primary transition-all">
+<div class="relative h-44 w-full overflow-hidden bg-surface-container">
+<img class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" data-alt="Artisanal cold drinks and pour over gear showcased during a neighborhood barista workshop." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA96RrHKWG0nAWXWkGX7wBZ0P53BRqOl7G0AWQE2kUz9M7dW8XNuiBfL6k5JgmJ5seE6f_1bKzqMKmXow9QVMkfdrg8cuvf9rv9kBqDJfl3KmH17lxS_9xzu3DS_XZ_LWbWXUxT0cEWtiixVnf58CfeZOvxeo_Nlxbb0Kq6gp6i04i4h8HrSdo9lMjmFWKmo14FXCaYaOFn29JCrqS-gwmy2BpfiNJpyiGIu9rYqewRtHmerIdfohYP">
+<div class="absolute top-space-xs right-space-xs bg-inverse-surface/80 text-inverse-on-surface px-2 py-0.5 rounded-full text-caption-xs backdrop-blur-md flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">fullscreen</span> Zoom
+</div>
+</div>
+<div class="p-space-sm space-y-space-xs">
+<div class="flex items-center justify-between text-caption-xs text-on-surface-variant">
+<span class="font-medium text-primary">Private Session</span>
+<span class="">1 Week Ago</span>
+</div>
+<h3 class="text-label-bold font-label-bold text-on-surface">Home Barista Masterclass</h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant line-clamp-2">AeroPress tasting &amp; manual brew calibration with neighbor enthusiasts.</p>
+</div>
+</div>
+</div>
+</section>
+<!-- 7. Customer Reviews Section -->
+<section class="bg-surface-container-lowest rounded-2xl p-space-lg md:p-space-xl border border-outline-variant shadow-sm space-y-space-lg" id="reviews">
+<div class="flex items-center justify-between border-b border-surface-container-high pb-space-sm">
+<h2 class="text-heading-lg-mobile md:text-heading-lg font-heading-lg-mobile md:font-heading-lg text-on-surface">
+            Customer Reviews
+          </h2>
+<button class="text-label-bold font-label-bold text-primary hover:underline" type="button">Write a Review</button>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-space-lg items-center">
+<!-- Overall Rating -->
+<div class="flex flex-col items-center justify-center p-space-md bg-surface-bright rounded-xl border border-outline-variant text-center">
+<span class="text-4xl font-extrabold text-on-surface">4.8</span>
+<div class="flex items-center gap-1 my-1 text-tertiary-container">
+<span class="material-symbols-outlined fill-icon text-[20px]">star</span>
+<span class="material-symbols-outlined fill-icon text-[20px]">star</span>
+<span class="material-symbols-outlined fill-icon text-[20px]">star</span>
+<span class="material-symbols-outlined fill-icon text-[20px]">star</span>
+<span class="material-symbols-outlined fill-icon text-[20px]">star_half</span>
+</div>
+<p class="text-caption-bold font-caption-bold text-on-surface-variant">Based on 240 verified local reviews</p>
+</div>
+<!-- Breakdown Bars -->
+<div class="md:col-span-2 space-y-2">
+<div class="flex items-center gap-2 text-caption-xs font-caption-xs">
+<span class="w-12 text-on-surface-variant">5 Star</span>
+<div class="flex-1 h-2 rounded-full bg-surface-container overflow-hidden">
+<div class="h-full bg-primary rounded-full w-[84%]"></div>
+</div>
+<span class="w-8 text-right font-medium">84%</span>
+</div>
+<div class="flex items-center gap-2 text-caption-xs font-caption-xs">
+<span class="w-12 text-on-surface-variant">4 Star</span>
+<div class="flex-1 h-2 rounded-full bg-surface-container overflow-hidden">
+<div class="h-full bg-primary rounded-full w-[12%]"></div>
+</div>
+<span class="w-8 text-right font-medium">12%</span>
+</div>
+<div class="flex items-center gap-2 text-caption-xs font-caption-xs">
+<span class="w-12 text-on-surface-variant">3 Star</span>
+<div class="flex-1 h-2 rounded-full bg-surface-container overflow-hidden">
+<div class="h-full bg-primary rounded-full w-[3%]"></div>
+</div>
+<span class="w-8 text-right font-medium">3%</span>
+</div>
+<div class="flex items-center gap-2 text-caption-xs font-caption-xs">
+<span class="w-12 text-on-surface-variant">2 Star</span>
+<div class="flex-1 h-2 rounded-full bg-surface-container overflow-hidden">
+<div class="h-full bg-primary rounded-full w-[1%]"></div>
+</div>
+<span class="w-8 text-right font-medium">1%</span>
+</div>
+</div>
+</div>
+<!-- Verified Neighbor Quote Card -->
+<div class="p-space-md rounded-xl bg-surface-container-low border border-outline-variant space-y-space-xs">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-bold text-caption-bold">
+                AN
+              </div>
+<div>
+<h4 class="text-label-bold font-label-bold text-on-surface">Ananya N.</h4>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">Resident • 320m away</p>
+</div>
+</div>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">Yesterday</span>
+</div>
+<p class="text-body-base font-body-base text-on-surface italic pt-1">
+            "The cold brew with vanilla cold foam is phenomenal! Plus having their sourdough delivered freshly warm in under 15 minutes right from down the block makes them an absolute neighborhood staple."
+          </p>
+</div>
+</section>
+</div>
+</main>
+<!-- 8. Fixed Bottom Cart / Order Bar -->
+<aside class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-lowest/95 backdrop-blur-lg border-t border-outline-variant p-space-md shadow-lg">
+<div class="max-w-4xl mx-auto flex items-center justify-between gap-space-md">
+<!-- Selected Items Indicator -->
+<div class="flex items-center gap-space-sm">
+<div class="relative w-11 h-11 rounded-xl bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[24px]">shopping_bag</span>
+<span class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary text-on-primary text-[11px] font-extrabold flex items-center justify-center">
+            2
+          </span>
+</div>
+<div>
+<div class="text-label-bold font-label-bold text-on-surface">2 items • ₹360</div>
+<div class="text-caption-xs font-caption-xs text-on-surface-variant">Plus ₹20 neighborhood delivery</div>
+</div>
+</div>
+<!-- Action Button -->
+<button class="flex items-center justify-center gap-2 px-space-xl py-3 rounded-full bg-primary text-on-primary font-button-label text-button-label shadow-md hover:bg-primary/95 active:scale-95 transition-all" type="button">
+<span class="">Review Order</span>
+<span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+</button>
+</div>
+</aside>
+
+
+</body></html>

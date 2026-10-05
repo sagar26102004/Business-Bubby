@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>One Place Business Buddy - Review &amp; Publish</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-variant": "#d9e6db",
+            "primary": "#14422d",
+            "background": "#f0fdf1",
+            "surface": "#f0fdf1",
+            "on-secondary-container": "#721c09",
+            "tertiary": "#513500",
+            "surface-container-highest": "#d9e6db",
+            "primary-container": "#2d5a43",
+            "primary-fixed": "#bceecf",
+            "secondary-container": "#fd8367",
+            "on-error-container": "#93000a",
+            "on-tertiary-fixed-variant": "#614000",
+            "on-secondary-fixed-variant": "#822714",
+            "on-primary": "#ffffff",
+            "on-surface-variant": "#414943",
+            "on-tertiary-container": "#ffb739",
+            "tertiary-fixed-dim": "#ffba44",
+            "error": "#ba1a1a",
+            "error-container": "#ffdad6",
+            "secondary": "#a13e28",
+            "outline": "#717973",
+            "on-error": "#ffffff",
+            "surface-container-low": "#eaf7ec",
+            "secondary-fixed": "#ffdad2",
+            "outline-variant": "#c0c9c1",
+            "surface-tint": "#3a674f",
+            "on-surface": "#131e17",
+            "surface-container-lowest": "#ffffff",
+            "surface-bright": "#f0fdf1",
+            "on-background": "#131e17",
+            "tertiary-fixed": "#ffddaf",
+            "on-primary-container": "#9fcfb2",
+            "secondary-fixed-dim": "#ffb4a3",
+            "surface-container": "#e4f1e6",
+            "on-tertiary": "#ffffff",
+            "on-primary-fixed": "#002112",
+            "on-secondary-fixed": "#3d0600",
+            "on-primary-fixed-variant": "#224f39",
+            "surface-dim": "#d0ddd2",
+            "inverse-surface": "#28332c",
+            "tertiary-container": "#6f4a00",
+            "inverse-on-surface": "#e7f4e9",
+            "on-secondary": "#ffffff",
+            "surface-container-high": "#dfebe0",
+            "primary-fixed-dim": "#a1d1b4",
+            "on-tertiary-fixed": "#281800",
+            "inverse-primary": "#a1d1b4"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-xl": "1.5rem",
+            "space-xs": "0.25rem",
+            "space-md": "0.75rem",
+            "margin": "1rem",
+            "space-sm": "0.5rem",
+            "space-lg": "1rem",
+            "gutter": "1rem"
+          },
+          "fontFamily": {
+            "caption-xs": ["Plus Jakarta Sans"],
+            "display-title": ["Plus Jakarta Sans"],
+            "caption-bold": ["Plus Jakarta Sans"],
+            "body-base": ["Plus Jakarta Sans"],
+            "heading-lg-mobile": ["Plus Jakarta Sans"],
+            "button-label": ["Plus Jakarta Sans"],
+            "label-bold": ["Plus Jakarta Sans"],
+            "label-sm": ["Plus Jakarta Sans"],
+            "subheading-md": ["Plus Jakarta Sans"],
+            "display-title-mobile": ["Plus Jakarta Sans"],
+            "heading-lg": ["Plus Jakarta Sans"],
+            "body-medium": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "caption-xs": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "display-title": ["28px", { "lineHeight": "34px", "fontWeight": "700" }],
+            "caption-bold": ["12px", { "lineHeight": "16px", "fontWeight": "700" }],
+            "body-base": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "heading-lg-mobile": ["20px", { "lineHeight": "26px", "fontWeight": "700" }],
+            "button-label": ["15px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "label-bold": ["14px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "label-sm": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+            "subheading-md": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "display-title-mobile": ["24px", { "lineHeight": "30px", "fontWeight": "700" }],
+            "heading-lg": ["22px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "body-medium": ["16px", { "lineHeight": "24px", "fontWeight": "500" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    .custom-scroll::-webkit-scrollbar {
+      display: none;
+    }
+    .custom-scroll {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased selection:bg-primary-fixed selection:text-primary min-h-screen flex flex-col font-body-base text-body-base">
+<!-- TOP APP BAR (Shared Components JSON Anchor) -->
+<header class="bg-surface-container-low dark:bg-surface-container docked full-width top-0 sticky z-40">
+<div class="flex justify-between items-center w-full px-space-lg py-space-sm max-w-7xl mx-auto">
+<div class="flex items-center gap-space-md">
+<button aria-label="Go back" class="p-space-xs rounded-full hover:bg-surface-container-highest dark:hover:bg-surface-variant active:opacity-75 transition-all text-primary dark:text-inverse-primary flex items-center justify-center" type="button">
+<span class="material-symbols-outlined" data-icon="arrow_back">arrow_back</span>
+</button>
+<div>
+<div class="flex items-center gap-2">
+<span class="text-caption-bold font-caption-bold text-primary dark:text-primary-fixed px-2 py-0.5 rounded-full bg-primary-fixed/50 dark:bg-primary-container">
+              Step 4 of 4
+            </span>
+<span class="text-caption-bold font-caption-bold text-on-surface-variant hidden sm:inline">Final Step</span>
+</div>
+<h1 class="text-heading-lg-mobile font-heading-lg-mobile dark:text-inverse-on-surface text-primary font-bold tracking-tight">
+            Neighborhood Market
+          </h1>
+</div>
+</div>
+<div class="flex items-center gap-space-sm">
+<button aria-label="Save draft" class="p-space-xs rounded-full hover:bg-surface-container-highest dark:hover:bg-surface-variant active:opacity-75 transition-all text-primary dark:text-inverse-primary flex items-center justify-center" title="Save draft" type="button">
+<span class="material-symbols-outlined" data-icon="bookmark">bookmark</span>
+</button>
+</div>
+</div>
+<!-- Step Progress Indicator -->
+<div class="w-full bg-surface-container h-1">
+<div class="bg-primary h-1 w-full transition-all duration-500 ease-out"></div>
+</div>
+</header>
+<!-- MAIN SCROLLABLE CONTENT CANVAS -->
+<main class="flex-1 w-full max-w-4xl mx-auto px-space-lg pt-space-lg pb-32">
+<!-- Hero / Headline Section -->
+<section class="mb-space-xl">
+<div class="flex items-center gap-2 mb-2">
+<span class="material-symbols-outlined text-primary text-xl" data-icon="verified">verified</span>
+<span class="text-caption-bold font-caption-bold text-primary uppercase tracking-wider">Ready for Neighborhood Launch</span>
+</div>
+<h2 class="text-display-title-mobile sm:text-display-title font-display-title text-on-surface tracking-tight mb-2">
+        Ready to launch your neighborhood page?
+      </h2>
+<p class="text-body-base font-body-base text-on-surface-variant max-w-2xl">
+        Review your setup below. Everything can be updated anytime from your merchant workspace once live.
+      </p>
+</section>
+<!-- Bento Grid Section: Live Storefront Card + Workspace Blueprint -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+<!-- LEFT COLUMN: Live Customer Card (8 Cols on Desktop) -->
+<div class="lg:col-span-7 flex flex-col gap-space-lg">
+<!-- Interactive Storefront Preview Card -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-5 shadow-none transition-all relative overflow-hidden">
+<!-- Live Preview Ribbon Badge -->
+<div class="flex items-center justify-between pb-4 mb-4 border-b border-surface-container">
+<div class="flex items-center gap-2">
+<span class="relative flex h-2.5 w-2.5">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+</span>
+<span class="text-caption-bold font-caption-bold text-primary">Live Customer Preview</span>
+</div>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant bg-surface-container px-2.5 py-1 rounded-full">
+              As seen in Sector 14 Feed
+            </span>
+</div>
+<!-- Merchant Header Avatar & Titles -->
+<div class="flex items-start gap-3.5 mb-4">
+<div class="w-14 h-14 rounded-xl bg-surface-container-low border border-outline-variant flex items-center justify-center text-primary flex-shrink-0 shadow-sm">
+<span class="material-symbols-outlined text-3xl" data-icon="plumbing">plumbing</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center gap-1.5 flex-wrap">
+<h3 class="text-subheading-md font-subheading-md text-on-surface truncate">
+                  Verma Quick Sanitary &amp; Plumbing Service
+                </h3>
+<span class="material-symbols-outlined text-primary text-sm" data-icon="verified" data-weight="fill" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<!-- Rating and Distance Sub-row -->
+<div class="flex items-center gap-2 mt-1 text-caption-bold font-caption-bold flex-wrap">
+<span class="flex items-center text-tertiary-container bg-tertiary-fixed/30 px-2 py-0.5 rounded-full">
+<span class="material-symbols-outlined text-xs mr-1" data-icon="star" data-weight="fill" style="font-variation-settings: 'FILL' 1;">star</span>
+                  5.0 (New Pro)
+                </span>
+<span class="text-on-surface-variant flex items-center">
+<span class="material-symbols-outlined text-xs mr-0.5" data-icon="near_me">near_me</span>
+                  800m away
+                </span>
+<span class="bg-surface-container-low text-primary px-2 py-0.5 rounded-full text-caption-xs font-caption-xs flex items-center">
+<span class="w-1.5 h-1.5 rounded-full bg-primary mr-1.5"></span>
+                  Open Now
+                </span>
+</div>
+</div>
+</div>
+<!-- Tags Strip -->
+<div class="flex flex-wrap gap-1.5 mb-4">
+<span class="bg-surface-container text-on-surface-variant text-caption-bold font-caption-bold px-2.5 py-1 rounded-full">
+              #Plumbing
+            </span>
+<span class="bg-surface-container text-on-surface-variant text-caption-bold font-caption-bold px-2.5 py-1 rounded-full">
+              #Emergency Repair
+            </span>
+<span class="bg-surface-container text-on-surface-variant text-caption-bold font-caption-bold px-2.5 py-1 rounded-full">
+              #Sanitary Fitting
+            </span>
+</div>
+<!-- Operating Model Banner (Privacy Protected) -->
+<div class="bg-surface-container-low rounded-xl p-3 mb-5 border border-primary/10 flex items-start gap-2.5">
+<span class="material-symbols-outlined text-primary text-lg mt-0.5" data-icon="shield">shield</span>
+<div>
+<p class="text-label-bold font-label-bold text-primary">Mobile Service Model</p>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-0.5">
+                Home address 100% hidden • Servicing within 7km of Sector 14 area
+              </p>
+</div>
+</div>
+<!-- Configured Customer Interaction Tabs -->
+<div class="space-y-2">
+<p class="text-caption-bold font-caption-bold text-on-surface-variant">Configured Customer Touchpoints</p>
+<div class="grid grid-cols-3 gap-2">
+<div class="bg-surface-container-low/60 rounded-xl p-2.5 text-center border border-outline-variant/60 flex flex-col items-center">
+<span class="material-symbols-outlined text-primary text-xl mb-1" data-icon="receipt_long">receipt_long</span>
+<span class="text-caption-bold font-caption-bold text-on-surface line-clamp-1">Rate Card</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">6 fixed rates</span>
+</div>
+<div class="bg-surface-container-low/60 rounded-xl p-2.5 text-center border border-outline-variant/60 flex flex-col items-center">
+<span class="material-symbols-outlined text-primary text-xl mb-1" data-icon="photo_library">photo_library</span>
+<span class="text-caption-bold font-caption-bold text-on-surface line-clamp-1">Work Proofs</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">3 reels linked</span>
+</div>
+<div class="bg-surface-container-low/60 rounded-xl p-2.5 text-center border border-outline-variant/60 flex flex-col items-center">
+<span class="material-symbols-outlined text-primary text-xl mb-1" data-icon="perm_phone_msg">perm_phone_msg</span>
+<span class="text-caption-bold font-caption-bold text-on-surface line-clamp-1">Direct Connect</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">Encrypted voice</span>
+</div>
+</div>
+</div>
+<!-- Customer Call to Action Simulation -->
+<div class="mt-5 pt-4 border-t border-surface-container flex items-center justify-between gap-3">
+<div class="flex items-center gap-1.5 text-on-surface-variant text-caption-xs font-caption-xs">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="check_circle">check_circle</span>
+              Instant neighbourhood booking enabled
+            </div>
+<button class="bg-secondary-container text-on-secondary-container px-3.5 py-1.5 rounded-full text-caption-bold font-caption-bold flex items-center gap-1 hover:opacity-90 active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-sm" data-icon="bolt">bolt</span>
+              Book Visit
+            </button>
+</div>
+</div>
+<!-- Community Trust Affirmation Banner -->
+<div class="bg-surface-container rounded-xl p-4 border border-outline-variant flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-primary-container text-on-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined" data-icon="handshake">handshake</span>
+</div>
+<div>
+<h4 class="text-label-bold font-label-bold text-primary">100% Free Neighborhood Listing</h4>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-0.5">
+              Zero commission on direct community orders. Direct client settlement with no hidden intermediaries.
+            </p>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: Backstage Workspace Modules Checklist (5 Cols Desktop) -->
+<div class="lg:col-span-5 flex flex-col gap-space-lg">
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant p-5 shadow-none">
+<div class="flex items-center justify-between mb-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary" data-icon="settings_suggest">settings_suggest</span>
+<h3 class="text-subheading-md font-subheading-md text-on-surface">Merchant Workspace</h3>
+</div>
+<span class="text-caption-bold font-caption-bold text-primary bg-primary-fixed/40 px-2.5 py-0.5 rounded-full">
+              4 Modules Ready
+            </span>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mb-4">
+            These back-office tools are pre-activated and bound to your local business ID:
+          </p>
+<!-- Activated Modules Vertical Stack -->
+<div class="space-y-3">
+<!-- Module 1: In-App Voice Calling & Chat -->
+<div class="p-3 rounded-lg border border-outline-variant bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary mt-0.5 text-lg" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="text-label-bold font-label-bold text-on-surface">In-App Voice &amp; Chat</span>
+<span class="text-caption-xs font-caption-xs bg-primary-fixed/60 text-on-primary-fixed font-bold px-1.5 py-0.5 rounded">Active</span>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-1 leading-snug">
+                    Encrypted VoIP audio &amp; messages. No personal mobile numbers ever exposed to shoppers.
+                  </p>
+</div>
+</div>
+</div>
+<!-- Module 2: Appointment & Visit Desk -->
+<div class="p-3 rounded-lg border border-outline-variant bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary mt-0.5 text-lg" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="text-label-bold font-label-bold text-on-surface">Appointment &amp; Visit Desk</span>
+<span class="text-caption-xs font-caption-xs bg-primary-fixed/60 text-on-primary-fixed font-bold px-1.5 py-0.5 rounded">Active</span>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-1 leading-snug">
+                    Calendar slots with auto-confirmation. Direct in-person client payment (0% platform take-rate).
+                  </p>
+</div>
+</div>
+</div>
+<!-- Module 3: Billing & Instant Invoices -->
+<div class="p-3 rounded-lg border border-outline-variant bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary mt-0.5 text-lg" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="text-label-bold font-label-bold text-on-surface">Billing &amp; Instant Invoices</span>
+<span class="text-caption-xs font-caption-xs bg-primary-fixed/60 text-on-primary-fixed font-bold px-1.5 py-0.5 rounded">Active</span>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-1 leading-snug">
+                    Generate digital estimate slips and UPI QR receipt links straight to WhatsApp.
+                  </p>
+</div>
+</div>
+</div>
+<!-- Module 4: Work Proof Showcase -->
+<div class="p-3 rounded-lg border border-outline-variant bg-surface-container-low/40 hover:bg-surface-container-low transition-colors">
+<div class="flex items-start gap-3">
+<span class="material-symbols-outlined text-primary mt-0.5 text-lg" data-icon="check_circle" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<span class="text-label-bold font-label-bold text-on-surface">Work Proof Showcase</span>
+<span class="text-caption-xs font-caption-xs bg-primary-fixed/60 text-on-primary-fixed font-bold px-1.5 py-0.5 rounded">Active</span>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-1 leading-snug">
+                    3 verified local repair videos and completion photos linked to your storefront reel.
+                  </p>
+</div>
+</div>
+</div>
+</div>
+<!-- Operational Tip Note -->
+<div class="mt-4 pt-3 border-t border-surface-container flex items-center gap-2 text-on-surface-variant text-caption-xs font-caption-xs">
+<span class="material-symbols-outlined text-sm text-primary" data-icon="info">info</span>
+<span>You can toggle any module on/off in Workspace &gt; Settings.</span>
+</div>
+</div>
+<!-- Registration Steps Mini History -->
+<div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant">
+<p class="text-caption-bold font-caption-bold text-on-surface-variant mb-2">Onboarding Pathway Completed</p>
+<div class="grid grid-cols-4 gap-1 text-center">
+<div class="p-1 rounded bg-surface-container-lowest border border-outline-variant">
+<span class="text-caption-xs font-caption-xs block text-primary font-bold">Step 1</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant truncate block">Identity</span>
+</div>
+<div class="p-1 rounded bg-surface-container-lowest border border-outline-variant">
+<span class="text-caption-xs font-caption-xs block text-primary font-bold">Step 2</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant truncate block">Location</span>
+</div>
+<div class="p-1 rounded bg-surface-container-lowest border border-outline-variant">
+<span class="text-caption-xs font-caption-xs block text-primary font-bold">Step 3</span>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant truncate block">Offerings</span>
+</div>
+<div class="p-1 rounded bg-primary-container text-on-primary border border-primary">
+<span class="text-caption-xs font-caption-xs block font-bold">Step 4</span>
+<span class="text-caption-xs font-caption-xs truncate block text-primary-fixed">Publish</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Neighborhood Standard Guarantee Card -->
+<section class="mt-space-xl bg-surface-container-lowest rounded-xl p-4 sm:p-5 border border-outline-variant flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-secondary-container/20 text-secondary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined" data-icon="policy">policy</span>
+</div>
+<div>
+<h4 class="text-label-bold font-label-bold text-on-surface">One Place Neighborhood Merchant Guarantee</h4>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">
+            By publishing, you agree to neighbor-friendly service standards, transparent estimates, and zero spam messaging.
+          </p>
+</div>
+</div>
+<div class="flex items-center gap-2 self-end sm:self-center">
+<span class="text-caption-bold font-caption-bold text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-base" data-icon="verified_user">verified_user</span>
+          Zero Hidden Fees
+        </span>
+</div>
+</section>
+</main>
+<!-- STICKY BOTTOM ACTION BAR (Step 4 Linear Flow Action Anchor) -->
+<div class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-low border-t border-outline-variant py-3 px-space-lg shadow-lg">
+<div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+<!-- Back action / Summary stats -->
+<div class="flex items-center justify-between sm:justify-start w-full sm:w-auto gap-4">
+<button class="inline-flex items-center gap-1.5 text-on-surface-variant hover:text-primary active:opacity-75 transition-all text-button-label font-button-label px-3 py-2 rounded-full hover:bg-surface-container" type="button">
+<span class="material-symbols-outlined text-lg" data-icon="arrow_back">arrow_back</span>
+<span>Edit Previous Steps</span>
+</button>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant hidden md:inline">
+          Profile status: <strong class="text-primary font-bold">100% complete</strong>
+</span>
+</div>
+<!-- Primary Confirmation Action Group -->
+<div class="flex items-center gap-3 w-full sm:w-auto">
+<button class="hidden sm:inline-flex items-center justify-center text-on-surface-variant hover:text-primary px-4 py-2.5 rounded-full text-button-label font-button-label hover:bg-surface-container transition-all" type="button">
+          Save as Draft
+        </button>
+<!-- Prominent Forest Green Publish Pill Button -->
+<button class="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 bg-primary-container hover:bg-primary text-on-primary px-7 py-3 rounded-full text-button-label font-button-label active:scale-95 transition-all shadow-sm" id="publishBtn" type="button">
+<span class="material-symbols-outlined text-xl" data-icon="rocket_launch">rocket_launch</span>
+<span>Publish Business Page</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Launch Confirmation Modal (Micro-interaction) -->
+<div class="fixed inset-0 z-50 bg-inverse-surface/60 backdrop-blur-sm hidden items-center justify-center p-4" id="publishModal">
+<div class="bg-surface-container-lowest max-w-md w-full rounded-2xl p-6 border border-outline-variant shadow-2xl transform transition-all text-center">
+<div class="w-16 h-16 rounded-full bg-primary-fixed text-primary mx-auto mb-4 flex items-center justify-center">
+<span class="material-symbols-outlined text-3xl" data-icon="storefront">storefront</span>
+</div>
+<h3 class="text-heading-lg font-heading-lg text-on-surface mb-2">You're officially live!</h3>
+<p class="text-body-base font-body-base text-on-surface-variant mb-6">
+<strong>Verma Quick Sanitary &amp; Plumbing Service</strong> is now discoverable across Sector 14. Your merchant backstage desk is unlocked.
+      </p>
+<div class="space-y-3">
+<button class="w-full bg-primary-container text-on-primary py-3 rounded-full text-button-label font-button-label hover:bg-primary transition-all" onclick="closeModal()" type="button">
+          Enter Merchant Workspace
+        </button>
+<button class="w-full text-on-surface-variant hover:text-on-surface py-2 text-caption-bold font-caption-bold" onclick="closeModal()" type="button">
+          View Live Customer Page
+        </button>
+</div>
+</div>
+</div>
+<script>
+    const publishBtn = document.getElementById('publishBtn');
+    const publishModal = document.getElementById('publishModal');
+
+    publishBtn.addEventListener('click', () => {
+      publishModal.classList.remove('hidden');
+      publishModal.classList.add('flex');
+    });
+
+    function closeModal() {
+      publishModal.classList.add('hidden');
+      publishModal.classList.remove('flex');
+    }
+  </script>
+</body></html>

@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>One Place - Neighborhood Explore &amp; Discovery</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Plus Jakarta Sans Font -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "on-secondary": "#ffffff",
+            "on-tertiary-fixed": "#281800",
+            "primary-fixed-dim": "#a1d1b4",
+            "surface-container-low": "#eaf7ec",
+            "secondary-container": "#fd8367",
+            "on-secondary-container": "#721c09",
+            "inverse-primary": "#a1d1b4",
+            "primary-container": "#2d5a43",
+            "tertiary-fixed": "#ffddaf",
+            "on-background": "#131e17",
+            "on-primary": "#ffffff",
+            "outline-variant": "#c0c9c1",
+            "secondary-fixed-dim": "#ffb4a3",
+            "on-secondary-fixed": "#3d0600",
+            "on-tertiary-fixed-variant": "#614000",
+            "on-primary-fixed": "#002112",
+            "surface": "#f0fdf1",
+            "on-surface-variant": "#414943",
+            "on-primary-fixed-variant": "#224f39",
+            "on-tertiary-container": "#ffb739",
+            "on-error-container": "#93000a",
+            "inverse-on-surface": "#e7f4e9",
+            "tertiary-container": "#6f4a00",
+            "outline": "#717973",
+            "secondary": "#a13e28",
+            "on-error": "#ffffff",
+            "inverse-surface": "#28332c",
+            "surface-container-highest": "#d9e6db",
+            "error": "#ba1a1a",
+            "surface-container-high": "#dfebe0",
+            "tertiary": "#513500",
+            "surface-tint": "#3a674f",
+            "surface-dim": "#d0ddd2",
+            "background": "#f0fdf1",
+            "tertiary-fixed-dim": "#ffba44",
+            "surface-container": "#e4f1e6",
+            "on-primary-container": "#9fcfb2",
+            "surface-bright": "#f0fdf1",
+            "primary-fixed": "#bceecf",
+            "secondary-fixed": "#ffdad2",
+            "on-tertiary": "#ffffff",
+            "primary": "#14422d",
+            "error-container": "#ffdad6",
+            "surface-container-lowest": "#ffffff",
+            "on-secondary-fixed-variant": "#822714",
+            "surface-variant": "#d9e6db",
+            "on-surface": "#131e17"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-xs": "0.25rem",
+            "space-lg": "1rem",
+            "space-xl": "1.5rem",
+            "margin": "1rem",
+            "gutter": "1rem",
+            "space-md": "0.75rem",
+            "space-sm": "0.5rem"
+          },
+          "fontFamily": {
+            "body-medium": ["Plus Jakarta Sans"],
+            "heading-lg": ["Plus Jakarta Sans"],
+            "display-title-mobile": ["Plus Jakarta Sans"],
+            "caption-xs": ["Plus Jakarta Sans"],
+            "label-sm": ["Plus Jakarta Sans"],
+            "button-label": ["Plus Jakarta Sans"],
+            "subheading-md": ["Plus Jakarta Sans"],
+            "heading-lg-mobile": ["Plus Jakarta Sans"],
+            "body-base": ["Plus Jakarta Sans"],
+            "display-title": ["Plus Jakarta Sans"],
+            "caption-bold": ["Plus Jakarta Sans"],
+            "label-bold": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "body-medium": ["16px", {"lineHeight": "24px", "fontWeight": "500"}],
+            "heading-lg": ["22px", {"lineHeight": "28px", "fontWeight": "700"}],
+            "display-title-mobile": ["24px", {"lineHeight": "30px", "fontWeight": "700"}],
+            "caption-xs": ["12px", {"lineHeight": "16px", "fontWeight": "400"}],
+            "label-sm": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+            "button-label": ["15px", {"lineHeight": "20px", "fontWeight": "700"}],
+            "subheading-md": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+            "heading-lg-mobile": ["20px", {"lineHeight": "26px", "fontWeight": "700"}],
+            "body-base": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+            "display-title": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+            "caption-bold": ["12px", {"lineHeight": "16px", "fontWeight": "700"}],
+            "label-bold": ["14px", {"lineHeight": "20px", "fontWeight": "700"}]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen pb-24 selection:bg-primary-fixed selection:text-primary">
+<!-- TOP APP BAR -->
+<header class="sticky top-0 z-40 bg-surface-container-low/95 backdrop-blur-md transition-shadow duration-200">
+<div class="flex justify-between items-center w-full px-4 h-16 max-w-7xl mx-auto">
+<div class="flex items-center gap-2">
+<button aria-label="Storefront" class="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-surface-container-highest transition-opacity duration-150 active:opacity-75">
+<span class="material-symbols-outlined text-[24px]">storefront</span>
+</button>
+<div class="flex flex-col">
+<span class="font-heading-lg-mobile text-heading-lg-mobile font-bold text-primary tracking-tight">One Place</span>
+<span class="font-caption-xs text-caption-xs text-on-surface-variant flex items-center gap-1">
+<span class="inline-block w-1.5 h-1.5 rounded-full bg-primary-container"></span>
+            Downtown Local Hub
+          </span>
+</div>
+</div>
+<div class="flex items-center gap-1">
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-highest hover:text-primary transition-opacity duration-150 active:opacity-75" title="View Neighborhood Map">
+<span class="material-symbols-outlined text-[22px]">map</span>
+</button>
+<button class="relative w-10 h-10 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-surface-container-highest hover:text-primary transition-opacity duration-150 active:opacity-75" title="Notifications">
+<span class="material-symbols-outlined text-[22px]">notifications</span>
+<span class="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-secondary"></span>
+</button>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-surface-container-highest transition-opacity duration-150 active:opacity-75" title="Scan QR">
+<span class="material-symbols-outlined text-[22px]">qr_code_2</span>
+</button>
+</div>
+</div>
+<!-- Location Selector & Search Strip -->
+<div class="max-w-7xl mx-auto px-4 pb-3 pt-1 space-y-3">
+<!-- Location pill + Distance scope -->
+<div class="flex items-center justify-between">
+<button class="flex items-center gap-1.5 py-1 px-2.5 -ml-2 rounded-full hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-secondary text-[18px]">location_on</span>
+<span class="font-label-bold text-label-bold text-on-surface">Central Sector 14, Downtown</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">keyboard_arrow_down</span>
+</button>
+<span class="font-caption-bold text-caption-bold text-primary bg-primary-fixed/60 px-2 py-0.5 rounded-full border border-primary-fixed-dim">
+          Within 3 km
+        </span>
+</div>
+<!-- Search Input Field -->
+<div class="relative flex items-center">
+<span class="absolute left-3.5 text-on-surface-variant flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</span>
+<input class="w-full h-12 pl-10 pr-12 rounded-xl bg-surface-container-lowest border border-outline-variant text-on-surface placeholder:text-on-surface-variant font-body-base text-body-base focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-primary-fixed transition-all" placeholder="Search stores, services, items (e.g. cold brew, plumber, gym)..." type="text"/>
+<button aria-label="Filters" class="absolute right-2 w-8 h-8 rounded-lg flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-[20px]">tune</span>
+</button>
+</div>
+</div>
+</header>
+<!-- MAIN SCROLLABLE CONTENT CANVAS -->
+<main class="max-w-7xl mx-auto px-4 pt-3 space-y-6">
+<!-- 1. CATEGORY PILL BAR (Horizontal Carousel) -->
+<section aria-label="Categories" class="-mx-4 px-4 overflow-x-auto no-scrollbar flex items-center gap-2 py-1">
+<!-- Active Pill -->
+<button class="flex-shrink-0 flex items-center gap-1.5 bg-primary-container text-on-primary px-4 py-2 rounded-full font-label-bold text-label-bold shadow-sm active:opacity-75 transition-opacity">
+<span>All</span>
+<span class="bg-primary/40 text-primary-fixed px-1.5 py-0.2 rounded-full font-caption-bold text-caption-bold">148</span>
+</button>
+<!-- Inactive Pills -->
+<button class="flex-shrink-0 flex items-center gap-1.5 bg-surface-container-lowest border border-outline-variant text-on-surface px-3.5 py-2 rounded-full font-label-sm text-label-sm hover:border-primary-container transition-colors active:opacity-75">
+<span class="material-symbols-outlined text-[16px] text-primary">restaurant</span>
+<span>Food &amp; Dining</span>
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">(42)</span>
+</button>
+<button class="flex-shrink-0 flex items-center gap-1.5 bg-surface-container-lowest border border-outline-variant text-on-surface px-3.5 py-2 rounded-full font-label-sm text-label-sm hover:border-primary-container transition-colors active:opacity-75">
+<span class="material-symbols-outlined text-[16px] text-primary">home_repair_service</span>
+<span>Home Services</span>
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">(28)</span>
+</button>
+<button class="flex-shrink-0 flex items-center gap-1.5 bg-surface-container-lowest border border-outline-variant text-on-surface px-3.5 py-2 rounded-full font-label-sm text-label-sm hover:border-primary-container transition-colors active:opacity-75">
+<span class="material-symbols-outlined text-[16px] text-primary">storefront</span>
+<span>Shops &amp; Retail</span>
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">(35)</span>
+</button>
+<button class="flex-shrink-0 flex items-center gap-1.5 bg-surface-container-lowest border border-outline-variant text-on-surface px-3.5 py-2 rounded-full font-label-sm text-label-sm hover:border-primary-container transition-colors active:opacity-75">
+<span class="material-symbols-outlined text-[16px] text-primary">fitness_center</span>
+<span>Fitness &amp; Coaching</span>
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">(19)</span>
+</button>
+<button class="flex-shrink-0 flex items-center gap-1.5 bg-surface-container-lowest border border-outline-variant text-on-surface px-3.5 py-2 rounded-full font-label-sm text-label-sm hover:border-primary-container transition-colors active:opacity-75">
+<span class="material-symbols-outlined text-[16px] text-primary">chair</span>
+<span>Rentals</span>
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">(14)</span>
+</button>
+<button class="flex-shrink-0 flex items-center gap-1.5 bg-surface-container-lowest border border-outline-variant text-on-surface px-3.5 py-2 rounded-full font-label-sm text-label-sm hover:border-primary-container transition-colors active:opacity-75">
+<span class="material-symbols-outlined text-[16px] text-primary">local_convenience_store</span>
+<span>Stalls</span>
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">(10)</span>
+</button>
+</section>
+<!-- 2. QUICK FILTER / TAG CLOUD -->
+<section class="flex flex-wrap items-center gap-1.5 pt-1">
+<span class="font-caption-bold text-caption-bold text-on-surface-variant mr-1">Trending:</span>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption-bold text-caption-bold hover:bg-surface-container-high transition-colors">#Cafe</button>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption-bold text-caption-bold hover:bg-surface-container-high transition-colors">#OrganicPantry</button>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption-bold text-caption-bold hover:bg-surface-container-high transition-colors">#ACRepair</button>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption-bold text-caption-bold hover:bg-surface-container-high transition-colors">#Coaching</button>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption-bold text-caption-bold hover:bg-surface-container-high transition-colors">#Tyres</button>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption-bold text-caption-bold hover:bg-surface-container-high transition-colors">#Dentist</button>
+<button class="px-2.5 py-1 rounded-lg bg-surface-container text-on-surface-variant font-caption-bold text-caption-bold hover:bg-surface-container-high transition-colors">#Tiffin</button>
+</section>
+<!-- 3. LIVE DEALS & FLASH OFFERS CAROUSEL -->
+<section class="space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-secondary text-[22px]" style="font-variation-settings: 'FILL' 1;">local_fire_department</span>
+<h2 class="font-heading-lg-mobile text-heading-lg-mobile text-on-surface font-bold">Neighborhood Deals Near You</h2>
+</div>
+<button class="font-label-bold text-label-bold text-primary hover:underline flex items-center">
+<span>View All</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+<!-- Horizontal Cards Scroll -->
+<div class="-mx-4 px-4 overflow-x-auto no-scrollbar flex items-stretch gap-3 pb-2">
+<!-- Offer Card 1: Bakery -->
+<article class="flex-shrink-0 w-72 bg-surface-container-lowest rounded-xl border border-outline-variant p-3.5 flex flex-col justify-between relative overflow-hidden transition-all hover:border-primary">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="inline-block px-2 py-0.5 rounded-full bg-secondary-container/20 text-on-secondary-container font-caption-bold text-caption-bold mb-1.5">
+                FLAT 20% OFF
+              </span>
+<h3 class="font-subheading-md text-subheading-md font-bold text-on-surface">Green Leaf Bakery</h3>
+<p class="font-body-base text-body-base text-on-surface-variant text-sm mt-0.5">Artisan Sourdoughs &amp; Pastries</p>
+</div>
+<img class="w-14 h-14 rounded-lg object-cover border border-outline-variant" data-alt="Close up warm shot of golden brown artisan sourdough bread freshly baked on a wooden cutting board with warm morning light highlighting flour dusting and crust texture in an artisanal bakery setting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD9nAS_OUdAqsHqs9bBaaw3udI2QtAvCbk5xs1BsKmNQUV9WUI6ZM_FK88v0WHBMeRn2132Z8KQ3bGGl3WhOeKBVHHAWRSLzS2qHkMGR6mEElk9GSQNUj_g94nbnS_Xr9VA4EkeuLVTxm7U_NpQwZgdBIL8ALYUQXJvn2Rz3oCY13roaxT2oXJGFKy0ahbRzEyaes0LIzDn35mdnUTetAOd1yCu801JYbo8F0Np1IOdM4pbJ9H4mipy"/>
+</div>
+<div class="mt-3 pt-3 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-1 font-caption-xs text-caption-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-primary">schedule</span>
+<span>Valid today • 450m away</span>
+</div>
+<button class="bg-surface-container-high hover:bg-surface-container-highest text-primary font-caption-bold text-caption-bold px-2.5 py-1 rounded-lg border border-outline-variant transition-colors">
+              Code: NEIGHBOR20
+            </button>
+</div>
+</article>
+<!-- Offer Card 2: Speedy Plumber -->
+<article class="flex-shrink-0 w-72 bg-surface-container-lowest rounded-xl border border-outline-variant p-3.5 flex flex-col justify-between relative overflow-hidden transition-all hover:border-primary">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="inline-block px-2 py-0.5 rounded-full bg-primary-fixed text-on-primary-fixed-variant font-caption-bold text-caption-bold mb-1.5">
+                FIRST VISIT FREE
+              </span>
+<h3 class="font-subheading-md text-subheading-md font-bold text-on-surface">Speedy Plumber</h3>
+<p class="font-body-base text-body-base text-on-surface-variant text-sm mt-0.5">Free Kitchen Pipe Inspection</p>
+</div>
+<div class="w-14 h-14 rounded-lg bg-surface-container-low flex items-center justify-center border border-outline-variant text-primary">
+<span class="material-symbols-outlined text-[28px]">plumbing</span>
+</div>
+</div>
+<div class="mt-3 pt-3 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-1 font-caption-xs text-caption-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-primary">bolt</span>
+<span>15 min arrival • 800m</span>
+</div>
+<button class="bg-secondary text-on-secondary font-caption-bold text-caption-bold px-3 py-1 rounded-lg active:opacity-75 transition-opacity">
+              Claim Deal
+            </button>
+</div>
+</article>
+<!-- Offer Card 3: Fitness Free Trial -->
+<article class="flex-shrink-0 w-72 bg-surface-container-lowest rounded-xl border border-outline-variant p-3.5 flex flex-col justify-between relative overflow-hidden transition-all hover:border-primary">
+<div class="flex items-start justify-between gap-2">
+<div>
+<span class="inline-block px-2 py-0.5 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-caption-bold text-caption-bold mb-1.5">
+                3-DAY PASS
+              </span>
+<h3 class="font-subheading-md text-subheading-md font-bold text-on-surface">IronPulse Studio</h3>
+<p class="font-body-base text-body-base text-on-surface-variant text-sm mt-0.5">Morning Yoga &amp; Strength Hub</p>
+</div>
+<div class="w-14 h-14 rounded-lg bg-surface-container-low flex items-center justify-center border border-outline-variant text-tertiary">
+<span class="material-symbols-outlined text-[28px]">self_improvement</span>
+</div>
+</div>
+<div class="mt-3 pt-3 border-t border-surface-container flex items-center justify-between">
+<div class="flex items-center gap-1 font-caption-xs text-caption-xs text-on-surface-variant">
+<span class="material-symbols-outlined text-[14px] text-primary">groups</span>
+<span>Evening slots • 1.1 km</span>
+</div>
+<button class="bg-surface-container-high hover:bg-surface-container-highest text-primary font-caption-bold text-caption-bold px-2.5 py-1 rounded-lg border border-outline-variant transition-colors">
+              Pass Active
+            </button>
+</div>
+</article>
+</div>
+</section>
+<!-- 4. "NEAR YOU NOW" - ADAPTIVE MERCHANT CARDS FEED -->
+<section class="space-y-4 pt-1">
+<div class="flex items-center justify-between">
+<div>
+<h2 class="font-heading-lg-mobile text-heading-lg-mobile font-bold text-on-surface">Near You Now</h2>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">Verified neighborhood providers open and active today</p>
+</div>
+<div class="flex items-center gap-1 bg-surface-container-high p-0.5 rounded-lg border border-outline-variant">
+<button class="px-2 py-1 rounded bg-surface-container-lowest text-primary font-caption-bold text-caption-bold shadow-xs">Popular</button>
+<button class="px-2 py-1 rounded text-on-surface-variant font-caption-bold text-caption-bold hover:text-on-surface">Nearest</button>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- CARD 1: SHOP / CAFE -->
+<article class="bg-surface-container-lowest rounded-xl border border-outline-variant p-4 space-y-3 hover:border-primary-container transition-all">
+<div class="flex gap-3">
+<img class="w-20 h-20 rounded-xl object-cover border border-outline-variant flex-shrink-0" data-alt="Inviting rustic coffee shop counter with brass espresso machine, ceramic coffee cups, display case of fresh croissants, warm ambient wooden lighting in a modern organic minimalist cafe interior." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIlxO1LtnmCFwk9RtQVz--NdeXc2L_uXqkPhkHC9NB63i63OjLuJn6KtJT_N-XNoJiI7q0rdbILvZAf8BeaziIwavH04dGz7Z401HnVRaP7N7G8ed9-ESfcyhqusLm3QrC3vOhEpKvsglGpSB_cdpKc1d9iCF6MJqOrbzzuO94c4HOGz3ffP3AxaZfWxYZQtUT5ES3qgkUa1hv-kz-iAylX2Pp_SZ67n_MfNDwxwWGanRg9ybEPZ2r"/>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-caption-bold text-caption-bold text-primary bg-primary-fixed/60 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">verified</span> Verified Cafe
+                </span>
+<span class="font-caption-bold text-caption-bold text-on-surface flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container" style="font-variation-settings: 'FILL' 1;">star</span>
+                  4.8 <span class="text-on-surface-variant font-caption-xs text-caption-xs">(240)</span>
+</span>
+</div>
+<h3 class="font-subheading-md text-subheading-md font-bold text-on-surface truncate mt-1">Green Valley Artisan Cafe</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
+<span>450m away</span> • 
+                <span class="text-primary font-caption-bold text-caption-bold">Open until 10 PM</span>
+</p>
+<div class="flex items-center gap-1.5 mt-2">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Coffee</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Bakery</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Outdoor Seating</span>
+</div>
+</div>
+</div>
+<!-- Quick Highlight Items -->
+<div class="bg-surface-container-low rounded-lg p-2.5 flex items-center justify-between text-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">
+              Popular: <strong class="text-on-surface">Vanilla Cold Foam Brew ₹180</strong>, Sourdough ₹210
+            </span>
+<span class="material-symbols-outlined text-[18px] text-primary flex-shrink-0 ml-1">local_mall</span>
+</div>
+<!-- Direct CTA Buttons -->
+<div class="flex items-center gap-2 pt-1">
+<button class="w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center text-primary hover:bg-surface-container-high transition-colors active:opacity-75" title="Call Cafe">
+<span class="material-symbols-outlined text-[18px]">call</span>
+</button>
+<button class="flex-1 h-10 rounded-full bg-secondary hover:bg-secondary/90 text-on-secondary font-button-label text-button-label flex items-center justify-center gap-1.5 active:opacity-75 transition-opacity">
+<span class="material-symbols-outlined text-[18px]">shopping_bag</span>
+<span>Order Now</span>
+</button>
+</div>
+</article>
+<!-- CARD 2: HOME SERVICE (Plumbing & Repairs) -->
+<article class="bg-surface-container-lowest rounded-xl border border-outline-variant p-4 space-y-3 hover:border-primary-container transition-all">
+<div class="flex gap-3">
+<div class="w-20 h-20 rounded-xl bg-surface-container flex items-center justify-center border border-outline-variant text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[36px]">plumbing</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-caption-bold text-caption-bold text-primary bg-primary-fixed/60 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+<span class="material-symbols-outlined text-[12px]" style="font-variation-settings: 'FILL' 1;">check_circle</span> Instant Visit
+                </span>
+<span class="font-caption-bold text-caption-bold text-on-surface flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container" style="font-variation-settings: 'FILL' 1;">star</span>
+                  4.9 <span class="text-on-surface-variant font-caption-xs text-caption-xs">(112)</span>
+</span>
+</div>
+<h3 class="font-subheading-md text-subheading-md font-bold text-on-surface truncate mt-1">Sharma Plumbing &amp; Quick Repair</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
+<span>600m away</span> • 
+                <span class="text-primary font-caption-bold text-caption-bold">Available in 15 mins</span>
+</p>
+<div class="flex items-center gap-1.5 mt-2">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Plumbing</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Leakage</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Sanitary Fix</span>
+</div>
+</div>
+</div>
+<!-- Quick Highlight Items -->
+<div class="bg-surface-container-low rounded-lg p-2.5 flex items-center justify-between text-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">
+              Standard Check: <strong class="text-on-surface">Inspection from ₹199</strong> (Zero visiting fee if serviced)
+            </span>
+<span class="material-symbols-outlined text-[18px] text-primary flex-shrink-0 ml-1">build</span>
+</div>
+<!-- Direct CTA Buttons -->
+<div class="flex items-center gap-2 pt-1">
+<button class="w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center text-primary hover:bg-surface-container-high transition-colors active:opacity-75" title="Call Plumber">
+<span class="material-symbols-outlined text-[18px]">call</span>
+</button>
+<button class="flex-1 h-10 rounded-full bg-primary-container hover:bg-primary text-on-primary font-button-label text-button-label flex items-center justify-center gap-1.5 active:opacity-75 transition-opacity">
+<span class="material-symbols-outlined text-[18px]">event_available</span>
+<span>Book Quick Slot</span>
+</button>
+</div>
+</article>
+<!-- CARD 3: RECURRING / COACHING -->
+<article class="bg-surface-container-lowest rounded-xl border border-outline-variant p-4 space-y-3 hover:border-primary-container transition-all">
+<div class="flex gap-3">
+<div class="w-20 h-20 rounded-xl bg-surface-container-high flex flex-col items-center justify-center border border-outline-variant text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-[30px]">school</span>
+<span class="font-caption-bold text-caption-bold mt-0.5 text-on-surface-variant">Class 9-12</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-caption-bold text-caption-bold text-on-secondary-container bg-secondary-container/20 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  Evening Batch
+                </span>
+<span class="font-caption-bold text-caption-bold text-on-surface flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container" style="font-variation-settings: 'FILL' 1;">star</span>
+                  4.7 <span class="text-on-surface-variant font-caption-xs text-caption-xs">(85)</span>
+</span>
+</div>
+<h3 class="font-subheading-md text-subheading-md font-bold text-on-surface truncate mt-1">Apex Science &amp; Maths Academy</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
+<span>1.2 km away</span> • 
+                <span class="text-secondary font-caption-bold text-caption-bold">Only 3 seats left</span>
+</p>
+<div class="flex items-center gap-1.5 mt-2">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">CBSE</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Weekly Tests</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Doubt Clearing</span>
+</div>
+</div>
+</div>
+<!-- Quick Highlight -->
+<div class="bg-surface-container-low rounded-lg p-2.5 flex items-center justify-between text-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">
+              Tuition package: <strong class="text-on-surface">CBSE Science &amp; Maths ₹2,200/mo</strong>
+</span>
+<span class="material-symbols-outlined text-[18px] text-primary flex-shrink-0 ml-1">history_edu</span>
+</div>
+<!-- Direct CTA Buttons -->
+<div class="flex items-center gap-2 pt-1">
+<button class="w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center text-primary hover:bg-surface-container-high transition-colors active:opacity-75" title="Chat with Teacher">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+</button>
+<button class="flex-1 h-10 rounded-full bg-surface-container-high hover:bg-surface-container-highest text-primary font-button-label text-button-label flex items-center justify-center gap-1.5 border border-outline-variant active:opacity-75 transition-opacity">
+<span>View Batch Plans</span>
+</button>
+</div>
+</article>
+<!-- CARD 4: RENTAL / EQUIPMENT -->
+<article class="bg-surface-container-lowest rounded-xl border border-outline-variant p-4 space-y-3 hover:border-primary-container transition-all">
+<div class="flex gap-3">
+<div class="w-20 h-20 rounded-xl bg-surface-container flex items-center justify-center border border-outline-variant text-tertiary flex-shrink-0">
+<span class="material-symbols-outlined text-[36px]">festival</span>
+</div>
+<div class="flex-1 min-w-0">
+<div class="flex items-center justify-between">
+<span class="font-caption-bold text-caption-bold text-primary bg-primary-fixed/60 px-2 py-0.5 rounded-full inline-flex items-center gap-1">
+                  Event Rentals
+                </span>
+<span class="font-caption-bold text-caption-bold text-on-surface flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[16px] text-on-tertiary-container" style="font-variation-settings: 'FILL' 1;">star</span>
+                  4.9 <span class="text-on-surface-variant font-caption-xs text-caption-xs">(64)</span>
+</span>
+</div>
+<h3 class="font-subheading-md text-subheading-md font-bold text-on-surface truncate mt-1">Maharaja Tent &amp; Sound Rentals</h3>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant flex items-center gap-1 mt-0.5">
+<span>1.5 km away</span> • 
+                <span class="text-primary font-caption-bold text-caption-bold">Available this weekend</span>
+</p>
+<div class="flex items-center gap-1.5 mt-2">
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Haldi Mandap</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">JBL Sound</span>
+<span class="px-2 py-0.5 rounded bg-surface-container text-on-surface-variant font-caption-xs text-caption-xs">Chairs</span>
+</div>
+</div>
+</div>
+<!-- Quick Highlight -->
+<div class="bg-surface-container-low rounded-lg p-2.5 flex items-center justify-between text-sm">
+<span class="font-label-sm text-label-sm text-on-surface-variant truncate">
+              Complete sets: <strong class="text-on-surface">From ₹4,500/day</strong> (Setup &amp; transport included)
+            </span>
+<span class="material-symbols-outlined text-[18px] text-primary flex-shrink-0 ml-1">speaker_group</span>
+</div>
+<!-- Direct CTA Buttons -->
+<div class="flex items-center gap-2 pt-1">
+<button class="w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center text-primary hover:bg-surface-container-high transition-colors active:opacity-75" title="Call Rental">
+<span class="material-symbols-outlined text-[18px]">call</span>
+</button>
+<button class="flex-1 h-10 rounded-full bg-primary-container hover:bg-primary text-on-primary font-button-label text-button-label flex items-center justify-center gap-1.5 active:opacity-75 transition-opacity">
+<span class="material-symbols-outlined text-[18px]">request_quote</span>
+<span>Request Quote</span>
+</button>
+</div>
+</article>
+<!-- CARD 5: INDIVIDUAL COMMUNITY STALL -->
+<article class="bg-surface-container-lowest rounded-xl border border-outline-variant p-4 space-y-3 hover:border-primary-container transition-all md:col-span-2">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-2.5">
+<div class="w-10 h-10 rounded-full bg-tertiary-fixed text-on-tertiary-fixed flex items-center justify-center font-label-bold text-label-bold">
+                RC
+              </div>
+<div>
+<div class="flex items-center gap-2">
+<h3 class="font-subheading-md text-subheading-md font-bold text-on-surface">Ravi's Vintage Gear Stall</h3>
+<span class="px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-bold text-[11px]">
+                    Neighborhood Reseller
+                  </span>
+</div>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">400m away • Sector 14 Community Market Stall #12</p>
+</div>
+</div>
+<span class="font-caption-bold text-caption-bold text-primary bg-primary-fixed/50 px-2 py-0.5 rounded-full">
+              Live Stall
+            </span>
+</div>
+<div class="bg-surface-container-low rounded-lg p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+<div class="flex items-center gap-3">
+<img class="w-14 h-14 rounded-lg object-cover border border-outline-variant flex-shrink-0" data-alt="Vintage 35mm classic black and silver film camera resting on a textured linen surface with natural window light and manual focus lens detailed." src="https://lh3.googleusercontent.com/aida-public/AB6AXuC4IpNwqSZjwl-5IGCVHhKPYYphsHUxy7e9TYOWYzrjrW3HaWN8WefeSpiC9fr_0JmViVAl8R3l6qiwIvnqFMfAFWrGREvkfjK9pqAVmQn1Sr_WbV54OUosWCxfPU7QVsyfS_akdu7ZegdssXkul55kKefuD3g5LYYL3PNBJrduHdNbP_B7tiSyb3RNmhgZBmijDRfxbhiJUEa-LUh6WElm2FEhUJ1VehAtvakkNYip2gS4Tg5Mfb1r"/>
+<div>
+<p class="font-label-bold text-label-bold text-on-surface">Olympus OM-1 35mm SLR Film Camera</p>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">Mint condition with 50mm f/1.8 lens • Original leather pouch</p>
+</div>
+</div>
+<div class="flex items-center justify-between sm:justify-end gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-outline-variant/30">
+<div class="text-right sm:text-right">
+<span class="font-subheading-md text-subheading-md font-bold text-primary">₹8,500</span>
+<span class="font-caption-xs text-caption-xs text-on-surface-variant block">Negotiable</span>
+</div>
+<button class="h-9 px-4 rounded-full bg-primary text-on-primary font-button-label text-button-label text-sm flex items-center gap-1 active:opacity-75 transition-opacity">
+<span class="material-symbols-outlined text-[16px]">chat</span>
+<span>Chat / Offer</span>
+</button>
+</div>
+</div>
+</article>
+</div>
+</section>
+<!-- Neighborhood Activity Banner -->
+<section class="bg-surface-container-low rounded-xl border border-outline-variant p-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-[28px] text-primary">celebration</span>
+<div>
+<h4 class="font-label-bold text-label-bold text-on-surface">Hosting a Neighborhood Gathering?</h4>
+<p class="font-caption-xs text-caption-xs text-on-surface-variant">Hire local bakers, sound setups, and caterers together with bundled discounts.</p>
+</div>
+</div>
+<button class="bg-surface-container-lowest border border-outline-variant text-primary font-button-label text-button-label px-3.5 py-1.5 rounded-full hover:bg-surface-container-high transition-colors active:opacity-75 text-sm flex-shrink-0 ml-2">
+        Plan a Party
+      </button>
+</section>
+</main>
+<!-- PERSISTENT BOTTOM NAVIGATION BAR (Strict Shared Component Execution) -->
+<!-- On mobile: docked fixed bottom navigation. Tab 1 (Explore) is active based on page intent. -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 py-1.5 h-16 bg-surface-container-low dark:bg-surface-container border-t border-outline-variant dark:border-outline shadow-none">
+<!-- Tab 1: Explore (Active Navigation Destination) -->
+<a class="flex flex-col items-center justify-center bg-primary dark:bg-primary-fixed text-on-primary dark:text-on-primary-fixed rounded-full px-4 py-1 transition-opacity duration-150 active:opacity-75" href="#explore">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">explore</span>
+<span class="font-caption-xs text-caption-xs font-bold leading-tight">Explore</span>
+</a>
+<!-- Tab 2: Orders -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-2 py-1 hover:text-primary transition-opacity duration-150 active:opacity-75" href="#orders">
+<span class="material-symbols-outlined text-[20px]">receipt_long</span>
+<span class="font-caption-xs text-caption-xs leading-tight">Orders</span>
+</a>
+<!-- Tab 3: Chats -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-2 py-1 hover:text-primary transition-opacity duration-150 active:opacity-75" href="#chats">
+<span class="material-symbols-outlined text-[20px]">chat</span>
+<span class="font-caption-xs text-caption-xs leading-tight">Chats</span>
+</a>
+<!-- Tab 4: Workspace -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-2 py-1 hover:text-primary transition-opacity duration-150 active:opacity-75" href="#workspace">
+<span class="material-symbols-outlined text-[20px]">grid_view</span>
+<span class="font-caption-xs text-caption-xs leading-tight">Workspace</span>
+</a>
+<!-- Tab 5: Account -->
+<a class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant px-2 py-1 hover:text-primary transition-opacity duration-150 active:opacity-75" href="#account">
+<span class="material-symbols-outlined text-[20px]">person</span>
+<span class="font-caption-xs text-caption-xs leading-tight">Account</span>
+</a>
+</nav>
+<script>
+    // Micro-interactions for chip filtering and smooth active state toggles
+    document.querySelectorAll('section[aria-label="Categories"] button').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('section[aria-label="Categories"] button').forEach(btn => {
+          btn.className = "flex-shrink-0 flex items-center gap-1.5 bg-surface-container-lowest border border-outline-variant text-on-surface px-3.5 py-2 rounded-full font-label-sm text-label-sm hover:border-primary-container transition-colors active:opacity-75";
+        });
+        button.className = "flex-shrink-0 flex items-center gap-1.5 bg-primary-container text-on-primary px-4 py-2 rounded-full font-label-bold text-label-bold shadow-sm active:opacity-75 transition-opacity";
+      });
+    });
+  </script>
+</body></html>

@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>List a Business - Step 1 | One Place Neighborhood Market</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container-low": "#eaf7ec",
+            "inverse-surface": "#28332c",
+            "primary-container": "#2d5a43",
+            "surface-container-lowest": "#ffffff",
+            "primary-fixed": "#bceecf",
+            "primary-fixed-dim": "#a1d1b4",
+            "tertiary": "#513500",
+            "inverse-primary": "#a1d1b4",
+            "on-primary-fixed": "#002112",
+            "outline": "#717973",
+            "tertiary-container": "#6f4a00",
+            "secondary-fixed": "#ffdad2",
+            "on-secondary-container": "#721c09",
+            "on-error": "#ffffff",
+            "secondary-container": "#fd8367",
+            "on-secondary-fixed-variant": "#822714",
+            "on-primary": "#ffffff",
+            "inverse-on-surface": "#e7f4e9",
+            "error-container": "#ffdad6",
+            "on-secondary": "#ffffff",
+            "on-secondary-fixed": "#3d0600",
+            "tertiary-fixed-dim": "#ffba44",
+            "surface-container-high": "#dfebe0",
+            "primary": "#14422d",
+            "surface-bright": "#f0fdf1",
+            "on-tertiary-fixed-variant": "#614000",
+            "secondary": "#a13e28",
+            "outline-variant": "#c0c9c1",
+            "on-primary-fixed-variant": "#224f39",
+            "surface": "#f0fdf1",
+            "on-surface": "#131e17",
+            "on-tertiary-fixed": "#281800",
+            "on-background": "#131e17",
+            "on-tertiary-container": "#ffb739",
+            "error": "#ba1a1a",
+            "surface-tint": "#3a674f",
+            "secondary-fixed-dim": "#ffb4a3",
+            "surface-dim": "#d0ddd2",
+            "tertiary-fixed": "#ffddaf",
+            "on-error-container": "#93000a",
+            "on-primary-container": "#9fcfb2",
+            "surface-container": "#e4f1e6",
+            "background": "#f0fdf1",
+            "on-surface-variant": "#414943",
+            "surface-container-highest": "#d9e6db",
+            "on-tertiary": "#ffffff",
+            "surface-variant": "#d9e6db"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-lg": "1rem",
+            "space-md": "0.75rem",
+            "space-sm": "0.5rem",
+            "gutter": "1rem",
+            "space-xs": "0.25rem",
+            "margin": "1rem",
+            "space-xl": "1.5rem"
+          },
+          "fontFamily": {
+            "heading-lg-mobile": ["Plus Jakarta Sans"],
+            "display-title": ["Plus Jakarta Sans"],
+            "label-sm": ["Plus Jakarta Sans"],
+            "body-base": ["Plus Jakarta Sans"],
+            "label-bold": ["Plus Jakarta Sans"],
+            "caption-xs": ["Plus Jakarta Sans"],
+            "display-title-mobile": ["Plus Jakarta Sans"],
+            "heading-lg": ["Plus Jakarta Sans"],
+            "button-label": ["Plus Jakarta Sans"],
+            "subheading-md": ["Plus Jakarta Sans"],
+            "body-medium": ["Plus Jakarta Sans"],
+            "caption-bold": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "heading-lg-mobile": ["20px", { "lineHeight": "26px", "fontWeight": "700" }],
+            "display-title": ["28px", { "lineHeight": "34px", "fontWeight": "700" }],
+            "label-sm": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+            "body-base": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "label-bold": ["14px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "caption-xs": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "display-title-mobile": ["24px", { "lineHeight": "30px", "fontWeight": "700" }],
+            "heading-lg": ["22px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "button-label": ["15px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "subheading-md": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "body-medium": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+            "caption-bold": ["12px", { "lineHeight": "16px", "fontWeight": "700" }]
+          }
+        }
+      }
+    };
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      line-height: 1;
+      display: inline-block;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen antialiased flex flex-col selection:bg-primary selection:text-on-primary">
+<!-- TOP APP BAR -->
+<header class="bg-surface-container-low dark:bg-surface-container docked full-width top-0 sticky z-40">
+<div class="flex justify-between items-center w-full px-space-lg py-space-sm max-w-7xl mx-auto">
+<div class="flex items-center gap-3">
+<button aria-label="Go back" class="w-10 h-10 rounded-full flex items-center justify-center text-primary dark:text-inverse-primary hover:bg-surface-container-highest active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-primary text-xl">arrow_back</span>
+</button>
+<div>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant block uppercase tracking-wider">Step 1 of 4: Business Identity</span>
+<h1 class="text-heading-lg-mobile font-heading-lg-mobile text-primary dark:text-inverse-primary leading-tight">Neighborhood Market</h1>
+</div>
+</div>
+<div class="flex items-center gap-2">
+<span class="hidden sm:inline-block px-3 py-1 rounded-full bg-surface-container-highest text-primary font-caption-bold text-caption-bold">Registration Mode</span>
+<button aria-label="Bookmark draft" class="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-surface-container-highest active:scale-95 transition-all" type="button">
+<span class="material-symbols-outlined text-primary text-xl">bookmark</span>
+</button>
+</div>
+</div>
+<!-- Step Progress Indicator -->
+<div class="w-full bg-surface-container-high h-1">
+<div class="bg-primary h-1 w-1/4 rounded-r-full transition-all duration-300"></div>
+</div>
+</header>
+<!-- MAIN CANVAS / REGISTRATION FLOW -->
+<main class="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 pb-32">
+<!-- Hero / Headline Section -->
+<div class="mb-8">
+<div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container text-primary font-caption-bold text-caption-bold mb-3 border border-outline-variant/40">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">verified</span>
+<span>Local Vendor Onboarding</span>
+</div>
+<h2 class="text-display-title-mobile sm:text-display-title font-display-title text-on-surface tracking-tight mb-2">
+        Tell us about your business
+      </h2>
+<p class="text-body-base font-body-base text-on-surface-variant max-w-2xl">
+        Choose your primary business model and identity so we can tailor your neighborhood profile and customer checkout workflows.
+      </p>
+</div>
+<form class="space-y-8" onsubmit="event.preventDefault();">
+<!-- SECTION 1: SELECT BUSINESS MODEL -->
+<section aria-labelledby="section-model-title" class="space-y-4">
+<div class="flex items-baseline justify-between border-b border-outline-variant/40 pb-2">
+<h3 class="text-heading-lg-mobile font-heading-lg-mobile text-on-surface flex items-center gap-2" id="section-model-title">
+<span>1. Select Business Model</span>
+<span class="text-caption-bold font-caption-bold text-primary bg-primary-fixed/60 px-2 py-0.5 rounded-full">Required</span>
+</h3>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">Single-choice</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Model Card 1: Service / Freelancer / Contractor (ACTIVE) -->
+<label class="relative block cursor-pointer group">
+<input checked="" class="peer sr-only" name="business_model" type="radio" value="service"/>
+<div class="h-full bg-surface-container-lowest border-2 border-primary-container rounded-xl p-5 transition-all shadow-sm peer-checked:bg-surface-bright peer-checked:ring-1 peer-checked:ring-primary-container">
+<div class="flex items-start justify-between mb-3">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-2xl" style="font-variation-settings: 'FILL' 1;">handyman</span>
+</div>
+<div class="w-7 h-7 rounded-full bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-base font-bold">check</span>
+</div>
+</div>
+<h4 class="text-subheading-md font-subheading-md text-on-surface mb-1">
+                Service / Freelancer / Contractor
+              </h4>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mb-4 leading-relaxed">
+                Plumbers, electricians, decorators, tutors, mechanics, and mobile professionals.
+              </p>
+<div class="flex flex-wrap gap-1.5 pt-1">
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-primary">Bookings</span>
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-primary">Rates</span>
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-primary">Direct Calls</span>
+</div>
+</div>
+</label>
+<!-- Model Card 2: Shop / Counter Store -->
+<label class="relative block cursor-pointer group">
+<input class="peer sr-only" name="business_model" type="radio" value="shop"/>
+<div class="h-full bg-surface-container-lowest border border-outline-variant rounded-xl p-5 transition-all hover:border-primary peer-checked:border-primary-container peer-checked:bg-surface-bright">
+<div class="flex items-start justify-between mb-3">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center text-primary group-hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-2xl">storefront</span>
+</div>
+<div class="w-7 h-7 rounded-full border-2 border-outline-variant flex items-center justify-center text-transparent peer-checked:bg-primary peer-checked:border-primary peer-checked:text-on-primary transition-all">
+<span class="material-symbols-outlined text-base font-bold">check</span>
+</div>
+</div>
+<h4 class="text-subheading-md font-subheading-md text-on-surface mb-1">
+                Shop / Counter Store
+              </h4>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mb-4 leading-relaxed">
+                Cafes, bakeries, tyre showrooms, grocery/kirana, flower stalls, and retailers.
+              </p>
+<div class="flex flex-wrap gap-1.5 pt-1">
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Digital Catalog</span>
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Dine-in Tabs</span>
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Orders</span>
+</div>
+</div>
+</label>
+<!-- Model Card 3: Rentals -->
+<label class="relative block cursor-pointer group">
+<input class="peer sr-only" name="business_model" type="radio" value="rentals"/>
+<div class="h-full bg-surface-container-lowest border border-outline-variant rounded-xl p-5 transition-all hover:border-primary peer-checked:border-primary-container peer-checked:bg-surface-bright">
+<div class="flex items-start justify-between mb-3">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center text-primary group-hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-2xl">key</span>
+</div>
+<div class="w-7 h-7 rounded-full border-2 border-outline-variant flex items-center justify-center text-transparent peer-checked:bg-primary peer-checked:border-primary peer-checked:text-on-primary transition-all">
+<span class="material-symbols-outlined text-base font-bold">check</span>
+</div>
+</div>
+<h4 class="text-subheading-md font-subheading-md text-on-surface mb-1">
+                Rentals
+              </h4>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mb-4 leading-relaxed">
+                Vehicles, party furniture, event sound systems, ladders, cameras, and tools.
+              </p>
+<div class="flex flex-wrap gap-1.5 pt-1">
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Per-Day Rates</span>
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Deposit Tracking</span>
+</div>
+</div>
+</label>
+<!-- Model Card 4: Personal Stall -->
+<label class="relative block cursor-pointer group">
+<input class="peer sr-only" name="business_model" type="radio" value="stall"/>
+<div class="h-full bg-surface-container-lowest border border-outline-variant rounded-xl p-5 transition-all hover:border-primary peer-checked:border-primary-container peer-checked:bg-surface-bright">
+<div class="flex items-start justify-between mb-3">
+<div class="w-12 h-12 rounded-xl bg-surface-container-low flex items-center justify-center text-primary group-hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-2xl">local_florist</span>
+</div>
+<div class="w-7 h-7 rounded-full border-2 border-outline-variant flex items-center justify-center text-transparent peer-checked:bg-primary peer-checked:border-primary peer-checked:text-on-primary transition-all">
+<span class="material-symbols-outlined text-base font-bold">check</span>
+</div>
+</div>
+<h4 class="text-subheading-md font-subheading-md text-on-surface mb-1">
+                Personal Stall
+              </h4>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mb-4 leading-relaxed">
+                Home crafts, organic terrace harvest, baked treats, art, and preloved goods.
+              </p>
+<div class="flex flex-wrap gap-1.5 pt-1">
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Direct Chat</span>
+<span class="text-caption-xs font-caption-bold px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant">Flexible Offers</span>
+</div>
+</div>
+</label>
+</div>
+</section>
+<!-- SECTION 2: BUSINESS IDENTITY & DISCOVERY TAGS -->
+<section aria-labelledby="section-identity-title" class="space-y-5 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 sm:p-7">
+<div class="border-b border-outline-variant/40 pb-3">
+<h3 class="text-heading-lg-mobile font-heading-lg-mobile text-on-surface" id="section-identity-title">
+            2. Business Identity &amp; Discovery Tags
+          </h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-1">
+            This information appears in neighborhood searches and on your physical stall QR badge.
+          </p>
+</div>
+<!-- Field 1: Business / Trade Name -->
+<div class="space-y-1.5">
+<label class="block text-label-bold font-label-bold text-on-surface" for="business_name">
+            Business / Trade Name <span class="text-secondary">*</span>
+</label>
+<div class="relative rounded-xl shadow-sm">
+<input class="w-full h-12 px-4 pr-11 bg-surface-container-lowest border border-outline-variant rounded-xl text-body-base font-body-base text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-surface-container transition-all" id="business_name" name="business_name" placeholder="e.g. Green Leaf Cafe or Sharma Tools" type="text" value="Verma Quick Sanitary &amp; Plumbing"/>
+<div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-primary-container">
+<span class="material-symbols-outlined text-xl" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant flex items-center gap-1">
+<span class="material-symbols-outlined text-sm text-primary">check_circle</span>
+            Trade identity verified with neighborhood registry
+          </p>
+</div>
+<!-- Field 2: Category & Trade Tags -->
+<div class="space-y-2">
+<label class="block text-label-bold font-label-bold text-on-surface">
+            Category &amp; Trade Tags <span class="text-secondary">*</span>
+</label>
+<!-- Active Tags Area -->
+<div class="min-h-12 p-2 bg-surface-container-lowest border border-outline-variant rounded-xl flex flex-wrap items-center gap-2">
+<!-- Tag 1 -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-container text-on-primary text-label-sm font-label-sm shadow-sm">
+<span>#Plumbing</span>
+<button aria-label="Remove Plumbing tag" class="w-4 h-4 rounded-full inline-flex items-center justify-center hover:bg-black/20" type="button">
+<span class="material-symbols-outlined text-xs">close</span>
+</button>
+</span>
+<!-- Tag 2 -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-container text-on-primary text-label-sm font-label-sm shadow-sm">
+<span>#Emergency Repair</span>
+<button aria-label="Remove Emergency Repair tag" class="w-4 h-4 rounded-full inline-flex items-center justify-center hover:bg-black/20" type="button">
+<span class="material-symbols-outlined text-xs">close</span>
+</button>
+</span>
+<!-- Tag 3 -->
+<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary-container text-on-primary text-label-sm font-label-sm shadow-sm">
+<span>#Sanitary Fitting</span>
+<button aria-label="Remove Sanitary Fitting tag" class="w-4 h-4 rounded-full inline-flex items-center justify-center hover:bg-black/20" type="button">
+<span class="material-symbols-outlined text-xs">close</span>
+</button>
+</span>
+<!-- Add Tag Pill Button -->
+<button class="inline-flex items-center gap-1 px-3 py-1 rounded-full border border-dashed border-outline text-on-surface-variant hover:text-primary hover:border-primary text-label-sm font-label-sm transition-colors" type="button">
+<span class="material-symbols-outlined text-sm">add</span>
+<span>Add tag...</span>
+</button>
+</div>
+<!-- Suggested Tags -->
+<div class="flex items-center flex-wrap gap-2 pt-1">
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">Recommended for plumbers:</span>
+<button class="text-caption-bold font-caption-bold px-2.5 py-0.5 rounded-full bg-surface-container text-primary hover:bg-surface-container-high transition-colors" type="button">
+              + Water Heater
+            </button>
+<button class="text-caption-bold font-caption-bold px-2.5 py-0.5 rounded-full bg-surface-container text-primary hover:bg-surface-container-high transition-colors" type="button">
+              + Pipe Clog
+            </button>
+<button class="text-caption-bold font-caption-bold px-2.5 py-0.5 rounded-full bg-surface-container text-primary hover:bg-surface-container-high transition-colors" type="button">
+              + Bathroom Fitting
+            </button>
+</div>
+</div>
+<!-- Field 3: Short Tagline / Headline -->
+<div class="space-y-1.5">
+<div class="flex justify-between items-center">
+<label class="block text-label-bold font-label-bold text-on-surface" for="tagline">
+              Short Tagline / Headline
+            </label>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant">58/100</span>
+</div>
+<div class="relative">
+<input class="w-full h-12 px-4 bg-surface-container-lowest border border-outline-variant rounded-xl text-body-base font-body-base text-on-surface focus:outline-none focus:border-primary-container focus:ring-2 focus:ring-surface-container transition-all" id="tagline" maxlength="100" name="tagline" type="text" value="Licensed residential plumbing with 30-min emergency response."/>
+</div>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant">
+            Displayed prominently beneath your title in local search cards and chat prompts.
+          </p>
+</div>
+</section>
+<!-- SECTION 3: OPERATING HOURS & DIRECT CALLING -->
+<section aria-labelledby="section-operations-title" class="space-y-4 bg-surface-container-lowest border border-outline-variant rounded-xl p-6 sm:p-7">
+<div class="border-b border-outline-variant/40 pb-3">
+<h3 class="text-heading-lg-mobile font-heading-lg-mobile text-on-surface" id="section-operations-title">
+            3. Operating Hours &amp; Direct Calling
+          </h3>
+<p class="text-caption-xs font-caption-xs text-on-surface-variant mt-1">
+            Let neighbors know when you are open for work and how they can reach you immediately.
+          </p>
+</div>
+<!-- Operating Schedule Row -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-surface border border-outline-variant/50">
+<div class="flex items-center gap-3.5">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-xl">schedule</span>
+</div>
+<div>
+<span class="text-caption-xs font-caption-xs text-on-surface-variant block uppercase tracking-wider">Weekly Schedule</span>
+<p class="text-body-medium font-body-medium text-on-surface font-semibold flex items-center gap-2">
+<span>Open Daily • 8:00 AM – 8:00 PM</span>
+<span class="inline-flex items-center px-2 py-0.5 rounded-full text-caption-xs font-caption-bold bg-surface-container-high text-primary">
+                  12 hrs/day
+                </span>
+</p>
+</div>
+</div>
+<button class="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-full border border-outline-variant bg-surface-container-lowest hover:bg-surface-container text-label-bold font-label-bold text-primary transition-colors text-sm" type="button">
+<span class="material-symbols-outlined text-base">edit_calendar</span>
+<span>Edit Schedule</span>
+</button>
+</div>
+<!-- In-App Voice & Calling Toggle -->
+<div class="p-4 rounded-xl bg-surface border border-outline-variant/50">
+<div class="flex items-start justify-between gap-4">
+<div class="flex items-start gap-3.5">
+<div class="w-10 h-10 rounded-full bg-surface-container-high flex items-center justify-center text-primary flex-shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-xl">phone_in_talk</span>
+</div>
+<div class="space-y-1">
+<div class="flex items-center gap-2 flex-wrap">
+<label class="text-subheading-md font-subheading-md text-on-surface font-semibold cursor-pointer" for="voice-toggle">
+                    Private In-App Voice Calls (Recommended)
+                  </label>
+<span class="px-2 py-0.5 rounded-full bg-secondary-container/20 text-secondary text-caption-bold font-caption-bold">
+                    Zero Number Exposure
+                  </span>
+</div>
+<p class="text-caption-xs sm:text-label-sm font-caption-xs sm:font-label-sm text-on-surface-variant max-w-xl leading-relaxed">
+                  Connect instantly with verified neighborhood customers without exposing your personal phone number. Receive alerts strictly within operating hours.
+                </p>
+</div>
+</div>
+<!-- Custom Switch Toggle -->
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0 mt-1">
+<input checked="" class="sr-only peer" id="voice-toggle" type="checkbox"/>
+<div class="w-12 h-6 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:border-outline-variant after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+</div>
+</section>
+</form>
+</main>
+<!-- STICKY BOTTOM ACTION BAR -->
+<footer class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-low dark:bg-surface-container shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
+<div class="max-w-4xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+<button class="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full text-label-bold font-label-bold text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors" type="button">
+<span class="material-symbols-outlined text-lg">arrow_back</span>
+<span>Back</span>
+</button>
+<div class="flex items-center gap-3">
+<span class="hidden sm:inline-block text-caption-xs font-caption-xs text-on-surface-variant">Step 1 of 4 completed</span>
+<button class="inline-flex items-center justify-center gap-2 px-6 sm:px-8 py-3 rounded-full bg-primary-container hover:bg-primary text-on-primary font-button-label text-button-label active:scale-95 transition-all shadow-sm" type="button">
+<span>Next: Location &amp; Operating Area</span>
+<span class="material-symbols-outlined text-lg">arrow_forward</span>
+</button>
+</div>
+</div>
+</footer>
+</body></html>

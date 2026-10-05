@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>List a Business - Step 3: Offerings &amp; Building Blocks | One Place</title>
+<!-- Material Symbols Outlined -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Google Font: Plus Jakarta Sans -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface-container-low": "#eaf7ec",
+            "inverse-surface": "#28332c",
+            "primary-container": "#2d5a43",
+            "surface-container-lowest": "#ffffff",
+            "primary-fixed": "#bceecf",
+            "primary-fixed-dim": "#a1d1b4",
+            "tertiary": "#513500",
+            "inverse-primary": "#a1d1b4",
+            "on-primary-fixed": "#002112",
+            "outline": "#717973",
+            "tertiary-container": "#6f4a00",
+            "secondary-fixed": "#ffdad2",
+            "on-secondary-container": "#721c09",
+            "on-error": "#ffffff",
+            "secondary-container": "#fd8367",
+            "on-secondary-fixed-variant": "#822714",
+            "on-primary": "#ffffff",
+            "inverse-on-surface": "#e7f4e9",
+            "error-container": "#ffdad6",
+            "on-secondary": "#ffffff",
+            "on-secondary-fixed": "#3d0600",
+            "tertiary-fixed-dim": "#ffba44",
+            "surface-container-high": "#dfebe0",
+            "primary": "#14422d",
+            "surface-bright": "#f0fdf1",
+            "on-tertiary-fixed-variant": "#614000",
+            "secondary": "#a13e28",
+            "outline-variant": "#c0c9c1",
+            "on-primary-fixed-variant": "#224f39",
+            "surface": "#f0fdf1",
+            "on-surface": "#131e17",
+            "on-tertiary-fixed": "#281800",
+            "on-background": "#131e17",
+            "on-tertiary-container": "#ffb739",
+            "error": "#ba1a1a",
+            "surface-tint": "#3a674f",
+            "secondary-fixed-dim": "#ffb4a3",
+            "surface-dim": "#d0ddd2",
+            "tertiary-fixed": "#ffddaf",
+            "on-error-container": "#93000a",
+            "on-primary-container": "#9fcfb2",
+            "surface-container": "#e4f1e6",
+            "background": "#f0fdf1",
+            "on-surface-variant": "#414943",
+            "surface-container-highest": "#d9e6db",
+            "on-tertiary": "#ffffff",
+            "surface-variant": "#d9e6db"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "space-lg": "1rem",
+            "space-md": "0.75rem",
+            "space-sm": "0.5rem",
+            "gutter": "1rem",
+            "space-xs": "0.25rem",
+            "margin": "1rem",
+            "space-xl": "1.5rem"
+          },
+          "fontFamily": {
+            "heading-lg-mobile": ["Plus Jakarta Sans"],
+            "display-title": ["Plus Jakarta Sans"],
+            "label-sm": ["Plus Jakarta Sans"],
+            "body-base": ["Plus Jakarta Sans"],
+            "label-bold": ["Plus Jakarta Sans"],
+            "caption-xs": ["Plus Jakarta Sans"],
+            "display-title-mobile": ["Plus Jakarta Sans"],
+            "heading-lg": ["Plus Jakarta Sans"],
+            "button-label": ["Plus Jakarta Sans"],
+            "subheading-md": ["Plus Jakarta Sans"],
+            "body-medium": ["Plus Jakarta Sans"],
+            "caption-bold": ["Plus Jakarta Sans"]
+          },
+          "fontSize": {
+            "heading-lg-mobile": ["20px", { "lineHeight": "26px", "fontWeight": "700" }],
+            "display-title": ["28px", { "lineHeight": "34px", "fontWeight": "700" }],
+            "label-sm": ["14px", { "lineHeight": "20px", "fontWeight": "500" }],
+            "body-base": ["16px", { "lineHeight": "24px", "fontWeight": "400" }],
+            "label-bold": ["14px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "caption-xs": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+            "display-title-mobile": ["24px", { "lineHeight": "30px", "fontWeight": "700" }],
+            "heading-lg": ["22px", { "lineHeight": "28px", "fontWeight": "700" }],
+            "button-label": ["15px", { "lineHeight": "20px", "fontWeight": "700" }],
+            "subheading-md": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+            "body-medium": ["16px", { "lineHeight": "24px", "fontWeight": "500" }],
+            "caption-bold": ["12px", { "lineHeight": "16px", "fontWeight": "700" }]
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      vertical-align: middle;
+      line-height: 1;
+    }
+    /* Smooth card toggling visual transition */
+    .toggle-checkbox:checked {
+      right: 2px;
+      left: auto;
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface antialiased min-h-screen flex flex-col font-body-base selection:bg-primary-fixed selection:text-on-primary-fixed">
+<!-- Top App Bar Navigation Anchor -->
+<header class="bg-surface-container-low sticky top-0 z-40 shadow-sm border-b border-outline-variant">
+<div class="max-w-7xl mx-auto px-space-lg py-space-sm flex justify-between items-center">
+<!-- Leading: Back Action & Hierarchy -->
+<div class="flex items-center gap-space-md">
+<a aria-label="Go back" class="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-surface-container-highest active:scale-95 transition-all" href="#previous-step">
+<span class="material-symbols-outlined text-primary text-2xl" data-icon="arrow_back">arrow_back</span>
+</a>
+<div>
+<div class="flex items-center gap-space-xs">
+<span class="px-space-xs py-0.5 rounded-full bg-primary text-on-primary font-caption-bold text-caption-bold">Step 3 of 4</span>
+<span class="text-on-surface-variant font-caption-xs text-caption-xs hidden sm:inline">• Offerings &amp; Building Blocks</span>
+</div>
+<h1 class="text-heading-lg-mobile font-heading-lg-mobile md:text-heading-lg md:font-heading-lg text-primary tracking-tight">List a Business</h1>
+</div>
+</div>
+<!-- Trailing Bookmark & Save indicator -->
+<div class="flex items-center gap-space-sm">
+<span class="hidden md:inline-flex items-center gap-1 text-on-surface-variant font-label-sm text-label-sm">
+<span class="material-symbols-outlined text-base text-primary" data-icon="cloud_done">cloud_done</span> Draft saved
+        </span>
+<button class="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-surface-container-highest active:scale-95 transition-all" title="Save for later">
+<span class="material-symbols-outlined text-primary" data-icon="bookmark">bookmark</span>
+</button>
+</div>
+</div>
+<!-- Progress Indicator Bar -->
+<div class="w-full bg-surface-container h-1">
+<div class="bg-primary h-1 w-3/4 rounded-r-full transition-all duration-300"></div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-grow max-w-7xl w-full mx-auto px-space-md md:px-space-xl py-space-xl space-y-space-xl pb-32">
+<!-- Hero Context Header -->
+<section class="max-w-3xl space-y-space-xs">
+<div class="inline-flex items-center gap-2 px-space-sm py-1 rounded-full bg-surface-container-high text-primary font-caption-bold text-caption-bold">
+<span class="material-symbols-outlined text-sm" data-icon="tune">tune</span>
+        Interactive Modular Configuration
+      </div>
+<h2 class="text-display-title-mobile md:text-display-title font-display-title text-primary tracking-tight">
+        What does your business offer?
+      </h2>
+<p class="text-on-surface-variant font-body-base text-body-base leading-relaxed">
+        Every local business is unique. Choose the operational building blocks you operate with. Each selection configures your storefront tabs and merchant workspace tools.
+      </p>
+</section>
+<!-- Constant Inclusions Banner -->
+<section class="rounded-xl border border-outline-variant bg-surface-container-lowest p-space-md md:p-space-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-space-md shadow-sm">
+<div class="flex items-start md:items-center gap-space-md">
+<div class="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-xl" data-icon="verified">verified</span>
+</div>
+<div>
+<span class="font-label-bold text-label-bold text-primary block">Always Included for Every Profile</span>
+<p class="text-on-surface-variant font-label-sm text-label-sm mt-0.5">
+            In-App Voice Calls, Verified Neighborhood Chat, and Navigation Route are built-in for every profile.
+          </p>
+</div>
+</div>
+<div class="flex items-center gap-2 self-end md:self-auto">
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-caption-bold text-caption-xs border border-outline-variant">
+<span class="material-symbols-outlined text-xs text-primary" data-icon="call">call</span> Voice
+        </span>
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-caption-bold text-caption-xs border border-outline-variant">
+<span class="material-symbols-outlined text-xs text-primary" data-icon="chat">chat</span> Chat
+        </span>
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-caption-bold text-caption-xs border border-outline-variant">
+<span class="material-symbols-outlined text-xs text-primary" data-icon="near_me">near_me</span> Route
+        </span>
+</div>
+</section>
+<!-- Responsive Layout: 2 Columns on Desktop (Blocks Grid + Live Blueprint Sticky Preview) -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-xl items-start">
+<!-- Section 1: Operational Building Blocks (7 Cards) -->
+<section class="lg:col-span-7 xl:col-span-8 space-y-space-md">
+<div class="flex items-center justify-between">
+<h3 class="text-heading-lg-mobile md:text-heading-lg font-heading-lg text-primary">
+            Operational Building Blocks
+          </h3>
+<span class="text-on-surface-variant font-caption-bold text-caption-bold">3 of 7 Selected</span>
+</div>
+<div class="grid grid-cols-1 gap-space-md">
+<!-- Block 1: Food Menu & Drinks (OFF) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md md:p-space-lg border border-outline-variant hover:border-outline transition-all duration-150">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-2xl" data-icon="restaurant_menu">restaurant_menu</span>
+</div>
+<div>
+<h4 class="text-subheading-md font-subheading-md text-on-surface">Food Menu &amp; Drinks</h4>
+<p class="text-on-surface-variant font-label-sm text-label-sm mt-0.5">Cafes, bakeries, cloud kitchens, juice bars.</p>
+</div>
+</div>
+<!-- Clean Switch Toggle (OFF) -->
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:border-outline-variant after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+<!-- Unlock Badges -->
+<div class="mt-space-md pt-space-md border-t border-surface-container flex flex-wrap items-center gap-space-xs">
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">Unlocks:</span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-xs">
+                Digital Menu
+              </span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-xs">
+                Dine-in Tabs
+              </span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-xs">
+                Table POS
+              </span>
+</div>
+</div>
+<!-- Block 2: Products for Sale (ON) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md md:p-space-lg border-2 border-primary-container shadow-sm transition-all duration-150">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-2xl" data-icon="inventory_2">inventory_2</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h4 class="text-subheading-md font-subheading-md text-primary">Products for Sale</h4>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">Active</span>
+</div>
+<p class="text-on-surface-variant font-label-sm text-label-sm mt-0.5">Retail, hardware, groceries, spare parts.</p>
+</div>
+</div>
+<!-- Clean Switch Toggle (ON) -->
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:border-outline-variant after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+<!-- Unlock Badges -->
+<div class="mt-space-md pt-space-md border-t border-surface-container-high flex flex-wrap items-center gap-space-xs">
+<span class="text-primary font-caption-bold text-caption-xs">Unlocks:</span>
+<span class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Catalog Storefront
+              </span>
+<span class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Stock Management
+              </span>
+<span class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Billing POS
+              </span>
+</div>
+</div>
+<!-- Block 3: Services & Repairs (ON) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md md:p-space-lg border-2 border-primary-container shadow-sm transition-all duration-150">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-2xl" data-icon="handyman">handyman</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h4 class="text-subheading-md font-subheading-md text-primary">Services &amp; Repairs</h4>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">Active</span>
+</div>
+<p class="text-on-surface-variant font-label-sm text-label-sm mt-0.5">Plumbing, electrical, wheel alignment, home visits.</p>
+</div>
+</div>
+<!-- Clean Switch Toggle (ON) -->
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:border-outline-variant after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+<!-- Unlock Badges -->
+<div class="mt-space-md pt-space-md border-t border-surface-container-high flex flex-wrap items-center gap-space-xs">
+<span class="text-primary font-caption-bold text-caption-xs">Unlocks:</span>
+<span class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Service Rate Cards
+              </span>
+<span class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Diagnostic Booking
+              </span>
+<span class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Job Sheets
+              </span>
+</div>
+</div>
+<!-- Block 4: Custom Packages & Events (OFF) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md md:p-space-lg border border-outline-variant hover:border-outline transition-all duration-150">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-2xl" data-icon="celebration">celebration</span>
+</div>
+<div>
+<h4 class="text-subheading-md font-subheading-md text-on-surface">Custom Packages &amp; Events</h4>
+<p class="text-on-surface-variant font-label-sm text-label-sm mt-0.5">Haldi/wedding sets, party catering, custom quotations.</p>
+</div>
+</div>
+<!-- Clean Switch Toggle (OFF) -->
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:border-outline-variant after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+<!-- Unlock Badges -->
+<div class="mt-space-md pt-space-md border-t border-surface-container flex flex-wrap items-center gap-space-xs">
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">Unlocks:</span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-xs">
+                Package Bundles
+              </span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-xs">
+                Custom Quotes
+              </span>
+</div>
+</div>
+<!-- Block 5: Work Showcase / Portfolio (ON) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md md:p-space-lg border-2 border-primary-container shadow-sm transition-all duration-150">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-primary text-on-primary flex items-center justify-center flex-shrink-0">
+<span class="material-symbols-outlined text-2xl" data-icon="photo_camera">photo_camera</span>
+</div>
+<div>
+<div class="flex items-center gap-2">
+<h4 class="text-subheading-md font-subheading-md text-primary">Work Showcase / Portfolio</h4>
+<span class="px-2 py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">Active</span>
+</div>
+<p class="text-on-surface-variant font-label-sm text-label-sm mt-0.5">Decorators, salons, plumbers, tailors.</p>
+</div>
+</div>
+<!-- Clean Switch Toggle (ON) -->
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:border-outline-variant after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+<!-- Unlock Badges -->
+<div class="mt-space-md pt-space-md border-t border-surface-container-high flex flex-wrap items-center gap-space-xs">
+<span class="text-primary font-caption-bold text-caption-xs">Unlocks:</span>
+<span class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Visual Reels Carousel
+              </span>
+<span class="inline-flex items-center gap-1 px-space-sm py-0.5 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Photo Showcase
+              </span>
+</div>
+</div>
+<!-- Block 6: Rentals (OFF) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md md:p-space-lg border border-outline-variant hover:border-outline transition-all duration-150">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-2xl" data-icon="key">key</span>
+</div>
+<div>
+<h4 class="text-subheading-md font-subheading-md text-on-surface">Rentals</h4>
+<p class="text-on-surface-variant font-label-sm text-label-sm mt-0.5">Vehicles, event gear, sound systems, tools.</p>
+</div>
+</div>
+<!-- Clean Switch Toggle (OFF) -->
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:border-outline-variant after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+<!-- Unlock Badges -->
+<div class="mt-space-md pt-space-md border-t border-surface-container flex flex-wrap items-center gap-space-xs">
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">Unlocks:</span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-xs">
+                Duration Picker
+              </span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-xs">
+                Deposit Tracker
+              </span>
+</div>
+</div>
+<!-- Block 7: Recurring Plans & Memberships (OFF) -->
+<div class="bg-surface-container-lowest rounded-xl p-space-md md:p-space-lg border border-outline-variant hover:border-outline transition-all duration-150">
+<div class="flex items-start justify-between gap-space-md">
+<div class="flex items-start gap-space-md">
+<div class="w-12 h-12 rounded-xl bg-surface-container flex items-center justify-center text-primary flex-shrink-0">
+<span class="material-symbols-outlined text-2xl" data-icon="event_repeat">event_repeat</span>
+</div>
+<div>
+<h4 class="text-subheading-md font-subheading-md text-on-surface">Recurring Plans &amp; Memberships</h4>
+<p class="text-on-surface-variant font-label-sm text-label-sm mt-0.5">Gym passes, tuition batches, tiffin subscriptions.</p>
+</div>
+</div>
+<!-- Clean Switch Toggle (OFF) -->
+<label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-12 h-7 bg-surface-container-highest peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-surface-container-lowest after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-surface-container-lowest after:border-outline-variant after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+<!-- Unlock Badges -->
+<div class="mt-space-md pt-space-md border-t border-surface-container flex flex-wrap items-center gap-space-xs">
+<span class="text-on-surface-variant font-caption-xs text-caption-xs">Unlocks:</span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-xs">
+                Subscription Ledger
+              </span>
+<span class="inline-flex items-center px-space-sm py-0.5 rounded-full bg-surface-container text-on-surface-variant font-caption-bold text-caption-xs">
+                Renewal Alerts
+              </span>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 2: Live Storefront Blueprint Preview (Sticky Sidebar on Desktop) -->
+<aside class="lg:col-span-5 xl:col-span-4 sticky top-24 space-y-space-md">
+<div class="bg-surface-container-lowest rounded-xl p-space-md md:p-space-lg border border-outline-variant shadow-sm space-y-space-lg">
+<!-- Header and Badge -->
+<div class="space-y-space-xs">
+<div class="flex items-center justify-between">
+<span class="inline-flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container-low text-primary font-caption-bold text-caption-xs border border-primary-fixed">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                Auto-configured from selections
+              </span>
+<span class="material-symbols-outlined text-outline text-lg" data-icon="dashboard_customize">dashboard_customize</span>
+</div>
+<h3 class="text-heading-lg-mobile font-heading-lg-mobile text-primary">
+              Live Storefront Blueprint Preview
+            </h3>
+<p class="text-on-surface-variant font-label-sm text-label-sm">
+              Real-time representation of how neighborhood customers and your back-office desk will experience your setup.
+            </p>
+</div>
+<!-- Active Storefront Tabs Sub-section -->
+<div class="space-y-space-sm bg-surface-container-low/50 p-space-md rounded-lg border border-surface-container">
+<div class="flex items-center justify-between">
+<span class="font-label-bold text-label-bold text-primary flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base" data-icon="storefront">storefront</span>
+                Active Customer Tabs
+              </span>
+<span class="font-caption-xs text-caption-xs text-on-surface-variant">5 Tabs</span>
+</div>
+<div class="flex flex-wrap gap-1.5">
+<!-- Default Tab -->
+<span class="inline-flex items-center px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-caption-bold text-caption-xs border border-outline-variant">
+                Overview &amp; Location
+              </span>
+<!-- Default Tab -->
+<span class="inline-flex items-center px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-caption-bold text-caption-xs border border-outline-variant">
+                Direct Call &amp; Chat
+              </span>
+<!-- Unlocked by Block 2 -->
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary text-on-primary font-caption-bold text-caption-xs shadow-xs">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Store Catalog
+              </span>
+<!-- Unlocked by Block 3 -->
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary text-on-primary font-caption-bold text-caption-xs shadow-xs">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Services &amp; Rates
+              </span>
+<!-- Unlocked by Block 5 -->
+<span class="inline-flex items-center gap-1 px-space-sm py-1 rounded-full bg-primary text-on-primary font-caption-bold text-caption-xs shadow-xs">
+<span class="material-symbols-outlined text-xs" data-icon="check">check</span> Work Proof Reels
+              </span>
+</div>
+</div>
+<!-- Backstage Workspace Tools Activated -->
+<div class="space-y-space-sm bg-surface-container-low/50 p-space-md rounded-lg border border-surface-container">
+<div class="flex items-center justify-between">
+<span class="font-label-bold text-label-bold text-primary flex items-center gap-1.5">
+<span class="material-symbols-outlined text-base" data-icon="business_center">business_center</span>
+                Backstage Workspace Tools
+              </span>
+<span class="font-caption-xs text-caption-xs text-on-surface-variant">4 Modules</span>
+</div>
+<div class="grid grid-cols-2 gap-2">
+<div class="p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-base" data-icon="receipt_long">receipt_long</span>
+<span class="text-caption-bold font-caption-bold text-on-surface">Orders Desk</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-base" data-icon="point_of_sale">point_of_sale</span>
+<span class="text-caption-bold font-caption-bold text-on-surface">Billing POS</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant flex items-center gap-2 col-span-2">
+<span class="material-symbols-outlined text-primary text-base" data-icon="calendar_month">calendar_month</span>
+<span class="text-caption-bold font-caption-bold text-on-surface">Appointment &amp; Visit Desk</span>
+</div>
+<div class="p-2.5 rounded-lg bg-surface-container-lowest border border-outline-variant flex items-center gap-2 col-span-2">
+<span class="material-symbols-outlined text-primary text-base" data-icon="video_library">video_library</span>
+<span class="text-caption-bold font-caption-bold text-on-surface">Work Proof Manager</span>
+</div>
+</div>
+</div>
+<!-- Quick Tip Card -->
+<div class="p-space-sm rounded-lg bg-surface-container flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-primary flex-shrink-0" data-icon="info">info</span>
+<p class="text-on-surface-variant font-caption-xs text-caption-xs leading-normal">
+              You can reconfigure or add other building blocks at any time after listing from your merchant settings.
+            </p>
+</div>
+</div>
+</aside>
+</div>
+</main>
+<!-- Sticky Bottom Task Action Bar -->
+<footer class="fixed bottom-0 left-0 w-full z-50 bg-surface-container-low/95 backdrop-blur-md border-t border-outline-variant shadow-lg py-space-sm md:py-space-md">
+<div class="max-w-7xl mx-auto px-space-md md:px-space-xl flex items-center justify-between gap-space-md">
+<!-- Back Action -->
+<a class="inline-flex items-center gap-1.5 px-space-lg py-3 rounded-full text-on-surface-variant font-button-label text-button-label hover:bg-surface-container-high active:scale-95 transition-all" href="#previous-step">
+<span class="material-symbols-outlined text-lg" data-icon="arrow_back">arrow_back</span>
+        Back
+      </a>
+<!-- Flow Stepper Indicator Info on desktop -->
+<div class="hidden sm:flex items-center gap-2 text-on-surface-variant font-label-sm text-label-sm">
+<span>Step 3 of 4: Offerings &amp; Building Blocks</span>
+</div>
+<!-- Primary CTA Button -->
+<a class="inline-flex items-center justify-center gap-2 bg-primary text-on-primary font-button-label text-button-label h-[50px] px-space-xl rounded-full shadow-sm hover:opacity-90 active:scale-95 transition-all" href="#step-4-review-launch">
+<span>Next: Review &amp; Launch (Step 4)</span>
+<span class="material-symbols-outlined text-lg" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</footer>
+</body></html>
