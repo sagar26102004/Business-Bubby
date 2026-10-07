@@ -33,7 +33,7 @@ export default function SearchScreen() {
   const insets = useSafeAreaInsets();
   const { cardColumns, gridMaxWidth, readableMaxWidth, centered } = useResponsive();
 
-  // `?q=` pre-fills and runs a search — Explore's trending #tag chips use it.
+  // `?q=` pre-fills and runs a search.
   const { q } = useLocalSearchParams<{ q?: string }>();
   const [query, setQuery] = useState(q ?? '');
   /** The committed search term — set on enter or when a suggestion is tapped. */

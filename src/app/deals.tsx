@@ -8,15 +8,22 @@
  * to browse them properly: one at a time, edge to edge, swiping up — and where
  * a business's video ad actually plays instead of sitting still.
  *
- * THE THREE CONTROLS, all applied to one fetch:
+ * LAYOUT follows the One Place "flash reels" mockup: the feed fills the whole
+ * window and the chrome FLOATS over it — back, a two-way pill ("Near you" /
+ * "Ending soon"), sound and filters — with a "1 / 12 deals nearby" counter
+ * under it. Each page is a `DealReelCard`.
+ *
+ * THE CONTROLS, all applied to one fetch:
+ *   MODE       — "Near you" is everything in range, nearest first as the
+ *                repository returns it; "Ending soon" keeps only offers with
+ *                an end date and puts the closest deadline first.
  *   RANGE      — the customer's own radius, in km, from 1 km all the way to
- *                "Anywhere". It goes to the repository (`listPlacements(near,
- *                { radiusKm })`), because widening the range must fetch
- *                further, not just filter what's on hand. Nothing caps it at a
- *                neighborhood: a customer willing to scroll through what's on
- *                offer 100 km away is inventory delivered for free, and ads are
- *                no longer sold by radius (domain/ads.ts) so a wider look costs
- *                the advertiser nothing either.
+ *                "Anywhere" (in the filter panel). It goes to the repository
+ *                (`listPlacements(near, { radiusKm })`), because widening the
+ *                range must fetch further, not just filter what's on hand.
+ *                Nothing caps it at a neighborhood: ads are no longer sold by
+ *                radius (domain/ads.ts) so a wider look costs the advertiser
+ *                nothing.
  *   CATEGORY   — the same INTENT_CATEGORIES as Home, matched with
  *                `intentMatches`, so "Food" means the same thing on both.
  *   REELS ONLY — narrows to offers with a video. Only offered when a video is
@@ -54,7 +61,7 @@ import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { shareText } from '@/lib/share';
 import { Icon, Text } from '@/components/ui';
-import { DealReelCard } from '@/features/ads/DealReelCard';
+import { DealReelCard, REEL } from '@/features/ads/DealReelCard';
 import { radius, spacing } from '@/theme/theme';
 
 /**
@@ -63,6 +70,11 @@ import { radius, spacing } from '@/theme/theme';
  * ("Anywhere") is one number the whole app agrees on.
  */
 const RANGES_KM = [...FEED_RANGES_KM, ANY_RANGE_KM];
+
+type Mode = 'near' | 'ending';
+
+/** Height of the floating bar below the status bar. */
+const BAR_HEIGHT = 56;
 
 export default function DealsScreen() {
   const repos = useRepositories();
@@ -75,15 +87,16 @@ export default function DealsScreen() {
   // rather than resetting them to everything.
   const { place: placeId, intent } = useLocalSearchParams<{ place?: string; intent?: string }>();
 
+  const [mode, setMode] = useState<Mode>('near');
   const [rangeKm, setRangeKm] = useState<number>(DEFAULT_FEED_RANGE_KM);
   const [categoryId, setCategoryId] = useState<string | null>(intent ?? null);
   const [reelsOnly, setReelsOnly] = useState(false);
-  const [rangeOpen, setRangeOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // Held by the screen, not the card, so a viewer who unmutes one ad keeps
   // sound for the rest of the session's scrolling.
   const [muted, setMuted] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [headerHeight, setHeaderHeight] = useState<number | null>(null);
+  const listRef = useRef<FlatList<AdPlacement>>(null);
 
   const { data: places } = useAsync(() => repos.places.listPlaces(), []);
   const place: SavedPlace | undefined = useMemo(
@@ -103,12 +116,17 @@ export default function DealsScreen() {
 
   const items = useMemo(() => {
     const category = INTENT_CATEGORIES.find((c) => c.id === categoryId);
-    return all.filter((p) => {
+    const picked = all.filter((p) => {
       if (reelsOnly && !p.offer.videoUrl) return false;
       if (category && !intentMatches(p.business, category)) return false;
+      if (mode === 'ending' && !p.offer.endsAt) return false;
       return true;
     });
-  }, [all, categoryId, reelsOnly]);
+    if (mode === 'ending') {
+      picked.sort((a, b) => (a.offer.endsAt ?? '').localeCompare(b.offer.endsAt ?? ''));
+    }
+    return picked;
+  }, [all, categoryId, reelsOnly, mode]);
 
   /** Categories that actually have something in range — no dead chips. */
   const categories = useMemo(() => {
@@ -149,197 +167,271 @@ export default function DealsScreen() {
     );
   }, []);
 
-  // A page is exactly the window minus the filter rows, so one swipe is one
-  // deal. The estimate only holds for the very first frame, before onLayout.
-  const pageHeight = Math.max(height - (headerHeight ?? insets.top + 52), 320);
+  // Changing what's listed starts the feed from the top again.
+  const resetTo = useCallback(() => {
+    setActiveIndex(0);
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+
+  // The feed owns the whole window; the bar floats over it. One page is one
+  // window, so one swipe is one deal.
+  const pageHeight = Math.max(height, 480);
   // On a desktop browser a full-bleed video feed would be a wall of pixels;
   // 9:16 inside the window is what the ad was filmed for.
-  const pageWidth = Platform.OS === 'web' ? Math.min(width, Math.round(pageHeight * 0.62)) : width;
+  const pageWidth = Platform.OS === 'web' ? Math.min(width, Math.round(pageHeight * 0.56)) : width;
+  const topInset = insets.top + BAR_HEIGHT + spacing.sm;
 
   const rangeLabel = formatRangeKm(rangeKm);
+  const nearLabel = rangeKm >= ANY_RANGE_KM ? 'Anywhere' : `Near you · ${rangeLabel}`;
+  const activeHasVideo = !!items[activeIndex]?.offer.videoUrl;
+  const filtering = categoryId !== null || reelsOnly || rangeKm !== DEFAULT_FEED_RANGE_KM;
 
   return (
     <View style={styles.screen}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Everything above the feed is measured rather than guessed: the rows
-          come and go (the range panel opens, the category strip only exists
-          when something matches), and a page that isn't exactly the leftover
-          height stops one swipe meaning one deal. */}
-      <View onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}>
-      {/* ── Top bar: back, range, reels ── */}
-      <View style={[styles.bar, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={dismiss} hitSlop={8} style={styles.backBtn}>
-          <Icon name="arrowLeft" size={20} color="#fff" />
-        </Pressable>
-
-        <Text variant="label" weight="bold" tone="inverse" style={styles.barTitle}>
-          Deals near you
-        </Text>
-
-        <Pressable
-          onPress={() => setRangeOpen((v) => !v)}
-          style={[styles.pill, rangeOpen && styles.pillOn]}
-          hitSlop={6}
-        >
-          <Text variant="caption" weight="bold" tone="inverse">
-            📍 {rangeLabel} ▾
-          </Text>
-        </Pressable>
-
-        {hasReels ? (
-          <Pressable
-            onPress={() => setReelsOnly((v) => !v)}
-            style={[styles.pill, reelsOnly && styles.pillOn]}
-            hitSlop={6}
-          >
-            <Text variant="caption" weight="bold" tone="inverse">
-              🎬 Reels
+      <View style={[styles.column, { width: pageWidth }]}>
+        {/* ── The feed ──
+            The shared Loading/Error/Empty views are built for the app's paper
+            pages and would print near-black text onto this one, so the three
+            states are spelled out here in the feed's own palette. */}
+        {loading && !data ? (
+          <View style={styles.state}>
+            <ActivityIndicator color={REEL.mint} />
+          </View>
+        ) : error ? (
+          <View style={styles.state}>
+            <Text variant="subheading" weight="bold" style={styles.stateTitle}>
+              Couldn’t load deals
             </Text>
+            <Text style={styles.stateBody}>{error.message}</Text>
+            <Pressable onPress={reload} style={[styles.chip, styles.chipOn, styles.retry]}>
+              <Text variant="label" weight="bold" style={styles.chipTextOn}>
+                Try again
+              </Text>
+            </Pressable>
+          </View>
+        ) : items.length === 0 ? (
+          <View style={styles.state}>
+            <Text variant="subheading" weight="bold" style={styles.stateTitle}>
+              {mode === 'ending'
+                ? 'Nothing ending soon'
+                : reelsOnly
+                  ? 'No video ads in range'
+                  : 'No deals in range'}
+            </Text>
+            <Text style={styles.stateBody}>
+              {mode === 'ending'
+                ? 'None of the deals in range has an end date. Switch back to “Near you” to see them all.'
+                : rangeKm < ANY_RANGE_KM
+                  ? `Nothing on offer within ${rangeLabel}. Widen the range in filters to look further out — it goes all the way to “Anywhere”.`
+                  : 'Nothing on offer around you just yet. Businesses nearby post deals as they run them.'}
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            ref={listRef}
+            data={items}
+            keyExtractor={(p) => `${p.business.id}:${p.offer.id}`}
+            pagingEnabled
+            snapToInterval={pageHeight}
+            snapToAlignment="start"
+            decelerationRate="fast"
+            showsVerticalScrollIndicator={false}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
+            // Keep only the neighbours mounted: every extra page with a video is
+            // another player held open.
+            windowSize={3}
+            initialNumToRender={1}
+            maxToRenderPerBatch={2}
+            removeClippedSubviews
+            getItemLayout={(_, index) => ({
+              length: pageHeight,
+              offset: pageHeight * index,
+              index,
+            })}
+            style={styles.list}
+            renderItem={({ item, index }) => (
+              <DealReelCard
+                placement={item}
+                active={index === activeIndex}
+                muted={muted}
+                height={pageHeight}
+                topInset={topInset + 36}
+                bottomInset={insets.bottom}
+                onOpen={() => open(item)}
+                onOrder={
+                  canOrderFrom(item.business)
+                    ? () =>
+                        router.push({
+                          pathname: '/order/new/[businessId]',
+                          // The reel IS an offer — the order screen opens with
+                          // that bundle picked, not an empty catalog.
+                          params: { businessId: item.business.id, offer: item.offer.id },
+                        })
+                    : undefined
+                }
+                onShare={() => share(item)}
+                onCall={() => router.push(`/call/${item.business.id}`)}
+                onDirections={
+                  canRoute(item.business)
+                    ? () => router.push(`/directions/${item.business.id}`)
+                    : undefined
+                }
+                next={items[index + 1]}
+                onNext={() => listRef.current?.scrollToIndex({ index: index + 1, animated: true })}
+              />
+            )}
+          />
+        )}
+
+        {/* ── Floating chrome ── */}
+        <View style={[styles.bar, { paddingTop: insets.top + spacing.sm }]} pointerEvents="box-none">
+          <Pressable onPress={dismiss} hitSlop={8} style={styles.roundBtn}>
+            <Icon name="arrowLeft" size={20} color={REEL.text} />
           </Pressable>
+
+          <View style={styles.modes}>
+            <ModePill
+              label={nearLabel}
+              live
+              on={mode === 'near'}
+              onPress={() => {
+                setMode('near');
+                resetTo();
+              }}
+            />
+            <ModePill
+              label="Ending soon"
+              on={mode === 'ending'}
+              onPress={() => {
+                setMode('ending');
+                resetTo();
+              }}
+            />
+          </View>
+
+          {activeHasVideo ? (
+            <Pressable onPress={() => setMuted((m) => !m)} hitSlop={6} style={styles.roundBtn}>
+              <Icon name={muted ? 'volumeOff' : 'volume'} size={20} color={REEL.text} />
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => setFiltersOpen((v) => !v)}
+            hitSlop={6}
+            style={[styles.roundBtn, (filtersOpen || filtering) && styles.roundBtnOn]}
+          >
+            <Icon name="tune" size={20} color={REEL.text} />
+          </Pressable>
+        </View>
+
+        {/* ── Filters ── open only when asked for, so the feed keeps the screen. */}
+        {filtersOpen ? (
+          <View style={[styles.panel, { top: insets.top + BAR_HEIGHT + spacing.sm }]}>
+            <Text variant="caption" weight="bold" style={styles.panelLabel}>
+              DISTANCE
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {RANGES_KM.map((km) => (
+                <Chip
+                  key={km}
+                  label={km >= ANY_RANGE_KM ? '🌍 Anywhere' : `${km} km`}
+                  on={km === rangeKm}
+                  onPress={() => {
+                    setRangeKm(km);
+                    resetTo();
+                  }}
+                />
+              ))}
+            </ScrollView>
+
+            {categories.length > 0 || hasReels ? (
+              <>
+                <Text variant="caption" weight="bold" style={styles.panelLabel}>
+                  WHAT
+                </Text>
+                {/* The same intents as Home, kept to the ones that actually
+                    match something in range. */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                  <Chip
+                    label="✨ All"
+                    on={categoryId === null}
+                    onPress={() => {
+                      setCategoryId(null);
+                      resetTo();
+                    }}
+                  />
+                  {hasReels ? (
+                    <Chip
+                      label="🎬 Reels"
+                      on={reelsOnly}
+                      onPress={() => {
+                        setReelsOnly((v) => !v);
+                        resetTo();
+                      }}
+                    />
+                  ) : null}
+                  {categories.map((c) => (
+                    <Chip
+                      key={c.id}
+                      label={`${c.icon} ${c.label}`}
+                      on={categoryId === c.id}
+                      onPress={() => {
+                        setCategoryId(categoryId === c.id ? null : c.id);
+                        resetTo();
+                      }}
+                    />
+                  ))}
+                </ScrollView>
+              </>
+            ) : null}
+          </View>
+        ) : items.length > 0 ? (
+          <View style={[styles.counter, { top: insets.top + BAR_HEIGHT + spacing.sm }]} pointerEvents="none">
+            <Text variant="caption" weight="bold" style={{ color: REEL.mint }}>
+              {Math.min(activeIndex + 1, items.length)}
+            </Text>
+            <Text variant="caption" weight="bold" style={{ color: REEL.muted }}>
+              {' / '}
+              {items.length} {items.length === 1 ? 'deal' : 'deals'}{' '}
+              {mode === 'ending' ? 'ending soon' : rangeKm >= ANY_RANGE_KM ? 'in range' : 'nearby'}
+            </Text>
+          </View>
         ) : null}
       </View>
-
-      {/* Range row — open only when asked for, so the feed keeps the screen.
-          It scrolls because the ladder now runs past the neighborhood and out
-          to "Anywhere", which is more rungs than a phone's width holds. */}
-      {rangeOpen ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.rangeRow}
-        >
-          {RANGES_KM.map((km) => (
-            <Pressable
-              key={km}
-              onPress={() => setRangeKm(km)}
-              style={[styles.pill, km === rangeKm && styles.pillOn]}
-            >
-              <Text variant="caption" weight="bold" tone="inverse">
-                {km >= ANY_RANGE_KM ? '🌍 Anywhere' : `${km} km`}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      ) : null}
-
-      {/* ── Category chips ── the same intents as Home, kept to the ones that
-          actually match something in range. */}
-      {categories.length > 0 ? (
-        <View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.categoryRow}
-          >
-            <Pressable
-              onPress={() => setCategoryId(null)}
-              style={[styles.pill, categoryId === null && styles.pillOn]}
-            >
-              <Text variant="caption" weight="bold" tone="inverse">
-                ✨ All
-              </Text>
-            </Pressable>
-            {categories.map((c) => (
-              <Pressable
-                key={c.id}
-                onPress={() => setCategoryId(categoryId === c.id ? null : c.id)}
-                style={[styles.pill, categoryId === c.id && styles.pillOn]}
-              >
-                <Text variant="caption" weight="bold" tone="inverse">
-                  {c.icon} {c.label}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        </View>
-      ) : null}
-      </View>
-
-      {/* ── The feed ──
-          The shared Loading/Error/Empty views are built for the app's white
-          pages and would print near-black text onto this one, so the three
-          states are spelled out here in the feed's own palette. */}
-      {loading && !data ? (
-        <View style={styles.state}>
-          <ActivityIndicator color="#fff" />
-        </View>
-      ) : error ? (
-        <View style={styles.state}>
-          <Text variant="subheading" weight="bold" tone="inverse">
-            Couldn’t load deals
-          </Text>
-          <Text tone="inverse" style={styles.stateBody}>
-            {error.message}
-          </Text>
-          <Pressable onPress={reload} style={[styles.pill, styles.pillOn, styles.retry]}>
-            <Text variant="label" weight="bold" tone="inverse">
-              Try again
-            </Text>
-          </Pressable>
-        </View>
-      ) : items.length === 0 ? (
-        <View style={styles.state}>
-          <Text variant="subheading" weight="bold" tone="inverse">
-            {reelsOnly ? 'No video ads in range' : 'No deals in range'}
-          </Text>
-          <Text tone="inverse" style={styles.stateBody}>
-            {rangeKm < ANY_RANGE_KM
-              ? `Nothing on offer within ${rangeLabel}. Widen the range to look further out — it goes all the way to “Anywhere”.`
-              : 'Nothing on offer around you just yet. Businesses nearby post deals as they run them.'}
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={items}
-          keyExtractor={(p) => `${p.business.id}:${p.offer.id}`}
-          pagingEnabled
-          snapToInterval={pageHeight}
-          snapToAlignment="start"
-          decelerationRate="fast"
-          showsVerticalScrollIndicator={false}
-          onViewableItemsChanged={onViewableItemsChanged}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 60 }}
-          // Keep only the neighbours mounted: every extra page with a video is
-          // another player held open.
-          windowSize={3}
-          initialNumToRender={1}
-          maxToRenderPerBatch={2}
-          removeClippedSubviews
-          getItemLayout={(_, index) => ({
-            length: pageHeight,
-            offset: pageHeight * index,
-            index,
-          })}
-          style={styles.list}
-          contentContainerStyle={
-            pageWidth < width ? { width: pageWidth, alignSelf: 'center' } : undefined
-          }
-          renderItem={({ item, index }) => (
-            <DealReelCard
-              placement={item}
-              active={index === activeIndex}
-              muted={muted}
-              onToggleMute={() => setMuted((m) => !m)}
-              height={pageHeight}
-              onOpen={() => open(item)}
-              onOrder={
-                canOrderFrom(item.business)
-                  ? () =>
-                      router.push({
-                        pathname: '/order/new/[businessId]',
-                        // The reel IS an offer — order screen opens with that
-                        // bundle picked, not an empty catalog.
-                        params: { businessId: item.business.id, offer: item.offer.id },
-                      })
-                  : undefined
-              }
-              onShare={() => share(item)}
-            />
-          )}
-        />
-      )}
     </View>
+  );
+}
+
+function ModePill({
+  label,
+  on,
+  live,
+  onPress,
+}: {
+  label: string;
+  on: boolean;
+  live?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={[styles.mode, on && styles.modeOn]}>
+      {live && on ? <View style={styles.liveDot} /> : null}
+      <Text variant="caption" weight="bold" numberOfLines={1} style={{ color: on ? REEL.text : REEL.muted }}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function Chip({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[styles.chip, on && styles.chipOn]}>
+      <Text variant="caption" weight="bold" style={on ? styles.chipTextOn : styles.chipText}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -359,41 +451,103 @@ function canOrderFrom(business: Business): boolean {
   );
 }
 
+/**
+ * A route is only offered to a place the owner lets people find — a business
+ * run from home, or one hiding its exact address, has no Route button on its
+ * own page either.
+ */
+function canRoute(business: Business): boolean {
+  const loc = business.location;
+  return !!loc?.point && !loc.isHome && !loc.hidePreciseLocation;
+}
+
 const styles = StyleSheet.create({
   // The feed is dark end to end: the chrome has to belong to the video, not to
-  // the app's paper-white pages.
-  screen: { flex: 1, backgroundColor: '#000' },
+  // the app's paper pages.
+  screen: { flex: 1, backgroundColor: REEL.ground, alignItems: 'center' },
+  column: { flex: 1, overflow: 'hidden' },
+  list: { flex: 1 },
   bar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
+    gap: 6,
+    paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
   },
-  backBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  roundBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: REEL.glass,
+    borderWidth: 1,
+    borderColor: REEL.border,
   },
-  barTitle: { flex: 1 },
-  pill: {
+  roundBtnOn: { backgroundColor: '#2D5A43', borderColor: REEL.mint },
+  modes: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    padding: 4,
+    borderRadius: radius.pill,
+    backgroundColor: 'rgba(40,51,44,0.7)',
+    borderWidth: 1,
+    borderColor: REEL.border,
+  },
+  mode: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 7,
+    borderRadius: radius.pill,
+  },
+  modeOn: { backgroundColor: '#2D5A43' },
+  liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: REEL.mint },
+  counter: {
+    position: 'absolute',
+    left: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    backgroundColor: REEL.glass,
+    borderWidth: 1,
+    borderColor: REEL.border,
+  },
+  panel: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    padding: spacing.md,
+    gap: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(40,51,44,0.94)',
+    borderWidth: 1,
+    borderColor: REEL.border,
+  },
+  panelLabel: { color: REEL.muted, letterSpacing: 0.6 },
+  chipRow: { gap: spacing.sm },
+  chip: {
     borderRadius: radius.pill,
     paddingHorizontal: spacing.md,
     paddingVertical: 6,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: REEL.glassLight,
+    borderWidth: 1,
+    borderColor: REEL.border,
   },
-  pillOn: { backgroundColor: 'rgba(255,255,255,0.42)' },
-  rangeRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
-  },
-  categoryRow: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
-  list: { flex: 1 },
+  chipOn: { backgroundColor: REEL.mint, borderColor: REEL.mint },
+  chipText: { color: REEL.text },
+  chipTextOn: { color: '#002112' },
   state: {
     flex: 1,
     alignItems: 'center',
@@ -401,6 +555,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
   },
-  stateBody: { opacity: 0.8, textAlign: 'center' },
+  stateTitle: { color: REEL.text },
+  stateBody: { color: REEL.muted, textAlign: 'center' },
   retry: { marginTop: spacing.md, paddingVertical: spacing.sm },
 });

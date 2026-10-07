@@ -242,6 +242,7 @@ export default function RootLayout() {
           <Stack.Screen name="business/[id]" options={{ title: 'Business' }} />
           <Stack.Screen name="employee/[id]" options={{ title: 'Profile' }} />
           <Stack.Screen name="map" options={{ title: 'Map' }} />
+          <Stack.Screen name="alerts" options={{ title: 'Alerts' }} />
           <Stack.Screen name="directions/[businessId]" options={{ title: 'Directions' }} />
           <Stack.Screen name="search" options={{ headerShown: false }} />
           <Stack.Screen name="browse/[type]" options={{ title: 'Browse' }} />
@@ -318,7 +319,7 @@ export default function RootLayout() {
           <Stack.Screen name="saved-places" options={{ title: 'Saved places' }} />
           <Stack.Screen name="delete-account" options={{ title: 'Delete account' }} />
           <Stack.Screen name="workspace/[businessId]/fleet" options={{ title: 'Fleet & tracking' }} />
-          <Stack.Screen name="workspace/[businessId]/team" options={{ title: 'Team' }} />
+          <Stack.Screen name="workspace/[businessId]/team" options={{ title: 'Team & access' }} />
           <Stack.Screen name="workspace/[businessId]/offers" options={{ title: 'Offers' }} />
           <Stack.Screen name="promote/[businessId]" options={{ title: 'Promote' }} />
           <Stack.Screen name="member/[membershipId]" options={{ title: 'Member' }} />

@@ -6,6 +6,7 @@
  * Gated like the inbox list it's opened from: chat recipients plus
  * owner/managers. The URL is guessable, so the check has to live here too.
  */
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import type { ChatMessage } from '@/domain/types';
@@ -14,6 +15,7 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { Avatar, EmptyView, ErrorView, LoadingView, Screen, Text } from '@/components/ui';
 import { ChatThread } from '@/features/chat/ChatThread';
+import { markBusinessThreadRead } from '@/features/notifications/alertSides';
 import { spacing, useColors } from '@/theme/theme';
 
 export default function InboxConversationScreen() {
@@ -26,6 +28,21 @@ export default function InboxConversationScreen() {
   const { currentUser } = useAuth();
 
   const myName = currentUser?.name ?? 'Business';
+
+  // Business messages are read HERE now (the Chats tab is customer-side only),
+  // so opening the conversation clears its "new message" alerts — and leaving
+  // clears any that arrived while it was open — which is what empties the
+  // Workspace tab's badge.
+  const viewerId = currentUser?.id;
+  useEffect(() => {
+    if (!viewerId) return;
+    const clear = () =>
+      markBusinessThreadRead(repos, viewerId, businessId, participantId).catch(() => undefined);
+    clear();
+    return () => {
+      clear();
+    };
+  }, [repos, viewerId, businessId, participantId]);
 
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);

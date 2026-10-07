@@ -444,19 +444,12 @@ export function WorkspaceHub({ businessId, header }: WorkspaceHubProps) {
       tools: [
         {
           icon: 'users',
-          label: 'Team',
-          sub: `${employees.length + 1} ${employees.length + 1 === 1 ? 'person' : 'people'}${isOwner ? ' · manage' : ''}`,
-          cta: isOwner ? 'Manage team' : 'View team',
+          label: canManageAll ? 'Team & access' : 'Team',
+          sub: `${employees.length + 1} ${employees.length + 1 === 1 ? 'person' : 'people'}${
+            canManageAll ? ' · who can open which tools' : ''
+          }`,
+          cta: canManageAll ? 'Manage team & access' : 'View team',
           href: `${base}/team` as Href,
-        },
-        canManageAll && {
-          icon: 'shield',
-          label: 'Access & permissions',
-          sub: employees.length
-            ? 'Grant each member the tools they need'
-            : 'Add team members to grant access',
-          cta: 'Set access',
-          href: `${base}/access` as Href,
         },
         mods.has('tracking') && canUse('fleet') && {
           icon: 'truck',

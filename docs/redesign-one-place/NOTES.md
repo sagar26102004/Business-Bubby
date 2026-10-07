@@ -39,7 +39,17 @@ Everything else follows the same patterns through the shared primitives in
 
 ## Navigation
 
-The bottom bar is **Explore · Subscriptions · Chats · Workspace · Account**.
+The bottom bar is **Explore · Subscriptions · 🔥 Deals · Chats · Workspace**
+(mockup: stitch (11)).
+
+- **Deals** is a raised terracotta button in the middle, not a tab: it opens
+  the full-screen deals feed, the same place as "View all" on Explore.
+- **Account** has no bottom button any more — it's the avatar left of
+  "One Place" on Explore's top bar (still a tab route, so the bar shows on it).
+- **Alerts** left the Chats tab: the bell on Explore's top bar (beside Map)
+  opens `/alerts`, with a dot while anything is unread. Chats is conversations
+  only, and its badge counts only unread messages. The mockup's Orders tab
+  was NOT adopted — Subscriptions stays.
 
 - **My orders** moved to the top of Account. Its route is still a tab route,
   so the bar stays visible on it.

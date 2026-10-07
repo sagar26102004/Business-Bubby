@@ -51,7 +51,7 @@ export default function WorkspaceBookingsScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Appointments' }} />
-        <EmptyView title="No access" subtitle="Ask the owner to grant you Appointments in Access & permissions." />
+        <EmptyView title="No access" subtitle="Ask the owner to grant you Appointments in Team & access." />
       </Screen>
     );
   }

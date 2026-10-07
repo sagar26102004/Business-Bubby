@@ -48,7 +48,7 @@ export default function WorkspaceBillingScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Billing' }} />
-        <EmptyView title="No access" subtitle="Ask the owner to grant you Billing in Access & permissions." />
+        <EmptyView title="No access" subtitle="Ask the owner to grant you Billing in Team & access." />
       </Screen>
     );
   }

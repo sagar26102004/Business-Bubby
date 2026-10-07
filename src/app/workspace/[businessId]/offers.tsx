@@ -122,7 +122,7 @@ export default function WorkspaceOffersScreen() {
           title={data.isMember ? 'No access' : 'Members only'}
           subtitle={
             data.isMember
-              ? 'Ask the owner to grant you “Offers” on the Access & permissions screen.'
+              ? 'Ask the owner to grant you “Offers” on the Team & access screen.'
               : `You're not part of ${business.name}.`
           }
         />

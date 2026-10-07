@@ -11,6 +11,7 @@
 import { StyleSheet, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { isManagerOrOwner } from '@/domain/access';
+import { isBusinessChatAlert } from '@/domain/notifications';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { LIVE_REFRESH_MS, useAsync } from '@/lib/useAsync';
 import { Avatar, Card, EmptyView, ErrorView, LoadingView, Screen, Tag, Text } from '@/components/ui';
@@ -25,12 +26,19 @@ export default function BusinessInboxScreen() {
   const { data, loading, error, reload } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
-    const [threads, employees] = await Promise.all([
+    const [threads, employees, alerts] = await Promise.all([
       repos.chat.listBusinessThreads(business.id),
       repos.employees.listByBusiness(business.id),
+      currentUser ? repos.notifications.listForUser(currentUser.id) : Promise.resolve([]),
     ]);
-    return { business, threads, employees };
-  }, [businessId], { refreshMs: LIVE_REFRESH_MS });
+    // Unread "new message" alerts per customer — the dot on each row.
+    const unreadBy = new Map<string, number>();
+    for (const n of alerts) {
+      if (n.read || !isBusinessChatAlert(n) || n.businessId !== business.id || !n.participantId) continue;
+      unreadBy.set(n.participantId, (unreadBy.get(n.participantId) ?? 0) + 1);
+    }
+    return { business, threads, employees, unreadBy };
+  }, [businessId, currentUser?.id], { refreshMs: LIVE_REFRESH_MS });
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
@@ -64,31 +72,38 @@ export default function BusinessInboxScreen() {
           subtitle="When a customer chats this business, the conversation shows up here."
         />
       ) : (
-        data.threads.map((t) => (
-          <Card
-            key={t.participantId}
-            onPress={() => router.push(`/inbox/${businessId}/${t.participantId}`)}
-            style={styles.card}
-          >
-            <View style={styles.row}>
-              <Avatar name={t.participantName} size={44} />
-              <View style={styles.info}>
-                <View style={styles.titleRow}>
-                  <Text weight="semibold">{t.participantName}</Text>
-                  {t.lastAuthorType === 'customer' ? (
-                    <Tag label="Awaiting reply" />
-                  ) : null}
+        data.threads.map((t) => {
+          const unread = data.unreadBy.get(t.participantId) ?? 0;
+          return (
+            <Card
+              key={t.participantId}
+              onPress={() => router.push(`/inbox/${businessId}/${t.participantId}`)}
+              style={styles.card}
+            >
+              <View style={styles.row}>
+                <Avatar name={t.participantName} size={44} />
+                <View style={styles.info}>
+                  <View style={styles.titleRow}>
+                    <Text weight="semibold">{t.participantName}</Text>
+                    {unread > 0 ? (
+                      <Tag label="New" count={unread} tone="danger" size="sm" />
+                    ) : t.lastAuthorType === 'customer' ? (
+                      <Tag label="Awaiting reply" />
+                    ) : null}
+                  </View>
+                  <Text
+                    variant="caption"
+                    tone={unread > 0 ? 'default' : 'muted'}
+                    weight={unread > 0 ? 'semibold' : 'regular'}
+                    numberOfLines={1}
+                  >
+                    {t.lastBody}
+                  </Text>
                 </View>
-                <Text variant="caption" tone="muted" numberOfLines={1}>
-                  {t.lastBody}
-                </Text>
-                <Text variant="caption" tone="muted">
-                  {t.count} message{t.count === 1 ? '' : 's'}
-                </Text>
               </View>
-            </View>
-          </Card>
-        ))
+            </Card>
+          );
+        })
       )}
     </Screen>
   );

@@ -94,7 +94,7 @@ export default function CustomersScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Customers' }} />
-        <EmptyView title="No access" subtitle="Ask the owner to grant you Customers in Access & permissions." />
+        <EmptyView title="No access" subtitle="Ask the owner to grant you Customers in Team & access." />
       </Screen>
     );
   }

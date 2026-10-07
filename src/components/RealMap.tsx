@@ -16,6 +16,13 @@
  * on native) so vehicles glide to their new position without the tiles or the
  * user's zoom/pan resetting. `follow` keeps the selected/only marker in view.
  *
+ * LOOK: `look="onePlace"` is the Explore map's style (One Place redesign —
+ * docs/redesign-one-place): warm-toned tiles, labelled 1/3/5 km rings, a
+ * pulsing "you" beacon, and rounded teardrop pins carrying a rating chip and,
+ * when selected, a name bubble. Zoom / recenter / street ⇄ satellite are driven
+ * from outside through `command` (live mode). Without `look` the map is the
+ * plain classic one the tracking and saved-place screens use.
+ *
  * To upgrade to native Google/Apple maps later (react-native-maps / expo-maps in
  * a dev build), swap this component's internals — the props stay the same.
  */
@@ -28,6 +35,19 @@ export type RealMapMarker = {
   point: GeoPoint;
   emoji?: string;
   color?: string;
+  /** onePlace look: the bubble over the SELECTED pin, e.g. "Harsh Daily · 800m". */
+  label?: string;
+  /** onePlace look: a small chip over an unselected pin, e.g. "★ 4.9". */
+  badge?: string;
+};
+
+/**
+ * A one-shot instruction to the map (live mode). A new `id` runs it; the same
+ * id again is ignored, so re-renders never repeat a zoom.
+ */
+export type RealMapCommand = {
+  id: number;
+  kind: 'zoomIn' | 'zoomOut' | 'recenter' | 'street' | 'satellite';
 };
 
 type Props = {
@@ -53,6 +73,10 @@ type Props = {
    * page (infrequent — only when the tracked vehicle/route changes).
    */
   route?: GeoPoint[];
+  /** Visual style — see the header. */
+  look?: 'classic' | 'onePlace';
+  /** Live mode only: zoom / recenter / switch layer. */
+  command?: RealMapCommand;
 };
 
 // Build a stand-alone Leaflet page. Injected data is JSON so there's no escaping risk.
@@ -63,9 +87,10 @@ function buildHtml(
   selectedId?: string,
   route: GeoPoint[] = [],
   tappable = false,
+  look: 'classic' | 'onePlace' = 'classic',
 ) {
   const hasRoute = route.length >= 2;
-  const data = JSON.stringify({ center, markers, rings: ringsKm, selectedId, route, tappable });
+  const data = JSON.stringify({ center, markers, rings: ringsKm, selectedId, route, tappable, look });
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -86,6 +111,47 @@ function buildHtml(
     .rp { width: 28px; height: 28px; border-radius: 14px; font-size: 14px; }
     .me { width: 18px; height: 18px; border-radius: 9px; background: #2563eb;
           border: 3px solid #fff; box-shadow: 0 0 0 3px rgba(37,99,235,.35); }
+
+    /* onePlace look */
+    body.op, body.op #map { background: #f7f5f0; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+    body.op.street .leaflet-tile-pane { filter: saturate(.55) sepia(.18) brightness(1.04) contrast(.94); }
+    .op-ring { font-size: 10px; font-weight: 700; letter-spacing: .06em; white-space: nowrap;
+               padding: 2px 8px; border-radius: 999px; transform: translate(-50%, -50%);
+               display: inline-block; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+    .op-ring.r1 { background: #1b4332; color: #fff; }
+    .op-ring.r3 { background: rgba(255,255,255,.92); color: #1b4332; border: 1px solid #bfe0cc; }
+    .op-ring.r5 { background: rgba(245,245,244,.92); color: #78716c; border: 1px solid #d6d3d1; }
+    .op-me { position: relative; width: 28px; height: 28px; }
+    .op-me .wave { position: absolute; left: 50%; top: 50%; width: 48px; height: 48px;
+                   margin: -24px 0 0 -24px; border-radius: 50%; background: #3b82f6;
+                   animation: opwave 2.5s cubic-bezier(.2,.6,.4,1) infinite; }
+    .op-me .rim { position: absolute; left: 0; top: 0; right: 0; bottom: 0; border-radius: 50%; background: #fff;
+                  box-shadow: 0 2px 6px rgba(0,0,0,.2); display: flex; align-items: center; justify-content: center; }
+    .op-me .core { width: 16px; height: 16px; border-radius: 50%; background: #2563eb;
+                   border: 2px solid #fff; box-sizing: border-box; display: flex; align-items: center; justify-content: center; }
+    .op-me .core::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+    @keyframes opwave { 0% { transform: scale(.4); opacity: .45; } 100% { transform: scale(2.2); opacity: 0; } }
+    .op-wrap { width: 200px; height: 96px; display: flex; flex-direction: column;
+               align-items: center; justify-content: flex-end; pointer-events: none; }
+    .op-wrap > * { pointer-events: auto; cursor: pointer; }
+    .op-chip { display: flex; align-items: center; gap: 2px; margin-bottom: 5px; padding: 1px 7px;
+               border-radius: 999px; background: rgba(255,255,255,.96); border: 1px solid #e7e5e4;
+               font-size: 10px; font-weight: 700; color: #44403c; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+    .op-chip b { color: #f59e0b; font-weight: 700; }
+    .op-bubble { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding: 4px 10px;
+                 border-radius: 999px; background: #133024; color: #fff; font-size: 11px; font-weight: 700;
+                 white-space: nowrap; box-shadow: 0 6px 14px rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.2); }
+    .op-bubble i { width: 8px; height: 8px; border-radius: 50%; background: #34d399; display: inline-block; }
+    .op-bubble span { color: #6ee7b7; font-weight: 500; }
+    .op-pin { position: relative; width: 38px; height: 38px; border-radius: 13px; color: #fff;
+              display: flex; align-items: center; justify-content: center; font-size: 18px;
+              box-shadow: 0 8px 20px -4px rgba(27,67,50,.35), 0 3px 6px -2px rgba(0,0,0,.12);
+              margin-bottom: 6px; }
+    .op-pin::after { content: ''; position: absolute; bottom: -5px; left: 50%; width: 11px; height: 11px;
+                     transform: translateX(-50%) rotate(45deg); background: inherit;
+                     border-bottom-right-radius: 3px; z-index: -1; }
+    .op-pin.sel { width: 48px; height: 48px; border-radius: 16px; font-size: 24px;
+                  box-shadow: 0 0 0 4px rgba(255,255,255,.92), 0 10px 24px -4px rgba(27,67,50,.45); }
   </style>
 </head>
 <body>
@@ -100,20 +166,47 @@ function buildHtml(
       else if (window.parent) window.parent.postMessage(s, '*');
     }
     var CENTER = D.center;
-    var map = L.map('map', { zoomControl: true, attributionControl: false })
+    var OP = D.look === 'onePlace';
+    if (OP) document.body.className = 'op street';
+    var map = L.map('map', { zoomControl: !OP, attributionControl: false })
       .setView([CENTER.latitude, CENTER.longitude], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+    var STREET = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+    var SATELLITE = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { maxZoom: 19 });
+    STREET.addTo(map);
 
     // You / the business — the fixed anchor point.
     L.marker([CENTER.latitude, CENTER.longitude], {
-      icon: L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [18,18], iconAnchor: [9,9] }),
+      icon: OP
+        ? L.divIcon({ className: '', html: '<div class="op-me"><div class="wave"></div><div class="rim"><div class="core"></div></div></div>', iconSize: [28,28], iconAnchor: [14,14] })
+        : L.divIcon({ className: '', html: '<div class="me"></div>', iconSize: [18,18], iconAnchor: [9,9] }),
       interactive: false,
+      zIndexOffset: OP ? 500 : 0,
     }).addTo(map);
 
     // Range rings (drawn once — they don't move).
-    (D.rings || []).forEach(function (km) {
-      L.circle([CENTER.latitude, CENTER.longitude], {
-        radius: km * 1000, color: '#64748b', weight: 1, fill: false, opacity: .45,
+    (D.rings || []).forEach(function (km, i, all) {
+      if (!OP) {
+        L.circle([CENTER.latitude, CENTER.longitude], {
+          radius: km * 1000, color: '#64748b', weight: 1, fill: false, opacity: .45,
+        }).addTo(map);
+        return;
+      }
+      // Innermost: solid green with a faint fill; middle: dashed green; outer: stone.
+      var tier = i === 0 ? 'r1' : i === all.length - 1 ? 'r5' : 'r3';
+      var style = tier === 'r1'
+        ? { color: '#2d6a4f', weight: 2, opacity: .35, fillColor: '#10b981', fillOpacity: .05 }
+        : tier === 'r3'
+          ? { color: '#047857', weight: 1.2, opacity: .35, dashArray: '6 6', fill: false }
+          : { color: '#a8a29e', weight: 1, opacity: .8, fill: false };
+      style.radius = km * 1000;
+      style.interactive = false;
+      L.circle([CENTER.latitude, CENTER.longitude], style).addTo(map);
+      // The label sits on the ring's northern edge.
+      L.marker([CENTER.latitude + km / 111.32, CENTER.longitude], {
+        icon: L.divIcon({ className: '', html: '<span class="op-ring ' + tier + '">' + km.toFixed(1) + ' KM</span>', iconSize: [0,0] }),
+        interactive: false,
       }).addTo(map);
     });
 
@@ -160,6 +253,24 @@ function buildHtml(
     var byId = {};
     var didFit = false;
 
+    var ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
+    function esc(t) {
+      return String(t).replace(/[&<>"]/g, function (c) { return ESC[c]; });
+    }
+    function opIcon(m, sel) {
+      var top = '';
+      if (sel && m.label) {
+        var parts = String(m.label).split(' · ');
+        top = '<div class="op-bubble"><i></i>' + esc(parts[0]) +
+          (parts.length > 1 ? ' <span>· ' + esc(parts.slice(1).join(' · ')) + '</span>' : '') + '</div>';
+      } else if (!sel && m.badge) {
+        top = '<div class="op-chip">' + esc(m.badge).replace('★', '<b>★</b>') + '</div>';
+      }
+      var pin = '<div class="op-pin' + (sel ? ' sel' : '') + '" style="background:' + (m.color || '#20513c') + '">' + (m.emoji || '📍') + '</div>';
+      // A fixed 200x96 box anchored at its bottom centre = the tip of the pin's tail.
+      return L.divIcon({ className: '', html: '<div class="op-wrap">' + top + pin + '</div>', iconSize: [200,96], iconAnchor: [100,96] });
+    }
+
     function draw(P) {
       var next = {};
       var bounds = [[CENTER.latitude, CENTER.longitude]];
@@ -168,7 +279,7 @@ function buildHtml(
         var sel = m.id === P.selectedId ? ' sel' : '';
         var html = '<div class="pin' + sel + '" style="background:' + (m.color || '#2563eb') + '">' + (m.emoji || '📍') + '</div>';
         var size = sel ? 42 : 34, anc = size / 2;
-        var icon = L.divIcon({ className: '', html: html, iconSize: [size,size], iconAnchor: [anc,anc] });
+        var icon = OP ? opIcon(m, !!sel) : L.divIcon({ className: '', html: html, iconSize: [size,size], iconAnchor: [anc,anc] });
         var ll = [m.point.latitude, m.point.longitude];
         var existing = byId[m.id];
         if (existing) {
@@ -208,8 +319,25 @@ function buildHtml(
       });
     }
 
+    // One-shot commands from the screen (zoom, recenter, layer), deduped by id.
+    var lastCommand = null;
+    function runCommand(C) {
+      if (!C || C.id === lastCommand) return;
+      lastCommand = C.id;
+      if (C.kind === 'zoomIn') map.zoomIn();
+      else if (C.kind === 'zoomOut') map.zoomOut();
+      else if (C.kind === 'recenter') map.setView([CENTER.latitude, CENTER.longitude], 15, { animate: true });
+      else if (C.kind === 'satellite' && !map.hasLayer(SATELLITE)) {
+        map.removeLayer(STREET); SATELLITE.addTo(map);
+        if (OP) document.body.className = 'op';
+      } else if (C.kind === 'street' && !map.hasLayer(STREET)) {
+        map.removeLayer(SATELLITE); STREET.addTo(map);
+        if (OP) document.body.className = 'op street';
+      }
+    }
+
     // Imperative update channel (used only in live mode).
-    function applyPayload(P) { try { draw(P); } catch (e) {} }
+    function applyPayload(P) { try { draw(P); runCommand(P.command); } catch (e) {} }
     window.__applyMap = function (P) { applyPayload(P); };       // native (injected JS)
     window.addEventListener('message', function (e) {            // web (iframe postMessage)
       try {
@@ -228,7 +356,7 @@ export default function RealMap(props: Props) {
   return Platform.OS === 'web' ? <WebMap {...props} /> : <NativeMap {...props} />;
 }
 
-function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route }: Props) {
+function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route, look, command }: Props) {
   const onPress = useRef(onMarkerPress);
   onPress.current = onMarkerPress;
   // Same ref trick as the marker handler: the listener is registered once, so
@@ -237,8 +365,8 @@ function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPres
   onTap.current = onMapPress;
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const readyRef = useRef(false);
-  const payloadRef = useRef({ markers, selectedId, follow });
-  payloadRef.current = { markers, selectedId, follow };
+  const payloadRef = useRef({ markers, selectedId, follow, command });
+  payloadRef.current = { markers, selectedId, follow, command };
   const routeKey = JSON.stringify(route ?? []);
 
   const postUpdate = () => {
@@ -270,7 +398,7 @@ function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPres
   useEffect(() => {
     if (live && readyRef.current) postUpdate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, markers, selectedId, follow]);
+  }, [live, markers, selectedId, follow, command]);
 
   // In live mode the page is built ONCE (kept mounted) and only rebuilt when the
   // route changes; otherwise it rebuilds per render as before, so static callers
@@ -279,14 +407,14 @@ function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPres
   const builtRouteKey = useRef<string | null>(null);
   if (live) {
     if (htmlRef.current === null || builtRouteKey.current !== routeKey) {
-      htmlRef.current = buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress);
+      htmlRef.current = buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress, look);
       builtRouteKey.current = routeKey;
       readyRef.current = false; // the reloaded page announces ready again
     }
   }
   const html = live
     ? (htmlRef.current as string)
-    : buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress);
+    : buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress, look);
 
   return (
     <View style={[styles.fill, style]}>
@@ -301,13 +429,13 @@ function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPres
   );
 }
 
-function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route }: Props) {
+function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route, look, command }: Props) {
   // Required lazily so the web bundle never touches the native module.
   const { WebView } = require('react-native-webview');
   const webRef = useRef<any>(null);
   const readyRef = useRef(false);
-  const payloadRef = useRef({ markers, selectedId, follow });
-  payloadRef.current = { markers, selectedId, follow };
+  const payloadRef = useRef({ markers, selectedId, follow, command });
+  payloadRef.current = { markers, selectedId, follow, command };
   const routeKey = JSON.stringify(route ?? []);
 
   const postUpdate = () => {
@@ -320,20 +448,20 @@ function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapP
   useEffect(() => {
     if (live && readyRef.current) postUpdate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [live, markers, selectedId, follow]);
+  }, [live, markers, selectedId, follow, command]);
 
   const htmlRef = useRef<string | null>(null);
   const builtRouteKey = useRef<string | null>(null);
   if (live) {
     if (htmlRef.current === null || builtRouteKey.current !== routeKey) {
-      htmlRef.current = buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress);
+      htmlRef.current = buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress, look);
       builtRouteKey.current = routeKey;
       readyRef.current = false;
     }
   }
   const html = live
     ? (htmlRef.current as string)
-    : buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress);
+    : buildHtml(center, markers, ringsKm ?? [], selectedId, route ?? [], !!onMapPress, look);
 
   return (
     <WebView

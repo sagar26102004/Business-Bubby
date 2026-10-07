@@ -68,7 +68,7 @@ export default function WorkspaceOrdersScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Orders' }} />
-        <EmptyView title="No access" subtitle="Ask the owner to grant you Orders in Access & permissions." />
+        <EmptyView title="No access" subtitle="Ask the owner to grant you Orders in Team & access." />
       </Screen>
     );
   }

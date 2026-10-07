@@ -6,7 +6,7 @@
  *    business's emoji — carrying three overlay chips: open state / today's
  *    hours, distance, and how many showcase photos there are.
  *  - The identity block on plain paper: name, tagline, ★ rating with the
- *    review count, #tag chips, and the address row with "Get directions ›".
+ *    review count, and the address row with "Get directions ›".
  *  - The ACTION ROW: four equal tiles — Call · Chat · the business's own door
  *    (Order / Request / Enroll…) · Route — passed in by the page.
  *  - Description, weekly hours and the home-based / rental-distance notes.
@@ -169,14 +169,6 @@ export function BusinessHero({
           ) : null}
         </View>
 
-        {tags.length > 0 ? (
-          <View style={styles.tags}>
-            {tags.map((t) => (
-              <Tag key={t} label={`#${t.replace(/\s+/g, '')}`} tone="soft" size="sm" />
-            ))}
-          </View>
-        ) : null}
-
         {/* Address row */}
         <View style={styles.addressRow}>
           <Icon name="pin" size={16} color={colors.cta} />
@@ -316,7 +308,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   rating: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs + 2, marginTop: spacing.md },
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',

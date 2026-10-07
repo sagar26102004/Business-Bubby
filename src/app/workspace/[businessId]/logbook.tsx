@@ -118,7 +118,7 @@ export default function WorkspaceLogbookScreen() {
         <Stack.Screen options={{ title: 'Logbook' }} />
         <EmptyView
           title="No logbook access"
-          subtitle="Ask the owner to grant you the Logbook in Access & permissions."
+          subtitle="Ask the owner to grant you the Logbook in Team & access."
         />
       </Screen>
     );

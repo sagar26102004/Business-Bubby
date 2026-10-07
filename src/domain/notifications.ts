@@ -160,3 +160,43 @@ export function toggleMute(
   const rest = (mutes ?? []).filter((m) => m !== key);
   return muted ? [...rest, key] : rest;
 }
+
+/**
+ * Which SIDE of the app an alert belongs to.
+ *
+ * The Chats tab is the CUSTOMER's inbox — replies from businesses they
+ * contacted, their orders and enrolments moving along, bills they were sent.
+ * Alerts a person gets because they run or work at a business (a new order, a
+ * customer's message, a missed call to the shop) belong to the WORKSPACE.
+ *
+ * Nearly every kind only ever goes one way. `order_update` is the exception:
+ * it tells the customer their order moved, but also tells the owner when a
+ * customer accepts or declines a proposal — so it is a business alert only
+ * when it's about a business this person runs or works at.
+ */
+const BUSINESS_SIDE_KINDS = new Set<AppNotification['kind']>([
+  'chat_message',
+  'booking_requested',
+  'order_requested',
+  'missed_call',
+  'review_posted',
+  'product_question',
+  'enroll_requested',
+  'payment_reported',
+  'ad_update',
+]);
+
+export function isBusinessAlert(
+  notification: Pick<AppNotification, 'kind' | 'businessId'>,
+  myBusinessIds: ReadonlySet<string>,
+): boolean {
+  if (BUSINESS_SIDE_KINDS.has(notification.kind)) return true;
+  if (notification.kind === 'order_update') {
+    return !!notification.businessId && myBusinessIds.has(notification.businessId);
+  }
+  return false;
+}
+
+/** A customer wrote to a business this person answers for. */
+export const isBusinessChatAlert = (notification: Pick<AppNotification, 'kind'>) =>
+  notification.kind === 'chat_message';

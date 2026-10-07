@@ -171,8 +171,11 @@ NOTES.md before touching layout. In short:
 - **Tokens** live in the `forest` scheme of `src/theme/theme.ts` (linen paper, deep sage brand, terracotta
   `cta` for "go buy it" only). **Type** is Plus Jakarta Sans, one family per weight (`src/theme/fonts.ts`);
   `Text` maps `weight`/`fontWeight` to the family, so never set a custom `fontFamily` by hand.
-- **Bottom bar:** Explore · Subscriptions · Chats · Workspace · Account. My Orders is a hidden tab route
-  reached from Account; the Workspace tab (`(tabs)/my-business.tsx`) opens straight onto
+- **Bottom bar:** Explore · Subscriptions · 🔥 Deals · Chats · Workspace. Deals is not a tab but a raised
+  terracotta button (`action` on `BottomTabBar`) that opens `/deals`, same as Explore's "View all". Account
+  is the avatar left of "One Place" on Explore; Alerts (customer, non-message) is the bell beside Map there
+  and lives at `app/alerts.tsx` — Chats is conversations only. Account and My Orders are button-less tab
+  routes (My Orders reached from Account); the Workspace tab (`(tabs)/my-business.tsx`) opens straight onto
   `features/workspace/WorkspaceHub.tsx` (shared with `/workspace/[id]`), with a business switcher.
 - **Register** is four phases ("Step N of 4": Identity → Location → Offerings → Review & launch); see the
   file's header comment.

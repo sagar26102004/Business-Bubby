@@ -180,7 +180,7 @@ export default function WorkspaceMembersScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Members' }} />
-        <EmptyView title="No access" subtitle="Ask the owner to grant you Members in Access & permissions." />
+        <EmptyView title="No access" subtitle="Ask the owner to grant you Members in Team & access." />
       </Screen>
     );
   }

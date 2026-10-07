@@ -1,13 +1,14 @@
 /**
  * Explore (One Place redesign — docs/redesign-one-place/explore.png). A flat
  * linen top sheet, then the feed:
- *  - Brand row ("One Place" + the place you're browsing) with Map and Deals.
+ *  - Brand row: my avatar (→ Account, which no longer has a bottom-bar button),
+ *    "One Place" + the place you're browsing, then Map, Alerts (the bell, with
+ *    my unread customer alerts — moved here from Chats) and Deals.
  *  - Location dropdown (saved places) + a "within N km" pill that states how far
  *    the list actually reaches, then the search pill.
  *  - INTENT CHIPS with live counts (All + every category that has listings
  *    here) — they filter this screen inline, no navigation.
- *  - A TRENDING row of #tags: the tags most carried by nearby listings, or, with
- *    a category picked, that category's tags (→ /browse/[intent]?sub=).
+ *  - With a category picked, a row of that category's tags (→ /browse/[intent]?sub=).
  *  - "Neighborhood deals near you" — the AD SLOT (domain/ads.ts), filtered to
  *    the picked category; what goes in it is decided by AdRepository.
  *  - "Near you now" — the listing cards, sorted Popular or Nearest.
@@ -35,11 +36,11 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { useResponsive } from '@/lib/useResponsive';
 import {
+  Avatar,
   Card,
   EmptyView,
   ErrorView,
   Icon,
-  IconTile,
   LoadingView,
   SectionHeader,
   SegmentedControl,
@@ -47,6 +48,7 @@ import {
   Text,
 } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
+import { useTabBadges } from '@/features/notifications/alertSides';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { AdCarousel, type AdCardItem } from '@/features/ads/AdCarousel';
 import { AD_GRADIENTS } from '@/features/ads/adGradients';
@@ -82,7 +84,8 @@ export default function BrowseScreen() {
   const colors = useColors();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isGuest } = useAuth();
+  const { isGuest, currentUser } = useAuth();
+  const { alerts: unreadAlerts } = useTabBadges();
   const { cardColumns, gridMaxWidth, centered } = useResponsive();
 
   const [activePlaceId, setActivePlaceId] = useState<string | undefined>();
@@ -144,18 +147,6 @@ export default function BrowseScreen() {
   const reachKm = useMemo(() => {
     const far = Math.max(0, ...(data ?? []).map((b) => b.distanceKm ?? 0));
     return far > 0 ? Math.max(1, Math.ceil(far)) : undefined;
-  }, [data]);
-
-  // Trending: the tags carried by the most nearby listings.
-  const trending = useMemo(() => {
-    const freq = new Map<string, number>();
-    for (const b of data ?? []) {
-      for (const t of b.tags ?? []) freq.set(t, (freq.get(t) ?? 0) + 1);
-    }
-    return [...freq.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([t]) => t);
   }, [data]);
 
   // What's in the ad slot: sponsored campaigns first, then live offers from
@@ -281,7 +272,23 @@ export default function BrowseScreen() {
         >
           {/* Brand row */}
           <View style={styles.brandRow}>
-            <IconTile icon="store" size={36} solid />
+            <Pressable
+              onPress={() => router.push('/account')}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="Account and profile"
+              style={({ pressed }) => [
+                styles.avatarBtn,
+                { backgroundColor: colors.brandSoft, borderColor: colors.border },
+                pressed && { opacity: 0.6 },
+              ]}
+            >
+              {currentUser && !isGuest ? (
+                <Avatar name={currentUser.name} uri={currentUser.avatarUrl} size={38} />
+              ) : (
+                <Icon name="user" size={22} color={colors.brand} />
+              )}
+            </Pressable>
             <View style={styles.flex}>
               <Text variant="subheading" weight="bold">
                 One Place
@@ -291,6 +298,12 @@ export default function BrowseScreen() {
               </Text>
             </View>
             <HeaderIcon icon="map" label="Map of businesses" onPress={() => router.push('/map')} />
+            <HeaderIcon
+              icon="bell"
+              label="Alerts"
+              badge={unreadAlerts}
+              onPress={() => router.push(isGuest ? '/sign-in' : '/alerts')}
+            />
             <HeaderIcon icon="ticket" label="Deals near you" onPress={() => router.push('/deals')} />
           </View>
 
@@ -378,31 +391,21 @@ export default function BrowseScreen() {
           )}
         </ScrollView>
 
-        {/* Trending tags — or the picked category's own tags. */}
-        {(selected ? subTiles.length : trending.length) > 0 ? (
+        {/* The picked category's own tags. */}
+        {selected && subTiles.length > 0 ? (
           <View style={styles.trendRow}>
             <Text variant="caption" weight="bold" tone="muted">
-              {selected ? `In ${selected.label}:` : 'Trending:'}
+              {`In ${selected.label}:`}
             </Text>
-            {selected
-              ? subTiles.map((t) => (
-                  <Tag
-                    key={t.id}
-                    label={`${t.emoji} ${t.label}`}
-                    tone="soft"
-                    size="sm"
-                    onPress={() => openSubcategory(t.id)}
-                  />
-                ))
-              : trending.map((t) => (
-                  <Tag
-                    key={t}
-                    label={`#${t.replace(/\s+/g, '')}`}
-                    tone="soft"
-                    size="sm"
-                    onPress={() => router.push({ pathname: '/search', params: { q: t } })}
-                  />
-                ))}
+            {subTiles.map((t) => (
+              <Tag
+                key={t.id}
+                label={`${t.emoji} ${t.label}`}
+                tone="soft"
+                size="sm"
+                onPress={() => openSubcategory(t.id)}
+              />
+            ))}
           </View>
         ) : null}
 
@@ -460,9 +463,10 @@ export default function BrowseScreen() {
       selectedId,
       selected,
       subTiles,
-      trending,
       intentCounts,
       reachKm,
+      currentUser,
+      unreadAlerts,
       data,
       sort,
     ],
@@ -532,10 +536,13 @@ export default function BrowseScreen() {
 function HeaderIcon({
   icon,
   label,
+  badge,
   onPress,
 }: {
   icon: 'map' | 'ticket' | 'bell';
   label: string;
+  /** Unread count — drawn as a terracotta dot, the count goes to screen readers. */
+  badge?: number;
   onPress: () => void;
 }) {
   const colors = useColors();
@@ -544,7 +551,7 @@ function HeaderIcon({
       onPress={onPress}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
       style={({ pressed }) => [
         styles.iconBtn,
         { backgroundColor: colors.surface, borderColor: colors.border },
@@ -552,6 +559,9 @@ function HeaderIcon({
       ]}
     >
       <Icon name={icon} size={18} color={colors.text} />
+      {badge ? (
+        <View style={[styles.badgeDot, { backgroundColor: colors.cta, borderColor: colors.surface }]} />
+      ) : null}
     </Pressable>
   );
 }
@@ -587,6 +597,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  badgeDot: {
+    position: 'absolute',
+    top: 7,
+    right: 8,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.5,
+  },
+  avatarBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   dropdown: { marginTop: spacing.sm },
   placeRow: {

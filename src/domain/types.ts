@@ -173,7 +173,7 @@ export interface Employee {
   /**
    * Which workspace services this employee may open (service ids from
    * `domain/access.ts`: 'orders', 'billing', 'logbook', …). Set by the owner on
-   * the Access & permissions screen. When UNSET the default depends on rank: a
+   * the Team & access screen. When UNSET the default depends on rank: a
    * MANAGER keeps every tool (trusted until narrowed), a STAFF member gets
    * NOTHING until the owner grants tools (least privilege — a new driver opens
    * a blank workspace). The owner always has access to everything, regardless.

@@ -2,7 +2,7 @@
  * Service access — which workspace tools each team member may open.
  *
  * The owner has everything. Employees are granted access per service on the
- * Access & permissions screen, which writes `Employee.permissions`. This is a
+ * Team & access screen, which writes `Employee.permissions`. This is a
  * separate axis from customer-contact ROUTING (who rings on calls, who replies
  * to chats, who scans order QRs — those stay on the Business and are set in
  * Manage): access is "can this member open the Billing tool?", routing is "does

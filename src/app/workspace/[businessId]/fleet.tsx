@@ -64,7 +64,7 @@ export default function WorkspaceFleetScreen() {
     return (
       <Screen>
         <Stack.Screen options={{ title: 'Fleet & tracking' }} />
-        <EmptyView title="No access" subtitle="Ask the owner to grant you Fleet & tracking in Access & permissions." />
+        <EmptyView title="No access" subtitle="Ask the owner to grant you Fleet & tracking in Team & access." />
       </Screen>
     );
   }

@@ -7,6 +7,14 @@
  * both surfaces; what changes here is that a VIDEO, if the business filmed one,
  * plays instead of the photo sitting still.
  *
+ * Layout follows the One Place "flash reels" mockup: the creative full-bleed
+ * under a dark sage vignette; a deal pill (tag + countdown), the business line,
+ * the offer, its price and saving and the business's tags bottom-left; a side
+ * rail (business avatar, share, directions, call); then "View business" beside
+ * the terracotta "Claim offer", and a peek at the next deal under them.
+ * Left out on purpose, as in docs/redesign-one-place/NOTES.md: the verified
+ * tick, bookmark counts and voucher codes — no data backs any of them.
+ *
  * Playback rules, learned from every feed that gets this wrong:
  *   - only the page actually on screen plays (`active`). Two videos playing at
  *     once is a bug you hear before you see.
@@ -22,40 +30,81 @@ import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import type { AdPlacement } from '@/data/repositories';
+import type { Business, Offer } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
-import { Text } from '@/components/ui';
-import { radius, spacing } from '@/theme/theme';
+import { openState } from '@/domain/hours';
+import { formatMoney, parsePrice } from '@/lib/money';
+import { Icon, Text } from '@/components/ui';
+import { radius, spacing, useColors } from '@/theme/theme';
 import { AD_GRADIENTS } from './adGradients';
+
+/**
+ * The feed's own dark palette. The reel sits on someone's photo or video, not
+ * on the app's linen paper, so its chrome is the mockup's inverse surface — a
+ * near-black sage — with light text, whichever color scheme the app is in.
+ */
+export const REEL = {
+  ground: '#28332C',
+  glass: 'rgba(40,51,44,0.6)',
+  glassLight: 'rgba(255,255,255,0.14)',
+  border: 'rgba(192,201,193,0.3)',
+  text: '#FFFFFF',
+  muted: '#D9E6DB',
+  mint: '#A1D1B4',
+  amber: '#FFDDAF',
+  star: '#FFBA44',
+  flame: '#FD8367',
+  onFlame: '#3D0600',
+} as const;
 
 export interface DealReelCardProps {
   placement: AdPlacement;
   /** This is the page on screen — the only one allowed to play. */
   active: boolean;
   muted: boolean;
-  onToggleMute: () => void;
   /** Exact page height, so one swipe moves exactly one deal. */
   height: number;
+  /** Room the floating top bar takes, so the page's own labels clear it. */
+  topInset: number;
+  /** Room the system bar takes at the bottom. */
+  bottomInset: number;
   /** Open the business behind the ad (counts as the tap the business bought). */
   onOpen: () => void;
-  /** Start an order, when there's anything to order. */
+  /** Start an order for this offer, when there's anything to order. */
   onOrder?: () => void;
   onShare: () => void;
+  onCall: () => void;
+  onDirections?: () => void;
+  /** The deal after this one, for the "Next deal" peek. */
+  next?: AdPlacement;
+  onNext?: () => void;
 }
 
 export function DealReelCard({
   placement,
   active,
   muted,
-  onToggleMute,
   height,
+  topInset,
+  bottomInset,
   onOpen,
   onOrder,
   onShare,
+  onCall,
+  onDirections,
+  next,
+  onNext,
 }: DealReelCardProps) {
+  const colors = useColors();
   const { business, offer, campaign, distanceKm } = placement;
   const emoji = offer.emoji ?? getType(business.type)?.icon ?? '🏷️';
   const gradient = AD_GRADIENTS[business.type];
   const distanceLabel = formatDistance(distanceKm);
+  const { open } = openState(business);
+  const where = areaLabel(business);
+  const saving = savingLabel(offer);
+  const dealLine = [offer.tag, endsInLabel(offer.endsAt)].filter(Boolean).join(' · ');
+  const tags = (business.tags ?? []).slice(0, 3);
 
   // A player exists only for a page that actually has a video: the feed keeps a
   // few pages mounted either side of the visible one, and idle players are the
@@ -109,165 +158,372 @@ export function DealReelCard({
       )}
 
       {/* Text sits on whatever the creative happens to be, so it needs its own
-          ground: dark at the bottom where the copy is, clear in the middle. */}
+          ground: tinted at the top under the bar, clear in the middle, the
+          feed's dark sage under the copy. */}
       <LinearGradient
-        colors={['rgba(0,0,0,0.55)', 'rgba(0,0,0,0.05)', 'rgba(0,0,0,0.35)', 'rgba(0,0,0,0.88)']}
-        locations={[0, 0.28, 0.6, 1]}
+        colors={['rgba(40,51,44,0.7)', 'rgba(40,51,44,0)', 'rgba(40,51,44,0.6)', REEL.ground]}
+        locations={[0, 0.22, 0.55, 1]}
         style={StyleSheet.absoluteFill}
         pointerEvents="none"
       />
 
-      {/* ── Labels ── */}
-      <View style={styles.topRow} pointerEvents="none">
-        {offer.tag ? (
-          <View style={styles.tagPill}>
-            <Text variant="caption" weight="bold" tone="inverse">
-              {offer.tag}
-            </Text>
-          </View>
-        ) : null}
-        {/* Never quiet about a paid placement. */}
-        {campaign ? (
-          <View style={styles.sponsoredPill}>
-            <Text variant="caption" weight="semibold" tone="inverse">
-              Sponsored
-            </Text>
-          </View>
-        ) : null}
-      </View>
+      {/* Never quiet about a paid placement. */}
+      {campaign ? (
+        <View style={[styles.sponsored, { top: topInset }]} pointerEvents="none">
+          <Text variant="caption" weight="semibold" style={{ color: REEL.muted }}>
+            Sponsored
+          </Text>
+        </View>
+      ) : null}
 
       {/* ── The side rail ── the small, repeatable actions. */}
-      <View style={styles.rail}>
-        {offer.videoUrl ? (
-          <Pressable onPress={onToggleMute} style={styles.railBtn} hitSlop={8}>
-            <Text style={styles.railIcon}>{muted ? '🔇' : '🔊'}</Text>
-          </Pressable>
-        ) : null}
-        <Pressable onPress={onShare} style={styles.railBtn} hitSlop={8}>
-          <Text style={styles.railIcon}>📤</Text>
+      <View style={[styles.rail, { bottom: bottomInset + (next ? 150 : 90) }]}>
+        <Pressable onPress={onOpen} hitSlop={6} style={styles.avatar}>
+          {business.coverImageUrl ? (
+            <Image source={{ uri: business.coverImageUrl }} style={styles.avatarImg} />
+          ) : (
+            <Text style={styles.avatarEmoji}>{getType(business.type)?.icon ?? '🏪'}</Text>
+          )}
         </Pressable>
+        <RailButton icon="share" label="Share" onPress={onShare} />
+        {onDirections ? (
+          <RailButton
+            icon="directions"
+            label={distanceLabel ?? 'Route'}
+            onPress={onDirections}
+            tint={REEL.mint}
+          />
+        ) : null}
+        <RailButton icon="phone" label="Call" onPress={onCall} />
       </View>
 
       {/* ── The copy ── */}
-      <View style={styles.body}>
-        <Pressable onPress={onOpen}>
-          <Text variant="caption" weight="semibold" tone="inverse" style={styles.business}>
-            {emoji}  {business.name}
-            {distanceLabel ? `  ·  📍 ${distanceLabel}` : ''}
-          </Text>
-        </Pressable>
+      <View style={[styles.bottom, { paddingBottom: bottomInset + spacing.md }]}>
+        <View style={styles.copy}>
+          {dealLine ? (
+            <View style={styles.dealPill}>
+              <Icon name="bolt" size={14} color={REEL.onFlame} />
+              <Text variant="caption" weight="bold" style={{ color: REEL.onFlame }}>
+                {dealLine.toUpperCase()}
+              </Text>
+            </View>
+          ) : null}
 
-        <Text variant="title" weight="bold" tone="inverse" numberOfLines={2}>
-          {offer.title}
-        </Text>
-
-        {offer.description ? (
-          <Text variant="label" tone="inverse" numberOfLines={2} style={styles.description}>
-            {offer.description}
-          </Text>
-        ) : null}
-
-        {offer.price ? (
-          <View style={styles.priceRow}>
-            <Text variant="heading" weight="bold" tone="inverse">
-              {offer.price}
+          <Pressable onPress={onOpen}>
+            <Text variant="subheading" weight="bold" style={{ color: REEL.text }} numberOfLines={1}>
+              {business.name}
             </Text>
-            {offer.wasPrice ? (
-              <Text variant="body" tone="inverse" style={styles.wasPrice}>
-                {offer.wasPrice}
+          </Pressable>
+
+          <View style={styles.meta}>
+            {open !== undefined ? (
+              <View style={styles.metaItem}>
+                <View style={[styles.dot, { backgroundColor: open ? REEL.mint : REEL.flame }]} />
+                <Text variant="caption" style={{ color: open ? REEL.mint : REEL.flame }}>
+                  {open ? 'Open now' : 'Closed'}
+                </Text>
+              </View>
+            ) : null}
+            {distanceLabel || where ? (
+              <Text variant="caption" style={{ color: REEL.muted }} numberOfLines={1}>
+                {[distanceLabel && `${distanceLabel} away`, where].filter(Boolean).join(' · ')}
+              </Text>
+            ) : null}
+            {business.ratingCount ? (
+              <Text variant="caption" weight="bold" style={{ color: REEL.star }}>
+                ★ {(business.ratingAvg ?? 0).toFixed(1)} ({business.ratingCount})
               </Text>
             ) : null}
           </View>
-        ) : null}
 
+          <Text variant="heading" weight="bold" style={{ color: REEL.text }} numberOfLines={2}>
+            {offer.title}
+          </Text>
+
+          {offer.description ? (
+            <Text variant="label" style={{ color: REEL.muted }} numberOfLines={2}>
+              {offer.description}
+            </Text>
+          ) : null}
+
+          {offer.price ? (
+            <View style={styles.priceRow}>
+              <Text weight="bold" style={styles.price}>
+                {offer.price}
+              </Text>
+              {offer.wasPrice ? (
+                <Text variant="body" style={styles.wasPrice}>
+                  {offer.wasPrice}
+                </Text>
+              ) : null}
+              {saving ? (
+                <View style={styles.save}>
+                  <Text variant="caption" weight="bold" style={{ color: REEL.mint }}>
+                    Save {saving}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          {tags.length > 0 ? (
+            <View style={styles.tags}>
+              {tags.map((t) => (
+                <View key={t} style={styles.tagChip}>
+                  <Text variant="caption" style={{ color: REEL.muted }}>
+                    #{t.replace(/\s+/g, '')}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+
+        {/* ── Doors ── one secondary, one terracotta "go buy it". */}
         <View style={styles.actions}>
-          <Pressable onPress={onOpen} style={[styles.cta, styles.ctaPrimary]}>
-            <Text variant="label" weight="bold">
+          <Pressable onPress={onOpen} style={[styles.cta, styles.ctaGhost, onOrder && styles.ctaNarrow]}>
+            <Icon name="store" size={18} color={REEL.text} />
+            <Text variant="label" weight="bold" style={{ color: REEL.text }}>
               View business
             </Text>
           </Pressable>
           {onOrder ? (
-            <Pressable onPress={onOrder} style={[styles.cta, styles.ctaGhost]}>
-              <Text variant="label" weight="bold" tone="inverse">
-                🛒 Order
+            <Pressable onPress={onOrder} style={[styles.cta, styles.ctaWide, { backgroundColor: colors.cta }]}>
+              <Text variant="label" weight="bold" style={{ color: '#fff' }}>
+                Claim offer
               </Text>
+              <Icon name="arrowRight" size={18} color="#fff" />
             </Pressable>
           ) : null}
         </View>
+
+        {/* ── Next deal ── the swipe-up affordance, and a tap does the swipe. */}
+        {next ? (
+          <Pressable onPress={onNext} style={styles.peek}>
+            <View style={styles.peekThumb}>
+              {next.offer.imageUrl ? (
+                <Image source={{ uri: next.offer.imageUrl }} style={styles.avatarImg} />
+              ) : (
+                <Text style={styles.peekEmoji}>
+                  {next.offer.emoji ?? getType(next.business.type)?.icon ?? '🏷️'}
+                </Text>
+              )}
+            </View>
+            <View style={styles.peekText}>
+              <View style={styles.peekTop}>
+                <View style={styles.nextBadge}>
+                  <Text weight="bold" style={styles.nextBadgeText}>NEXT DEAL</Text>
+                </View>
+                <Text variant="caption" style={{ color: REEL.muted, flexShrink: 1 }} numberOfLines={1}>
+                  {next.business.name}
+                </Text>
+              </View>
+              <Text variant="caption" weight="bold" style={{ color: REEL.text }} numberOfLines={1}>
+                {next.offer.title}
+                {formatDistance(next.distanceKm) ? ` · ${formatDistance(next.distanceKm)}` : ''}
+              </Text>
+            </View>
+            <Icon name="chevronDown" size={18} color={REEL.mint} />
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
 }
 
+function RailButton({
+  icon,
+  label,
+  onPress,
+  tint = REEL.text,
+}: {
+  icon: 'share' | 'directions' | 'phone';
+  label: string;
+  onPress: () => void;
+  tint?: string;
+}) {
+  return (
+    <Pressable onPress={onPress} hitSlop={6} style={styles.railItem}>
+      <View style={styles.railBtn}>
+        <Icon name={icon} size={20} color={tint} />
+      </View>
+      <Text variant="caption" weight="bold" style={styles.railLabel}>
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/**
+ * Where the business is, short: the street line, or only the area when the
+ * owner asked for the exact address to stay private.
+ */
+function areaLabel(business: Business): string | undefined {
+  const loc = business.location;
+  if (!loc) return undefined;
+  if (loc.hidePreciseLocation || loc.isHome) return loc.city ?? loc.region;
+  return loc.addressLine ?? loc.city;
+}
+
+/** "₹101" off, when both prices read as money and the deal is cheaper. */
+function savingLabel(offer: Offer): string | undefined {
+  const now = parsePrice(offer.price);
+  const was = parsePrice(offer.wasPrice);
+  if (now === undefined || was === undefined || was <= now) return undefined;
+  return formatMoney(was - now);
+}
+
+/** "Ends in 2h 45m" while it's close, "Ends in 3 days" further out. */
+export function endsInLabel(endsAt?: string, now: number = Date.now()): string | undefined {
+  if (!endsAt) return undefined;
+  const ms = new Date(endsAt).getTime() - now;
+  if (!Number.isFinite(ms) || ms <= 0) return undefined;
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `Ends in ${Math.max(mins, 1)}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Ends in ${hours}h ${mins % 60}m`;
+  const days = Math.round(hours / 24);
+  return `Ends in ${days} day${days === 1 ? '' : 's'}`;
+}
+
 const styles = StyleSheet.create({
-  page: { width: '100%', backgroundColor: '#000', overflow: 'hidden' },
+  page: { width: '100%', backgroundColor: REEL.ground, overflow: 'hidden' },
   video: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' },
   watermark: {
     position: 'absolute',
     alignSelf: 'center',
-    top: '32%',
+    top: '26%',
     fontSize: 140,
     opacity: 0.35,
   },
-  topRow: {
+  sponsored: {
     position: 'absolute',
-    top: spacing.lg,
-    left: spacing.lg,
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  tagPill: {
-    backgroundColor: 'rgba(255,255,255,0.28)',
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 3,
-  },
-  sponsoredPill: {
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    right: spacing.md,
+    backgroundColor: REEL.glass,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },
   rail: {
     position: 'absolute',
-    right: spacing.lg,
-    bottom: 190,
+    right: spacing.md,
     gap: spacing.md,
     alignItems: 'center',
+    zIndex: 2,
   },
+  avatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: REEL.mint,
+    backgroundColor: '#fff',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  avatarImg: { width: '100%', height: '100%' },
+  avatarEmoji: { fontSize: 24 },
+  railItem: { alignItems: 'center', gap: 2 },
   railBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(40,51,44,0.5)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
   },
-  railIcon: { fontSize: 20 },
-  body: {
+  railLabel: { color: REEL.text, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 3 },
+  bottom: {
     position: 'absolute',
-    left: spacing.lg,
-    right: spacing.lg,
-    bottom: spacing.xl,
-    gap: spacing.xs,
-  },
-  business: { opacity: 0.95, marginBottom: spacing.xs },
-  description: { opacity: 0.88 },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: spacing.lg,
     gap: spacing.sm,
-    marginTop: spacing.xs,
   },
-  wasPrice: { opacity: 0.75, textDecorationLine: 'line-through' },
-  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  cta: {
-    height: 46,
+  copy: { maxWidth: '80%', gap: spacing.xs },
+  dealPill: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: REEL.flame,
     borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    marginBottom: spacing.xs,
+  },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.sm, rowGap: 2 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
+  priceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginTop: spacing.xs },
+  price: { fontSize: 26, lineHeight: 32, color: REEL.amber },
+  wasPrice: { color: REEL.muted, textDecorationLine: 'line-through' },
+  save: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(161,209,180,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(161,209,180,0.4)',
+  },
+  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.xs },
+  tagChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radius.pill,
+    backgroundColor: REEL.glass,
+    borderWidth: 1,
+    borderColor: REEL.border,
+  },
+  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  cta: {
+    flex: 1,
+    height: 48,
+    borderRadius: radius.pill,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: spacing.xl,
+    gap: 6,
   },
-  ctaPrimary: { backgroundColor: '#fff' },
-  ctaGhost: { borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.7)' },
+  // The mockup's 2 : 3 split — the door that buys is the bigger one.
+  ctaNarrow: { flex: 2 },
+  ctaWide: { flex: 3 },
+  ctaGhost: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+  },
+  peek: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    padding: 10,
+    borderRadius: radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  peekThumb: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: REEL.muted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  peekEmoji: { fontSize: 20 },
+  peekText: { flex: 1, minWidth: 0, gap: 1 },
+  peekTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  nextBadge: {
+    backgroundColor: 'rgba(161,62,40,0.6)',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+  },
+  nextBadgeText: { fontSize: 10, lineHeight: 14, color: '#FFDAD2' },
 });

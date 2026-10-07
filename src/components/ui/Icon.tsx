@@ -69,7 +69,14 @@ export type IconName =
   | 'filter'
   | 'sparkle'
   | 'image'
-  | 'bolt';
+  | 'bolt'
+  | 'layers'
+  | 'list'
+  | 'locate'
+  | 'tune'
+  | 'flame'
+  | 'volume'
+  | 'volumeOff';
 
 export interface IconProps {
   name: IconName;
@@ -413,6 +420,17 @@ export function Icon({ name, size = 24, color = '#000', filled, strokeWidth = 2 
 
       {name === 'minus' ? <Path d="M5 12h14" {...s} /> : null}
 
+      {name === 'layers' ? (
+        <>
+          <Path d="M12 3 2.5 8 12 13l9.5-5z" {...solid} />
+          <Path d="m2.5 12.5 9.5 5 9.5-5M2.5 16.5l9.5 5 9.5-5" {...s} />
+        </>
+      ) : null}
+
+      {name === 'list' ? <Path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" {...s} /> : null}
+
+      {name === 'locate' ? <Path d="M21 3 3 10.5l7.5 3 3 7.5z" {...solid} /> : null}
+
       {name === 'filter' ? <Path d="M3.5 5h17l-6.5 8v6l-4 2v-8z" {...solid} /> : null}
 
       {name === 'sparkle' ? (
@@ -428,6 +446,31 @@ export function Icon({ name, size = 24, color = '#000', filled, strokeWidth = 2 
       ) : null}
 
       {name === 'bolt' ? <Path d="M13 2.5 4.5 13.5H12l-1 8 8.5-11H12z" {...solid} /> : null}
+
+      {name === 'flame' ? (
+        <>
+          <Path
+            d="M12 2.5c.4 2.6 2.2 4.3 3.7 6.1 1.4 1.7 2.8 3.5 2.8 6.1a6.5 6.5 0 0 1-13 0c0-2.4 1.1-4.2 2.6-5.6.1 1.5.7 2.7 1.8 3.4C9.6 9.4 10.4 5.6 12 2.5z"
+            {...solid}
+          />
+          <Path d="M12 21a2.8 2.8 0 0 1-2.8-2.8c0-1.6 1.3-2.6 2.8-4.2 1.5 1.6 2.8 2.6 2.8 4.2A2.8 2.8 0 0 1 12 21z" {...(filled ? { fill: 'rgba(255,255,255,0.55)' } : s)} />
+        </>
+      ) : null}
+
+      {name === 'tune' ? (
+        <Path d="M4 6.5h9M17 6.5h3M4 12h3M11 12h9M4 17.5h11M19 17.5h1M15 4.5v4M9 10v4M17 15.5v4" {...s} />
+      ) : null}
+
+      {name === 'volume' || name === 'volumeOff' ? (
+        <>
+          <Path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" {...solid} />
+          {name === 'volume' ? (
+            <Path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" {...s} />
+          ) : (
+            <Path d="m16 9.5 5 5M21 9.5l-5 5" {...s} />
+          )}
+        </>
+      ) : null}
     </Svg>
   );
 }

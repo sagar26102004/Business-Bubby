@@ -21,7 +21,6 @@ import {
   Input,
   LoadingView,
   Screen,
-  Tag,
   Text,
 } from '@/components/ui';
 import { formatMoney, parsePrice } from '@/lib/money';
@@ -70,8 +69,8 @@ export default function NewBillScreen() {
       repos.chat.listBusinessThreads(business.id),
       repos.orders.listForBusiness(business.id),
     ]);
-    // Customers this business already knows — from chats and past orders. These
-    // are a shortcut only; the search below reaches every account.
+    // Customers this business already knows — from chats and past orders. Used
+    // to mark them "Existing customer" in the search results.
     const known = new Map<string, BillCustomer>();
     threads.forEach((t) => known.set(t.participantId, { id: t.participantId, name: t.participantName }));
     orders.forEach((o) => known.set(o.customerId, { id: o.customerId, name: o.customerName }));
@@ -217,13 +216,6 @@ export default function NewBillScreen() {
         </Card>
       ) : (
         <>
-          {knownCustomers.length > 0 ? (
-            <View style={styles.pillRow}>
-              {knownCustomers.map((c) => (
-                <Tag key={c.id} label={c.name} onPress={() => pick(c)} />
-              ))}
-            </View>
-          ) : null}
           <Input
             placeholder="Search everyone by name, or type a new one"
             value={term}
@@ -381,7 +373,6 @@ function Label({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   label: { marginTop: spacing.lg, marginBottom: spacing.sm },
-  pillRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   hint: { marginTop: spacing.xs },
   selected: { borderWidth: 1.5 },
   selectedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
