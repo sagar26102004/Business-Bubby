@@ -8,19 +8,38 @@
  * the pin is also draggable; "Use my current location" snaps it back. Nearby
  * businesses render as faint dots so the map is orientable.
  *
+ * Panning a small map inside a scrolling form is fiddly — on a phone the page
+ * and the map fight over every drag — so there are two easier ways in:
+ *   - a SEARCH box: type the address or area, tap a result, the pin jumps there
+ *     (Nominatim via `lib/geocode.ts`; `onPlaceFound` lets the form fill its
+ *     address fields from the same result);
+ *   - a FULL-SCREEN button that opens the same map in a modal with the search
+ *     on top, where nothing else is competing for the gesture.
+ *
  * The Leaflet page is built ONCE (from the user's location + nearby dots + the
  * initial pin) so moving the pin never reloads the tiles — the drag/tap is
  * handled inside the page and reported back up via postMessage. "Use my current
  * location" bumps a reset key, the one case that rebuilds the page.
  */
 import { createElement, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  ActivityIndicator,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GeoPoint } from '@/domain/types';
 import { getType } from '@/domain/catalog';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { haversineKm } from '@/lib/geo';
-import { Button, Text } from '@/components/ui';
+import { searchPlaces, type PlaceResult } from '@/lib/geocode';
+import { Button, Icon, Input, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 const RADIUS_KM = 5; // area of nearby dots shown around the user
@@ -30,6 +49,8 @@ const CANVAS_HEIGHT = 260;
 export interface LocationPickerProps {
   value?: GeoPoint;
   onChange: (point: GeoPoint) => void;
+  /** A search result was picked — lets the form fill its address fields too. */
+  onPlaceFound?: (place: PlaceResult) => void;
 }
 
 type Dot = { lat: number; lng: number; color: string };
@@ -63,7 +84,7 @@ function buildHtml(center: GeoPoint, pin: GeoPoint, dots: Dot[], rings: number[]
       else if (window.parent) window.parent.postMessage(s, '*');
     }
     var map = L.map('map', { zoomControl: true, attributionControl: false })
-      .setView([D.center.latitude, D.center.longitude], 15);
+      .setView([D.pin.latitude, D.pin.longitude], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
 
     // You
@@ -100,7 +121,7 @@ function buildHtml(center: GeoPoint, pin: GeoPoint, dots: Dot[], rings: number[]
 </html>`;
 }
 
-export function LocationPicker({ value, onChange }: LocationPickerProps) {
+export function LocationPicker({ value, onChange, onPlaceFound }: LocationPickerProps) {
   const repos = useRepositories();
   const colors = useColors();
 
@@ -151,18 +172,37 @@ export function LocationPicker({ value, onChange }: LocationPickerProps) {
     if (Number.isFinite(p.latitude) && Number.isFinite(p.longitude)) onChangeRef.current(p);
   };
 
-  const useCurrentLocation = () => {
-    if (!data) return;
-    valueRef.current = data.center;
-    onChange(data.center);
-    // Rebuild the page so the pin snaps back to the user's location.
+  // Moving the pin from OUTSIDE the map (current location, a search result)
+  // rebuilds the page around it; drags and taps inside the map never do.
+  const jumpTo = (p: GeoPoint) => {
+    valueRef.current = p;
+    onChange(p);
     setResetKey((k) => k + 1);
   };
+
+  const useCurrentLocation = () => {
+    if (data) jumpTo(data.center);
+  };
+
+  const pickPlace = (place: PlaceResult) => {
+    jumpTo(place.point);
+    onPlaceFound?.(place);
+  };
+
+  const [fullScreen, setFullScreen] = useState(false);
+  const closeFullScreen = () => {
+    setFullScreen(false);
+    // The inline map was built before the pin moved in the big one.
+    setResetKey((k) => k + 1);
+  };
+  const insets = useSafeAreaInsets();
 
   const distanceKm = data && value ? haversineKm(data.center, value) : undefined;
 
   return (
     <View>
+      <PlaceSearch near={data?.center} onPick={pickPlace} />
+
       <View style={[styles.canvas, { borderColor: colors.border }]}>
         {html ? (
           <MapFrame key={resetKey} html={html} onPick={handlePick} style={styles.fill} />
@@ -178,7 +218,46 @@ export function LocationPicker({ value, onChange }: LocationPickerProps) {
             ◉ You · tap the map or drag 📍 to set your pin
           </Text>
         </View>
+        {html ? (
+          <Pressable
+            onPress={() => setFullScreen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Open the map full screen"
+            style={[styles.expand, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
+            <Icon name="map" size={16} color={colors.text} />
+            <Text variant="caption" weight="semibold">
+              Full screen
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
+
+      <Modal visible={fullScreen} animationType="slide" onRequestClose={closeFullScreen}>
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.background,
+              paddingTop: insets.top + spacing.sm,
+              paddingBottom: insets.bottom + spacing.sm,
+            },
+          ]}
+        >
+          <PlaceSearch near={data?.center} onPick={pickPlace} />
+          <View style={[styles.sheetMap, { borderColor: colors.border }]}>
+            {html && fullScreen ? (
+              <MapFrame key={`full-${resetKey}`} html={html} onPick={handlePick} style={styles.fill} />
+            ) : null}
+          </View>
+          <View style={styles.sheetFoot}>
+            <Button title="🎯 My location" variant="secondary" onPress={useCurrentLocation} />
+            <View style={styles.fill}>
+              <Button title="Done" onPress={closeFullScreen} />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <View style={styles.below}>
         <Text variant="caption" tone="muted" style={styles.distance}>
@@ -194,6 +273,90 @@ export function LocationPicker({ value, onChange }: LocationPickerProps) {
           onPress={useCurrentLocation}
         />
       </View>
+    </View>
+  );
+}
+
+/**
+ * Type-to-find box above the map. Debounced (Nominatim allows ~1 request a
+ * second); results are listed inline under the box, and picking one hands it
+ * up and clears the box.
+ */
+function PlaceSearch({ near, onPick }: { near?: GeoPoint; onPick: (place: PlaceResult) => void }) {
+  const colors = useColors();
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<PlaceResult[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [searched, setSearched] = useState(false);
+  // Only the newest request may write results, however the replies arrive.
+  const seq = useRef(0);
+
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 3) {
+      seq.current++;
+      setResults([]);
+      setBusy(false);
+      setSearched(false);
+      return;
+    }
+    const mine = ++seq.current;
+    setBusy(true);
+    const t = setTimeout(async () => {
+      const found = await searchPlaces(q, near);
+      if (mine !== seq.current) return;
+      setResults(found);
+      setBusy(false);
+      setSearched(true);
+    }, 600);
+    return () => clearTimeout(t);
+    // `near` is read at search time; a new location shouldn't re-run the query.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  const pick = (place: PlaceResult) => {
+    setQuery('');
+    onPick(place);
+  };
+
+  return (
+    <View style={styles.search}>
+      <Input
+        placeholder="Search your address or area"
+        value={query}
+        onChangeText={setQuery}
+        rightIcon="search"
+        autoCorrect={false}
+        returnKeyType="search"
+      />
+      {busy ? (
+        <View style={styles.searchNote}>
+          <ActivityIndicator size="small" color={colors.textMuted} />
+        </View>
+      ) : results.length > 0 ? (
+        <View style={[styles.results, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          {results.map((r, i) => (
+            <Pressable
+              key={`${r.point.latitude},${r.point.longitude},${i}`}
+              onPress={() => pick(r)}
+              style={({ pressed }) => [
+                styles.result,
+                i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+                pressed && { backgroundColor: colors.surfaceAlt },
+              ]}
+            >
+              <Icon name="pin" size={16} color={colors.textMuted} />
+              <Text variant="caption" numberOfLines={2} style={styles.fill}>
+                {r.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : searched ? (
+        <Text variant="caption" tone="muted" style={styles.searchNote}>
+          No places found — try a nearby landmark or area, or move the pin on the map.
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -275,6 +438,31 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
+  expand: {
+    position: 'absolute',
+    bottom: spacing.sm,
+    right: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  search: { marginBottom: spacing.sm, gap: spacing.xs },
+  searchNote: { paddingVertical: spacing.xs, alignItems: 'center', textAlign: 'center' },
+  results: { borderWidth: 1, borderRadius: radius.md, overflow: 'hidden' },
+  result: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  sheet: { flex: 1, paddingHorizontal: spacing.md, gap: spacing.sm },
+  sheetMap: { flex: 1, borderRadius: radius.lg, borderWidth: 1, overflow: 'hidden' },
+  sheetFoot: { flexDirection: 'row', gap: spacing.sm },
   below: { marginTop: spacing.sm, gap: spacing.sm },
   distance: { textAlign: 'center' },
 });

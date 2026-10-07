@@ -1780,7 +1780,19 @@ export default function RegisterScreen() {
                 ? 'Pin where you’re based'
                 : 'Pin your location on the map'}
             </Text>
-            <LocationPicker value={point} onChange={setPoint} />
+            <LocationPicker
+              value={point}
+              onChange={setPoint}
+              onPlaceFound={(place) => {
+                // The search result describes the pinned place, so it fills the
+                // fields below. A typed address line is the owner's own words
+                // and is never overwritten.
+                if (!addressLine.trim() && place.addressLine) setAddressLine(place.addressLine);
+                if (place.city) setCity(place.city);
+                if (place.region) setRegion(place.region);
+                if (place.country) setCountry(place.country);
+              }}
+            />
 
             <Input
               label="Address (optional)"

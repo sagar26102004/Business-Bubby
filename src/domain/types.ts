@@ -274,10 +274,8 @@ export interface PortfolioItem {
  * Somewhere ELSE the business's work lives — a Google Drive folder of wedding
  * albums, an Instagram grid of haircuts, a YouTube channel.
  *
- * We host only a handful of files per listing (MAX_SHOWCASE_PHOTOS /
- * MAX_SHOWCASE_VIDEOS), which is plenty for a cafe's FSSAI certificate but
- * nowhere near a wedding designer's portfolio. Those businesses point at the
- * gallery they already keep, and the business page renders it as a chip that
+ * Uploads cover most listings, but a wedding designer's portfolio already
+ * lives somewhere else. Those businesses point at the gallery they keep, and the business page renders it as a chip that
  * opens the link. `kind` is derived from the URL's host, so nobody types a
  * label.
  */

@@ -7,23 +7,15 @@
  * function. The first two fit in a few files; the third never will. So the
  * showcase is deliberately two things at once —
  *
- *  1. a HANDFUL of files we host ourselves (MAX_SHOWCASE_PHOTOS +
- *     MAX_SHOWCASE_VIDEOS), because storage is the one thing that scales with
- *     every business that signs up, and
+ *  1. files we host ourselves — as many photos and videos as the business
+ *     wants (each video still capped by length, below), and
  *  2. LINKS to the gallery the business already keeps — a Drive folder, an
- *     Instagram grid — which cost us nothing and hold as much as they like.
- *
- * Raise the limits here and the editor, the counters and the warnings all move
- * together; nothing else hardcodes them.
+ *     Instagram grid — for the ones whose whole portfolio lives elsewhere.
  */
 import type { PortfolioItem, ShowcaseLinkKind } from './types';
 
-/** Photos we host per listing. */
-export const MAX_SHOWCASE_PHOTOS = 3;
-/** Videos we host per listing — video is the expensive one. */
-export const MAX_SHOWCASE_VIDEOS = 1;
 /**
- * And it has to be short, because duration is the ONLY size control there is.
+ * Each video has to be short, because duration is the ONLY size control there is.
  * Nothing on the client can re-encode a video, and the delivery CDN won't be
  * asked to either — transcoding is billed per second of footage, which makes it
  * the most expensive operation available on a free plan. So this number, and the

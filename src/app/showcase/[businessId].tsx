@@ -13,10 +13,9 @@
  * do should be the thing in front of you.
  *
  * TWO WAYS to show work, and a business usually wants both:
- *  - UPLOADS, capped at MAX_SHOWCASE_PHOTOS + MAX_SHOWCASE_VIDEOS. A cafe's
- *    FSSAI certificate, a barber's best fade — that's all it takes, and storage
- *    is what scales with every listing that signs up.
- *  - LINKS, uncapped, for the businesses whose showcase IS the business: a
+ *  - UPLOADS, as many photos and videos as they like (each video ≤
+ *    MAX_SHOWCASE_VIDEO_SECONDS). A cafe's FSSAI certificate, a barber's fades.
+ *  - LINKS for the businesses whose showcase IS the business: a
  *    wedding designer points at the Drive folder or the Instagram grid they
  *    already keep, and the business page renders it as a chip that opens it.
  */
@@ -39,15 +38,13 @@ import {
   countVideos,
   describeShowcaseLink,
   isValidLink,
-  MAX_SHOWCASE_PHOTOS,
-  MAX_SHOWCASE_VIDEOS,
   MAX_SHOWCASE_VIDEO_SECONDS,
   normalizeLink,
   showcaseLinkKind,
 } from '@/domain/showcase';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
-import { isLocalUri, uploadAll, uploadMedia } from '@/lib/upload';
+import { isLocalUri, uploadAll } from '@/lib/upload';
 import { thumbUrl } from '@/lib/media';
 import { showAlert } from '@/lib/alert';
 import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Text } from '@/components/ui';
@@ -95,8 +92,6 @@ export default function ShowcaseScreen() {
   const { business } = data;
   const portfolio = business.portfolio ?? [];
   const links = business.showcaseLinks ?? [];
-  const photosLeft = MAX_SHOWCASE_PHOTOS - countPhotos(portfolio);
-  const videosLeft = MAX_SHOWCASE_VIDEOS - countVideos(portfolio);
   const isEmpty = portfolio.length === 0 && links.length === 0 && pending.length === 0;
 
   const item = (kind: PortfolioItem['kind'], url: string): PortfolioItem => ({
@@ -136,12 +131,12 @@ export default function ShowcaseScreen() {
       : await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ['images'],
           allowsMultipleSelection: true,
-          selectionLimit: photosLeft,
+          selectionLimit: 0, // 0 = no limit
           quality: 0.7,
         });
     if (result.canceled) return;
 
-    const picked = result.assets.slice(0, photosLeft);
+    const picked = result.assets;
     if (picked.length === 0) return;
     setPending(picked.map(() => 'photo' as const));
     // Options per file, not per batch — a mixed .png/.jpg pick used to store the
@@ -190,39 +185,53 @@ export default function ShowcaseScreen() {
           videoMaxDuration: MAX_SHOWCASE_VIDEO_SECONDS,
           quality: 0.7,
         })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'], quality: 0.7 });
+      : await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['videos'],
+          allowsMultipleSelection: true,
+          selectionLimit: 0, // 0 = no limit
+          quality: 0.7,
+        });
     if (result.canceled) return;
 
-    const asset = result.assets[0];
-    if (!asset) return;
     // `duration` is milliseconds, and null when the picker couldn't read it —
     // let that through rather than refusing a perfectly good clip.
-    if (asset.duration != null && asset.duration > MAX_SHOWCASE_VIDEO_SECONDS * 1000 + 500) {
-      setError(
-        `That video is ${Math.round(asset.duration / 1000)}s. Keep it under ${MAX_SHOWCASE_VIDEO_SECONDS}s — trim it and try again.`,
-      );
+    const tooLong = (a: ImagePicker.ImagePickerAsset) =>
+      a.duration != null && a.duration > MAX_SHOWCASE_VIDEO_SECONDS * 1000 + 500;
+    const picked = result.assets.filter((a) => !tooLong(a));
+    const skipped = result.assets.length - picked.length;
+    const lengthWarning =
+      skipped > 0
+        ? `${skipped === 1 ? 'One video was' : `${skipped} videos were`} longer than ${MAX_SHOWCASE_VIDEO_SECONDS}s and skipped — trim and try again.`
+        : null;
+    if (picked.length === 0) {
+      setError(lengthWarning);
       return;
     }
-    setPending(['video']);
-    const url = await uploadMedia(
-      asset.uri,
-      {
-        kind: 'video',
-        mimeType: asset.mimeType,
-        fileName: asset.fileName ?? undefined,
-        bytes: asset.fileSize,
-      },
+    setPending(picked.map(() => 'video' as const));
+    const urls = await uploadAll(
+      picked.map((a) => ({
+        uri: a.uri,
+        kind: 'video' as const,
+        mimeType: a.mimeType,
+        fileName: a.fileName ?? undefined,
+        bytes: a.fileSize,
+      })),
       (message) => setError(`Couldn’t upload: ${message}. The video is saved on this device only.`),
     );
     setPending([]);
-    await savePortfolio([...portfolio, item('video', url)]);
+    await savePortfolio([...portfolio, ...urls.map((u) => item('video', u))]);
 
-    if (isLocalUri(url)) {
+    const stranded = urls.filter(isLocalUri).length;
+    if (stranded > 0) {
       setError(
         (existing) =>
           existing ??
-          'That video couldn’t be uploaded and is on this phone only — customers won’t see it.',
+          `${stranded === 1 ? 'That video' : `${stranded} videos`} couldn’t be uploaded and ${
+            stranded === 1 ? 'is' : 'are'
+          } on this phone only — customers won’t see ${stranded === 1 ? 'it' : 'them'}.`,
       );
+    } else if (lengthWarning) {
+      setError((existing) => existing ?? lengthWarning);
     }
   };
 
@@ -291,8 +300,6 @@ export default function ShowcaseScreen() {
       <AddMenu
         visible={menuOpen}
         onClose={() => setMenuOpen(false)}
-        photosLeft={photosLeft}
-        videosLeft={videosLeft}
         onTakePhoto={() => addPhotos(true)}
         onPickPhotos={() => addPhotos(false)}
         onFilmVideo={() => addVideo(true)}
@@ -358,8 +365,8 @@ export default function ShowcaseScreen() {
       </View>
 
       <Text variant="caption" tone="muted" style={styles.counts}>
-        {countPhotos(portfolio)}/{MAX_SHOWCASE_PHOTOS} photos ·{' '}
-        {countVideos(portfolio)}/{MAX_SHOWCASE_VIDEOS} video
+        {countPhotos(portfolio)} {countPhotos(portfolio) === 1 ? 'photo' : 'photos'} ·{' '}
+        {countVideos(portfolio)} {countVideos(portfolio) === 1 ? 'video' : 'videos'}
       </Text>
 
       {links.length > 0 ? (
@@ -465,8 +472,6 @@ function MediaTile({ item, onRemove }: { item: PortfolioItem; onRemove: () => vo
 function AddMenu({
   visible,
   onClose,
-  photosLeft,
-  videosLeft,
   onTakePhoto,
   onPickPhotos,
   onFilmVideo,
@@ -475,8 +480,6 @@ function AddMenu({
 }: {
   visible: boolean;
   onClose: () => void;
-  photosLeft: number;
-  videosLeft: number;
   onTakePhoto: () => void;
   onPickPhotos: () => void;
   onFilmVideo: () => void;
@@ -488,14 +491,13 @@ function AddMenu({
   // the camera entries only make sense on a phone.
   const onPhone = Platform.OS !== 'web';
 
-  const rows: { icon: string; label: string; hint: string; disabled?: boolean; onPress: () => void }[] = [
+  const rows: { icon: string; label: string; hint: string; onPress: () => void }[] = [
     ...(onPhone
       ? [
           {
             icon: '📷',
             label: 'Take a photo',
-            hint: photosLeft > 0 ? `${photosLeft} left` : 'Limit reached',
-            disabled: photosLeft <= 0,
+            hint: 'Straight from the camera',
             onPress: onTakePhoto,
           },
         ]
@@ -503,8 +505,7 @@ function AddMenu({
     {
       icon: '🖼️',
       label: onPhone ? 'Choose photos' : 'Upload photos',
-      hint: photosLeft > 0 ? `${photosLeft} of ${MAX_SHOWCASE_PHOTOS} left` : 'Limit reached',
-      disabled: photosLeft <= 0,
+      hint: 'Pick as many as you like',
       onPress: onPickPhotos,
     },
     ...(onPhone
@@ -512,17 +513,15 @@ function AddMenu({
           {
             icon: '🎥',
             label: 'Film a video',
-            hint: videosLeft > 0 ? `Up to ${MAX_SHOWCASE_VIDEO_SECONDS}s` : 'Limit reached',
-            disabled: videosLeft <= 0,
+            hint: `Up to ${MAX_SHOWCASE_VIDEO_SECONDS}s`,
             onPress: onFilmVideo,
           },
         ]
       : []),
     {
       icon: '🎬',
-      label: onPhone ? 'Choose a video' : 'Upload a video',
-      hint: videosLeft > 0 ? `${videosLeft} of ${MAX_SHOWCASE_VIDEOS}, up to ${MAX_SHOWCASE_VIDEO_SECONDS}s` : 'Limit reached',
-      disabled: videosLeft <= 0,
+      label: onPhone ? 'Choose videos' : 'Upload videos',
+      hint: `As many as you like, each up to ${MAX_SHOWCASE_VIDEO_SECONDS}s`,
       onPress: onPickVideo,
     },
     {
@@ -544,10 +543,9 @@ function AddMenu({
           {rows.map((row) => (
             <Pressable
               key={row.label}
-              onPress={row.disabled ? undefined : row.onPress}
-              style={[styles.option, { borderColor: colors.border }, row.disabled && styles.optionOff]}
+              onPress={row.onPress}
+              style={[styles.option, { borderColor: colors.border }]}
               accessibilityRole="button"
-              accessibilityState={{ disabled: row.disabled }}
             >
               <Text style={styles.optionIcon}>{row.icon}</Text>
               <View style={styles.optionText}>
@@ -674,7 +672,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     padding: spacing.md,
   },
-  optionOff: { opacity: 0.4 },
   optionIcon: { fontSize: 22 },
   optionText: { flex: 1 },
 });

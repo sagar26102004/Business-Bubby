@@ -1,5 +1,10 @@
 # Localo — Test data pack (accounts, businesses, employees)
 
+> ⚠️ **Gone from the live DB since 7 Oct 2026.** The test world was wiped for real data
+> (`supabase/scripts/wipe_test_data_2026-10.sql`). Only `sagar`, `jaikiranaown` / Jai Kirana Store,
+> `jaikiranaemp1` and `custaarav` remain, for the Play review. This file now describes a pack you
+> *could* recreate. It is not what's live.
+
 Everything you need to hand-create a realistic test world that exercises **every**
 listing shape and every module the app has. Nothing here changes code — it is
 data to type into the app.

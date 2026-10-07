@@ -4,6 +4,13 @@
 submission: what is done, what is decided, and what is next. The other files in this folder are
 *reference* (what to paste, what to record); this one is *status*.
 
+**7 October 2026 — live DB wiped for real data.** Every test account and listing was removed
+(`supabase/scripts/wipe_test_data_2026-10.sql`; backup in schema `wipe_backup_20261007`). Only four
+accounts survive: the super-admin `sagar` and the Play reviewer set from `sign-in-details.md`, which is
+`jaikiranaown` + **Jai Kirana Store** (162 products, all history cleared), its employee `jaikiranaemp1`,
+and `custaarav`. The reviewer set still signs in with `test1234`. **Remove it only after Play approves
+the app**, listing first (`rotate_test_accounts.sql` §3).
+
 Last updated **1 October 2026** — see blocker **9**: the submission was REJECTED for an empty
 **Sign in details** declaration, which is paperwork, not code (`docs/play-store/sign-in-details.md`).
 Before that, 23 August 2026 (fifth pass, amended late the same day by decision 6: a bundle has reached **internal testing**, so the
