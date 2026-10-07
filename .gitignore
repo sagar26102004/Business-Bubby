@@ -76,3 +76,6 @@ keystore.b64
 
 # Supabase CLI local state (link target, temp files) — machine-specific
 supabase/.temp/
+
+# bulk-listing importer credentials (scripts/list-business.ts)
+scripts/.listing.env
