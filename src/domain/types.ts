@@ -372,9 +372,10 @@ export interface Offer {
    * free reach, campaigns) and needs no second pricing model.
    *
    * Where it plays: full-screen in the /deals feed, autoplaying while its page
-   * is the one on screen. Everywhere a still is wanted — the Home carousel, the
-   * business page — `imageUrl` is used instead, so a reel should carry one as
-   * its poster frame.
+   * is the one on screen. The Home carousel leaves reels out entirely (it's
+   * photo posters only). Where a still is wanted — the business page — and as
+   * the blurred backdrop behind the reel, `imageUrl` is used, so a reel should
+   * carry one as its poster frame.
    */
   videoUrl?: string;
   /** What's included — picked from the business's own offerings. */

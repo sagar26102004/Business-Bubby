@@ -11,7 +11,9 @@
  * LAYOUT follows the One Place "flash reels" mockup: the feed fills the whole
  * window and the chrome FLOATS over it — back, a two-way pill ("Near you" /
  * "Ending soon"), sound and filters — with a "1 / 12 deals nearby" counter
- * under it. Each page is a `DealReelCard`.
+ * under it. Each page is a `DealReelCard`. Sound is on by default, and a tap on
+ * anything that isn't a button toggles CLEAN VIEW — bar, counter and every
+ * control gone, only the store name left at the bottom (see the card).
  *
  * THE CONTROLS, all applied to one fetch:
  *   MODE       — "Near you" is everything in range, nearest first as the
@@ -93,9 +95,15 @@ export default function DealsScreen() {
   const [categoryId, setCategoryId] = useState<string | null>(intent ?? null);
   const [reelsOnly, setReelsOnly] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  // Held by the screen, not the card, so a viewer who unmutes one ad keeps
-  // sound for the rest of the session's scrolling.
-  const [muted, setMuted] = useState(true);
+  // Held by the screen, not the card, so a viewer who mutes one ad keeps it
+  // quiet for the rest of the session's scrolling. Sound is ON by default; the
+  // one exception is a web page nobody has interacted with yet (a pasted link),
+  // where the browser blocks autoplay with sound and the video would sit still.
+  const [muted, setMuted] = useState(startMuted);
+  // Clean view: a tap anywhere that isn't a button hides every control and
+  // leaves only the store name, so the video gets the screen. Held here, so it
+  // stays on while the viewer swipes, until they tap again.
+  const [clean, setClean] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<FlatList<AdPlacement>>(null);
 
@@ -162,6 +170,13 @@ export default function DealsScreen() {
     },
     [repos, router],
   );
+
+  // A tap with the filter panel open just closes the panel — it's the panel
+  // the viewer was done with, not the controls.
+  const toggleClean = useCallback(() => {
+    if (filtersOpen) setFiltersOpen(false);
+    else setClean((c) => !c);
+  }, [filtersOpen]);
 
   const share = useCallback((p: AdPlacement) => {
     const price = p.offer.price ? ` — ${p.offer.price}` : '';
@@ -261,6 +276,8 @@ export default function DealsScreen() {
                 placement={item}
                 active={index === activeIndex}
                 muted={muted}
+                clean={clean}
+                onToggleClean={toggleClean}
                 height={pageHeight}
                 topInset={topInset + 36}
                 bottomInset={insets.bottom}
@@ -290,48 +307,50 @@ export default function DealsScreen() {
           />
         )}
 
-        {/* ── Floating chrome ── */}
-        <View style={[styles.bar, { paddingTop: insets.top + spacing.sm }]} pointerEvents="box-none">
-          <Pressable onPress={dismiss} hitSlop={8} style={styles.roundBtn}>
-            <Icon name="arrowLeft" size={20} color={REEL.text} />
-          </Pressable>
-
-          <View style={styles.modes}>
-            <ModePill
-              label={nearLabel}
-              live
-              on={mode === 'near'}
-              onPress={() => {
-                setMode('near');
-                resetTo();
-              }}
-            />
-            <ModePill
-              label="Ending soon"
-              on={mode === 'ending'}
-              onPress={() => {
-                setMode('ending');
-                resetTo();
-              }}
-            />
-          </View>
-
-          {activeHasVideo ? (
-            <Pressable onPress={() => setMuted((m) => !m)} hitSlop={6} style={styles.roundBtn}>
-              <Icon name={muted ? 'volumeOff' : 'volume'} size={20} color={REEL.text} />
+        {/* ── Floating chrome ── gone in clean view. */}
+        {clean ? null : (
+          <View style={[styles.bar, { paddingTop: insets.top + spacing.sm }]} pointerEvents="box-none">
+            <Pressable onPress={dismiss} hitSlop={8} style={styles.roundBtn}>
+              <Icon name="arrowLeft" size={20} color={REEL.text} />
             </Pressable>
-          ) : null}
-          <Pressable
-            onPress={() => setFiltersOpen((v) => !v)}
-            hitSlop={6}
-            style={[styles.roundBtn, (filtersOpen || filtering) && styles.roundBtnOn]}
-          >
-            <Icon name="tune" size={20} color={REEL.text} />
-          </Pressable>
-        </View>
+
+            <View style={styles.modes}>
+              <ModePill
+                label={nearLabel}
+                live
+                on={mode === 'near'}
+                onPress={() => {
+                  setMode('near');
+                  resetTo();
+                }}
+              />
+              <ModePill
+                label="Ending soon"
+                on={mode === 'ending'}
+                onPress={() => {
+                  setMode('ending');
+                  resetTo();
+                }}
+              />
+            </View>
+
+            {activeHasVideo ? (
+              <Pressable onPress={() => setMuted((m) => !m)} hitSlop={6} style={styles.roundBtn}>
+                <Icon name={muted ? 'volumeOff' : 'volume'} size={20} color={REEL.text} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={() => setFiltersOpen((v) => !v)}
+              hitSlop={6}
+              style={[styles.roundBtn, (filtersOpen || filtering) && styles.roundBtnOn]}
+            >
+              <Icon name="tune" size={20} color={REEL.text} />
+            </Pressable>
+          </View>
+        )}
 
         {/* ── Filters ── open only when asked for, so the feed keeps the screen. */}
-        {filtersOpen ? (
+        {clean ? null : filtersOpen ? (
           <View style={[styles.panel, { top: insets.top + BAR_HEIGHT + spacing.sm }]}>
             <Text variant="caption" weight="bold" style={styles.panelLabel}>
               DISTANCE
@@ -406,6 +425,18 @@ export default function DealsScreen() {
       </View>
     </View>
   );
+}
+
+/**
+ * Start muted only where sound can't autoplay: on web, before the viewer has
+ * touched the page at all (Chrome's sticky user activation). Anywhere else the
+ * feed opens with sound.
+ */
+function startMuted(): boolean {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
+  const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } })
+    .userActivation;
+  return activation ? !activation.hasBeenActive : false;
 }
 
 function ModePill({

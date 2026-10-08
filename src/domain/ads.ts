@@ -86,9 +86,10 @@ export const FEED_RANGES_KM = [1, 2, 5, 10, 25, 50, 100, 200] as const;
  */
 export const ANY_RANGE_KM = 20_000;
 
-/** The range the feed opens on: far enough to have something in it, close
- *  enough that the first card is still somewhere the customer would go. */
-export const DEFAULT_FEED_RANGE_KM = 10;
+/** The range the feed opens on: "Anywhere", so the feed is never empty for
+ *  want of a wider look. It's still sorted nearest first, so the closest deal
+ *  leads; a customer who wants only the neighbourhood narrows it in filters. */
+export const DEFAULT_FEED_RANGE_KM = ANY_RANGE_KM;
 
 export const formatRangeKm = (km: number): string =>
   km >= ANY_RANGE_KM ? 'Anywhere' : `${km} km`;

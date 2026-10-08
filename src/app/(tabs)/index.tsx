@@ -8,8 +8,7 @@
  *    the list actually reaches, then the search pill.
  *  - INTENT CHIPS with live counts (All + every category that has listings
  *    here) — they filter this screen inline, no navigation.
- *  - With a category picked, a row of that category's tags (→ /browse/[intent]?sub=).
- *  - "Neighborhood deals near you" — the AD SLOT (domain/ads.ts), filtered to
+ *  - "Deals" — the AD SLOT (domain/ads.ts), filtered to
  *    the picked category; what goes in it is decided by AdRepository.
  *  - "Near you now" — the listing cards, in a RANDOM order by default so the
  *    same business isn't on top every time the app opens. Popular and Nearest
@@ -35,7 +34,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { setStatusBarStyle } from 'expo-status-bar';
 import type { PlaceKind, SavedPlace } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
-import { INTENT_CATEGORIES, intentMatches, tagEmoji, type IntentCategory } from '@/domain/intents';
+import { ANY_RANGE_KM } from '@/domain/ads';
+import { INTENT_CATEGORIES, intentMatches, type IntentCategory } from '@/domain/intents';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { useResponsive } from '@/lib/useResponsive';
@@ -67,7 +67,7 @@ import { isDemoViewer, isListedPublicly } from '@/lib/onHold';
  *
  * Deliberately NOT applied to search or the category pages: someone who typed
  * "bullet rental" or opened Rentals is looking for a specific thing and would
- * rather travel for it. The ad slot has its own reach rules (domain/ads.ts).
+ * rather travel for it. The ad slot isn't limited at all: it asks for "Anywhere".
  *
  * With no `near` point yet (a device still waiting on GPS) there is no distance
  * to rank by, so this is simply the first HOME_MIN_COUNT rather than an empty screen.
@@ -182,13 +182,17 @@ export default function BrowseScreen() {
   // shops close by. The reach rules live in the repository (data/adPlacements),
   // so this screen only has to decide the CATEGORY filter and the card look.
   const { data: placements } = useAsync(
-    () => repos.ads.listPlacements(near).then((ps) => ps.filter((p) => isListedPublicly(p.business))),
+    // "Anywhere", like the Deals feed it opens: nearest first, nothing cut off
+    // by distance (the repository's built-in reach rules no longer apply).
+    () => repos.ads.listPlacements(near, { radiusKm: ANY_RANGE_KM }).then((ps) => ps.filter((p) => isListedPublicly(p.business))),
     [near?.latitude, near?.longitude, isDemoViewer()],
   );
 
   const ads: AdCardItem[] = useMemo(() => {
+    // Reels stay in the Deals feed, where they play; Home's carousel is
+    // photo posters only.
     const inCategory = (placements ?? []).filter(
-      (p) => !selected || intentMatches(p.business, selected),
+      (p) => !p.offer.videoUrl && (!selected || intentMatches(p.business, selected)),
     );
 
     const fromOffers: AdCardItem[] = inCategory.map((p) => ({
@@ -257,33 +261,12 @@ export default function BrowseScreen() {
     [campaignByKey, repos],
   );
 
-  // A picked category's own tags that nearby listings carry — its trending row.
-  // (ON HOLD (redesign 2026-10): stall — the Stalls category's item-subcategory
-  // chips used to be built here.)
-  const subTiles = useMemo(() => {
-    if (!selected) return [];
-    const present = new Set(
-      businesses.flatMap((b) => b.tags ?? []).map((t) => t.trim().toLowerCase()),
-    );
-    return selected.tags
-      .filter((t) => present.has(t.toLowerCase()))
-      .slice(0, 12)
-      .map((t) => ({ id: t, label: t, emoji: tagEmoji(t, selected.icon) }));
-  }, [selected, businesses]);
-
   // Sticky-search trigger: the header bar's own offset, minus the safe area the
   // pinned copy occupies (a few px of hysteresis so it can't flicker).
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.nativeEvent.contentOffset.y;
     const threshold = Math.max(searchY.current - insets.top, 1);
     setSearchStuck((stuck) => (stuck ? y > threshold - 8 : y > threshold + 8));
-  };
-
-  const openSubcategory = (sub: string) => {
-    router.push({
-      pathname: '/browse/[type]',
-      params: { type: selected!.id, sub, ...(activePlace ? { place: activePlace.id } : {}) },
-    });
   };
 
   // The top section opens on dark green, so the status bar's icons go light
@@ -424,30 +407,12 @@ export default function BrowseScreen() {
           )}
         </ScrollView>
 
-        {/* The picked category's own tags. */}
-        {selected && subTiles.length > 0 ? (
-          <View style={styles.trendRow}>
-            <Text variant="caption" weight="bold" tone="muted">
-              {`In ${selected.label}:`}
-            </Text>
-            {subTiles.map((t) => (
-              <Tag
-                key={t.id}
-                label={`${t.emoji} ${t.label}`}
-                tone="soft"
-                size="sm"
-                onPress={() => openSubcategory(t.id)}
-              />
-            ))}
-          </View>
-        ) : null}
-
         {/* The ad slot — offers near you, scoped to the picked category */}
         {ads.length > 0 ? (
           <View>
             <SectionHeader
               emoji="🔥"
-              title={selected ? `${selected.label} deals near you` : 'Neighborhood deals near you'}
+              title={selected ? `${selected.label} deals near you` : 'Deals'}
               actionLabel="View all"
               onAction={() =>
                 router.push({
@@ -497,7 +462,6 @@ export default function BrowseScreen() {
       countImpression,
       selectedId,
       selected,
-      subTiles,
       intentCounts,
       reachKm,
       currentUser,
@@ -672,11 +636,4 @@ const styles = StyleSheet.create({
   // Escape the list's horizontal padding so rows reach the screen edges.
   bleed: { marginHorizontal: -spacing.lg },
   chipRow: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingTop: spacing.lg },
-  trendRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: spacing.xs + 2,
-    marginTop: spacing.md,
-  },
 });

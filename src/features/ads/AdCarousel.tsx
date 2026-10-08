@@ -1,6 +1,7 @@
 /**
  * THE AD SLOT — the rotating card carousel on Home, under the category strip.
- * (One Place redesign: white "deal circular" cards — docs/redesign-one-place.)
+ * Each card is a tall POSTER: the offer's photo edge to edge, and nothing on it
+ * but the store's name at the bottom (and "Sponsored" when it's paid for).
  *
  * One tall card sits centered with a sliver of the previous and next peeking in
  * at the edges; the list wraps around (circular) and auto-advances. Tapping a
@@ -19,7 +20,7 @@
  * (Was features/businesses/DealsCarousel.tsx, when the slot could only show the
  * seeded `Deal` array and nothing in the app could create one.)
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   Image,
   NativeScrollEvent,
@@ -31,7 +32,7 @@ import {
   View,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Icon, Text } from '@/components/ui';
+import { Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
 export interface AdCardItem {
@@ -76,6 +77,8 @@ export function AdCarousel({ items, onImpression }: AdCarouselProps) {
   const colors = useColors();
   // Narrow deal cards so the next one peeks in, like a stack of circulars.
   const cardW = Math.min(width - 2 * (PEEK + GAP), 300);
+  // Portrait, like a poster on a wall: 4 wide to 5 tall.
+  const cardH = Math.round(cardW * 1.25);
   const step = cardW + GAP;
   const n = items.length;
   const loop = n > 1;
@@ -86,7 +89,6 @@ export function AdCarousel({ items, onImpression }: AdCarouselProps) {
   const lastX = useRef(0);
   const initialized = useRef(false);
   const timer = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-  const [dot, setDot] = useState(0);
 
   /** Snap index at the current offset, re-centered onto the middle copy. */
   const normalize = useCallback(() => {
@@ -142,7 +144,6 @@ export function AdCarousel({ items, onImpression }: AdCarouselProps) {
     lastX.current = e.nativeEvent.contentOffset.x;
     const i = Math.round(lastX.current / step);
     const at = ((i % n) + n) % n;
-    setDot(at);
     count(at);
     startTimer();
   };
@@ -174,99 +175,48 @@ export function AdCarousel({ items, onImpression }: AdCarouselProps) {
           <Pressable
             key={`${it.key}:${idx}`}
             onPress={it.onPress}
+            // The poster shows only the name; a screen reader gets the offer too.
+            accessibilityRole="button"
+            accessibilityLabel={`${it.title}, ${it.businessName}`}
             style={({ pressed }) => [{ width: cardW }, pressed && styles.pressed]}
           >
-            <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-              {/* One Place deal card: white paper, a terracotta tag pill, the
-                  offer in bold, and the photo (or the business's emoji) as a
-                  thumbnail on the right. */}
-              <View style={styles.topRow}>
-                <View style={[styles.tagPill, { backgroundColor: colors.ctaSoft }]}>
-                  <Text variant="caption" weight="bold" style={{ color: colors.cta }} numberOfLines={1}>
-                    {it.tag}
+            <View style={[styles.card, { height: cardH, backgroundColor: colors.surfaceAlt }]}>
+              {/* A poster: the offer's photo fills the card (or the business's
+                  gradient + emoji when there's no photo), and the only words on
+                  it are the store's name at the bottom. */}
+              {it.imageUrl ? (
+                <Image source={{ uri: it.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              ) : (
+                <LinearGradient
+                  colors={it.colors}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[StyleSheet.absoluteFill, styles.fallback]}
+                >
+                  <Text style={styles.emoji}>{it.emoji}</Text>
+                </LinearGradient>
+              )}
+              <LinearGradient
+                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.65)']}
+                locations={[0.6, 1]}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+              {/* Never quiet about it: a paid placement is labelled. */}
+              {it.sponsored ? (
+                <View style={styles.sponsoredPill}>
+                  <Text variant="caption" weight="semibold" style={styles.onPoster}>
+                    Sponsored
                   </Text>
                 </View>
-                {/* Never quiet about it: a paid placement is labelled. */}
-                {it.sponsored ? (
-                  <View style={[styles.sponsoredPill, { backgroundColor: colors.surfaceAlt }]}>
-                    <Text variant="caption" weight="semibold" tone="muted">
-                      Sponsored
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-
-              <View style={styles.middle}>
-                <View style={styles.body}>
-                  <Text variant="subheading" weight="bold" numberOfLines={2}>
-                    {it.title}
-                  </Text>
-                  <Text variant="caption" tone="muted" numberOfLines={1} style={styles.desc}>
-                    {it.businessName}
-                    {it.description ? ` · ${it.description}` : ''}
-                  </Text>
-                </View>
-                {it.imageUrl ? (
-                  <Image source={{ uri: it.imageUrl }} style={styles.thumb} resizeMode="cover" />
-                ) : (
-                  <LinearGradient
-                    colors={it.colors}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={[styles.thumb, styles.thumbFallback]}
-                  >
-                    <Text style={styles.emoji}>{it.emoji}</Text>
-                  </LinearGradient>
-                )}
-              </View>
-
-              <View style={[styles.footer, { borderTopColor: colors.border }]}>
-                {it.distanceLabel ? (
-                  <View style={styles.meta}>
-                    <Icon name="pin" size={13} color={colors.textMuted} />
-                    <Text variant="caption" tone="muted" numberOfLines={1}>
-                      {it.distanceLabel} away
-                    </Text>
-                  </View>
-                ) : (
-                  <View style={styles.meta} />
-                )}
-                {it.price ? (
-                  <View style={[styles.pricePill, { backgroundColor: colors.brandSoft }]}>
-                    <Text variant="label" weight="bold" tone="brand">
-                      {it.price}
-                    </Text>
-                    {it.wasPrice ? (
-                      <Text variant="caption" tone="muted" style={styles.wasPrice}>
-                        {it.wasPrice}
-                      </Text>
-                    ) : null}
-                  </View>
-                ) : (
-                  <Text variant="caption" weight="bold" tone="brand">
-                    View deal ›
-                  </Text>
-                )}
-              </View>
+              ) : null}
+              <Text variant="subheading" weight="bold" numberOfLines={1} style={[styles.name, styles.onPoster]}>
+                {it.businessName}
+              </Text>
             </View>
           </Pressable>
         ))}
       </ScrollView>
-
-      {/* One dot per ad (not per rendered copy). */}
-      {loop ? (
-        <View style={styles.dots}>
-          {items.map((it, i) => (
-            <View
-              key={it.key}
-              style={[
-                styles.dot,
-                { backgroundColor: colors.textMuted, opacity: i === dot ? 1 : 0.3 },
-              ]}
-            />
-          ))}
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -274,49 +224,18 @@ export function AdCarousel({ items, onImpression }: AdCarouselProps) {
 const styles = StyleSheet.create({
   row: { gap: GAP, paddingHorizontal: PEEK + GAP },
   pressed: { opacity: 0.85 },
-  card: {
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    padding: spacing.lg,
-    gap: spacing.md,
-    minHeight: 168,
-  },
-  topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  tagPill: {
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 3,
-    flexShrink: 1,
-  },
+  card: { borderRadius: radius.lg, overflow: 'hidden', justifyContent: 'flex-end' },
+  fallback: { alignItems: 'center', justifyContent: 'center' },
+  emoji: { fontSize: 72, lineHeight: 84 },
   sponsoredPill: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
+    backgroundColor: 'rgba(0,0,0,0.45)',
   },
-  middle: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', flex: 1 },
-  body: { flex: 1, minWidth: 0 },
-  desc: { marginTop: 2 },
-  thumb: { width: 64, height: 64, borderRadius: radius.md },
-  thumbFallback: { alignItems: 'center', justifyContent: 'center' },
-  emoji: { fontSize: 30, lineHeight: 36 },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: spacing.sm,
-  },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 },
-  pricePill: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.xs,
-    borderRadius: radius.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 4,
-  },
-  wasPrice: { textDecorationLine: 'line-through' },
-  dots: { flexDirection: 'row', justifyContent: 'center', gap: 5, marginTop: spacing.sm },
-  dot: { width: 6, height: 6, borderRadius: 3 },
+  onPoster: { color: '#fff' },
+  name: { margin: spacing.md, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4 },
 });
