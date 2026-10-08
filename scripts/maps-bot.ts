@@ -329,19 +329,36 @@ async function scrapePlace(page: Page, place: { name: string; href: string }, ro
     } else review.push('no menu on Google');
   }
 
-  if (partialDays > 0 && partialDays < 7) {
-    // Back to Overview, open the week's list, read again.
+  if (partialDays < 7) {
+    // Google shows hours three ways: the full week inline (read above), a
+    // collapsed list behind a dropdown, or one "Open · Closes 11 pm · See more
+    // hours" line that opens a separate hours page. Expand whichever is there.
+    // On that hours page the panel loses its name, so read page-wide; the FIRST
+    // week listed is opening hours (later tables are delivery/takeaway hours).
     await page.locator(`${panel} [role=tab]`, { hasText: /^Overview$/ }).first().click().catch(() => {});
     await sleep(1500);
-    await page.locator(`${panel} [jsaction*="openhours"][jsaction*="dropdown"]`).first().click().catch(() => {});
-    await sleep(2000);
-    const retry = parseDays(await readLabels(), []);
+    const opener = page
+      .locator(`${panel} [aria-label*="See more hours"], ${panel} [jsaction*="openhours"][jsaction*="dropdown"]`)
+      .first();
+    const hasHours = (await opener.count()) > 0;
+    let retry: Record<string, string> = {};
+    if (hasHours) {
+      await opener.click().catch(() => {});
+      await page
+        .waitForFunction(() => document.querySelectorAll('[aria-label$="Copy open hours"]').length >= 7, undefined, { timeout: 8000 })
+        .catch(() => {});
+      const all = await page.$$eval('[aria-label$="Copy open hours"]', (els) => els.map((e) => e.getAttribute('aria-label') ?? ''));
+      retry = parseDays(all, []);
+    }
     if (Object.keys(retry).length === 7) {
       Object.assign(hours, retry);
       listing.hours = hours;
       writeFileSync(join(dir, 'listing.json'), JSON.stringify(listing, null, 2));
-    } else review.push(`hours incomplete — only ${Math.max(partialDays, Object.keys(retry).length)}/7 days read; hours left out`);
-  } else if (!partialDays) review.push('no opening hours on Google');
+    } else if (hasHours || partialDays > 0) {
+      // Google HAS hours we couldn't read: hold rather than publish without them.
+      review.push(`hours incomplete — only ${Math.max(partialDays, Object.keys(retry).length)}/7 days read; hours left out`);
+    } else review.push('no opening hours on Google');
+  }
   const dayTotal = Object.keys(hours).length;
 
   if (!tabsLoaded) review.push(`page loaded only partly (tabs: ${tabNames.join(' / ') || 'none'} — Google throttling?) — re-collect later`);
@@ -403,7 +420,16 @@ export async function collect(opts: CollectOptions): Promise<CollectResult> {
       .then(() => true)
       .catch(() => false);
     if (!listed) {
-      log(`No results list for "${query}" — Google slow, or nothing found.`);
+      // No list can mean three things. One match: Maps opens that place
+      // directly. No match: it says so. Neither: the page never loaded, which
+      // is the throttle. Only the last should make the caller back off.
+      const body = await page.locator('body').innerText().catch(() => '');
+      const singlePlace = (await page.locator('div[role=main] h1').count()) > 0;
+      if (singlePlace || /can't find|No results/i.test(body)) {
+        log(`"${query}" has no results list (${singlePlace ? 'one match' : 'no matches'}) — next search`);
+        return { made, throttled: false, exhausted: true };
+      }
+      log(`No results list for "${query}" — Google slow; backing off.`);
       return { made, throttled: true, exhausted: false };
     }
 

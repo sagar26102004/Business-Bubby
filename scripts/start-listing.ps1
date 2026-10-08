@@ -9,7 +9,12 @@
 # cycle it is in and exits.
 param(
   [double]$Hours = 10,
-  [switch]$DryPublish
+  [switch]$DryPublish,
+  # Test knobs; normally left to scripts/listing-plan.json.
+  [double]$Interval = 0,
+  [int]$PerCycle = 0,
+  [string]$Root = '',
+  [string]$Plan = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -18,7 +23,8 @@ Set-Location $repo
 $Host.UI.RawUI.WindowTitle = "Localo listing run ($Hours h) - do not close"
 
 # A STOP file left over from last time would end this run immediately.
-if (Test-Path 'E:\listing\STOP') { Remove-Item 'E:\listing\STOP' -Force }
+$stopFile = if ($Root) { Join-Path $Root 'STOP' } else { 'E:\listing\STOP' }
+if (Test-Path $stopFile) { Remove-Item $stopFile -Force }
 
 # Keep the PC awake (system, not display) while this window runs.
 Add-Type -Namespace Localo -Name Power -MemberDefinition @'
@@ -34,6 +40,10 @@ Write-Host ""
 
 $loopArgs = @('tsx', 'scripts/listing-loop.ts', '--hours', "$Hours")
 if ($DryPublish) { $loopArgs += '--dry-publish' }
+if ($Interval -gt 0) { $loopArgs += @('--interval', "$Interval") }
+if ($PerCycle -gt 0) { $loopArgs += @('--per-cycle', "$PerCycle") }
+if ($Root) { $loopArgs += @('--root', $Root) }
+if ($Plan) { $loopArgs += @('--plan', $Plan) }
 try {
   & npx.cmd @loopArgs
 } finally {

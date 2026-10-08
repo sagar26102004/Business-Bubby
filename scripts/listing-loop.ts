@@ -2,7 +2,8 @@
 /**
  * LISTING LOOP — the unattended run behind /start-listing. See LISTING-PLAN.md.
  *
- *   npx tsx scripts/listing-loop.ts [--hours 10] [--interval 30] [--per-cycle 20] [--dry-publish] [--root E:/listing]
+ *   npx tsx scripts/listing-loop.ts [--hours 10] [--interval 30] [--per-cycle 20] [--dry-publish] [--root E:/listing] [--plan file]
+ *   TESTS ONLY: --simulate ok|throttle replaces the collector (no Google) to exercise the schedule, STOP and back-off.
  *
  * Every `intervalMinutes` (a "slot") it runs one cycle:
  *   1. stop if E:\listing\STOP exists
@@ -57,6 +58,7 @@ async function main() {
   const perCycle = Number(arg('per-cycle') ?? plan.perCycle);
   const root = arg('root') ?? plan.root;
   const dryPublish = process.argv.includes('--dry-publish');
+  const simulate = arg('simulate'); // 'ok' | 'throttle' — tests only
   const typeDir = join(root, plan.type);
 
   mkdirSync(join(root, 'logs'), { recursive: true });
@@ -134,7 +136,11 @@ async function main() {
     let throttled = false;
     while (got < perCycle && state.queryIndex < plan.queries.length) {
       const query = plan.queries[state.queryIndex];
-      const r = await collect({ query, type: plan.type, limit: perCycle - got, root, log, menuModel: plan.menuModel }).catch((e) => {
+      if (simulate) log(`(simulated collector: ${simulate})`);
+      const r = await (simulate
+        ? Promise.resolve({ made: [] as string[], throttled: simulate === 'throttle', exhausted: false })
+        : collect({ query, type: plan.type, limit: perCycle - got, root, log, menuModel: plan.menuModel })
+      ).catch((e) => {
         log(`collector error: ${e instanceof Error ? e.message : e}`);
         return { made: [] as string[], throttled: true, exhausted: false };
       });
@@ -143,6 +149,7 @@ async function main() {
         throttled = true;
         break;
       }
+      if (simulate === 'ok') break;
       if (r.exhausted) {
         log(`search "${query}" has nothing new left — next search`);
         state.queryIndex++;
