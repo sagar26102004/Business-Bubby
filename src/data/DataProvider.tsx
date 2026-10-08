@@ -15,6 +15,8 @@ import { createMockRepositories, resetMockData } from '@/data/mock/mockRepositor
 import { createSupabaseRepositories } from '@/data/supabase';
 import { createApiRepositories } from '@/data/api';
 import { selectedBackend } from '@/data/backend';
+import { setDemoViewer } from '@/lib/onHold';
+import { invalidate } from '@/lib/queryCache';
 
 /**
  * Pick the concrete backend, exactly once. `EXPO_PUBLIC_BACKEND` chooses:
@@ -55,6 +57,11 @@ interface DataContextValue {
   signInAs: (userId: string) => Promise<User>;
   /** Give a guest an anonymous identity so calls (etc.) work without sign-up. */
   signInGuest: () => Promise<User>;
+  /**
+   * Whether this viewer may see demo listings (`Business.demo`): a platform
+   * admin or a `bot…` demo account. Everyone else never sees them.
+   */
+  demoViewer: boolean;
   /** Dev/testing: restore seed data and sign out. */
   resetData: () => void;
 }
@@ -94,6 +101,35 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       active = false;
     };
   }, [repositories]);
+
+  // Demo listings are visible only to admins and `bot…` accounts. The flag
+  // lives in lib/onHold (read by every public list); flipping it drops the
+  // cache so those lists refetch with or without the demo listings.
+  const [demoViewer, setDemoViewerState] = useState(false);
+  useEffect(() => {
+    let active = true;
+    const apply = (on: boolean) => {
+      if (!active) return;
+      setDemoViewer(on);
+      setDemoViewerState((was) => {
+        if (was !== on) invalidate(() => true);
+        return on;
+      });
+    };
+    if (!currentUser || currentUser.isAnonymous) {
+      apply(false);
+    } else if (currentUser.username?.toLowerCase().startsWith('bot')) {
+      apply(true);
+    } else {
+      repositories.users
+        .listPlatformAdminIds()
+        .then((ids) => apply(ids.includes(currentUser.id)))
+        .catch(() => apply(false));
+    }
+    return () => {
+      active = false;
+    };
+  }, [repositories, currentUser]);
 
   const setCurrentUser = useCallback((user: User) => setCurrentUserState(user), []);
 
@@ -161,8 +197,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       signInAs,
       signInGuest,
       resetData,
+      demoViewer,
     }),
-    [repositories, currentUser, authLoading, setCurrentUser, signIn, signUp, signOut, deleteAccount, signInAs, signInGuest, resetData],
+    [repositories, currentUser, authLoading, setCurrentUser, signIn, signUp, signOut, deleteAccount, signInAs, signInGuest, resetData, demoViewer],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

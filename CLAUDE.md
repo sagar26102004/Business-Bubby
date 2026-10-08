@@ -200,7 +200,7 @@ NOTES.md before touching layout. In short:
 
 ## Bulk listing from Google Maps
 
-Real businesses are listed in bulk (cafés first) by scripts in `scripts/` (`maps-bot` → `menu-from-photos` → `list-business`, scheduled by `listing-loop` via `/start-listing`). **Read `LISTING-PLAN.md` at the repo root before touching any of it**: it holds the folder layout, the duplicate key (name + pin within 150 m, recorded in `E:\listing\published-keys.json`), the 30-minute schedule and the Google back-off rules.
+Real businesses are listed in bulk (cafés first) by scripts in `scripts/` (`zomato-bot` for food places, `maps-bot` for other types → `menu-from-photos` → `list-business`, scheduled by `listing-loop` via `/start-listing`). **Read `LISTING-PLAN.md` at the repo root before touching any of it**: it holds the folder layout, the duplicate key (name + pin within 150 m, recorded in `E:\listing\published-keys.json`), the 30-minute schedule and the back-off rules.
 
 ## Shipping to Google Play (in progress)
 

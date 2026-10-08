@@ -953,6 +953,12 @@ export interface Business {
    */
   ownerHandlesCalls?: boolean;
   /**
+   * A sample listing (scripts/demo-listings.ts) used to show owners the Deals
+   * feed. Hidden from every public list and from Deals unless the viewer is an
+   * admin or a `bot…` account — see `isListedPublicly` in lib/onHold.ts.
+   */
+  demo?: boolean;
+  /**
    * Chat routing: employee ids that customer chats are forwarded to. The owner
    * always receives chats, so an empty list means "owner only".
    */

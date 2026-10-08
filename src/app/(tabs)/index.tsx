@@ -57,7 +57,7 @@ import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { AdCarousel, type AdCardItem } from '@/features/ads/AdCarousel';
 import { AD_GRADIENTS } from '@/features/ads/adGradients';
 import { radius, spacing, useColors } from '@/theme/theme';
-import { isListedPublicly } from '@/lib/onHold';
+import { isDemoViewer, isListedPublicly } from '@/lib/onHold';
 
 /**
  * How much Home shows: every listing within HOME_RADIUS_KM — unless that's
@@ -130,7 +130,7 @@ export default function BrowseScreen() {
         );
         return inRing.length >= HOME_MIN_COUNT ? inRing : listed.slice(0, HOME_MIN_COUNT);
       }),
-    [near?.latitude, near?.longitude],
+    [near?.latitude, near?.longitude, isDemoViewer()],
   );
 
   // (Home stays mounted across tab switches and account changes, so its initial
@@ -182,8 +182,8 @@ export default function BrowseScreen() {
   // shops close by. The reach rules live in the repository (data/adPlacements),
   // so this screen only has to decide the CATEGORY filter and the card look.
   const { data: placements } = useAsync(
-    () => repos.ads.listPlacements(near),
-    [near?.latitude, near?.longitude],
+    () => repos.ads.listPlacements(near).then((ps) => ps.filter((p) => isListedPublicly(p.business))),
+    [near?.latitude, near?.longitude, isDemoViewer()],
   );
 
   const ads: AdCardItem[] = useMemo(() => {

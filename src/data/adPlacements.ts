@@ -41,6 +41,7 @@ import {
 } from '@/domain/ads';
 import { isOfferLive } from '@/domain/offers';
 import { haversineKm } from '@/lib/geo';
+import { isListedPublicly } from '@/lib/onHold';
 import type { AdPlacement } from './repositories';
 
 export function buildPlacements(
@@ -52,6 +53,9 @@ export function buildPlacements(
   /** The range the viewer explicitly asked for (the /deals feed), in km. */
   viewerRadiusKm?: number,
 ): AdPlacement[] {
+  // Demo listings (lib/onHold) never count for a real viewer — not even toward
+  // filling a thin slot.
+  businesses = businesses.filter(isListedPublicly);
   const byId = new Map(businesses.map((b) => [b.id, b]));
   const distanceTo = (b: Business): number | undefined =>
     near && b.location?.point ? haversineKm(near, b.location.point) : undefined;

@@ -1,13 +1,16 @@
 # START LISTING — launcher for the unattended listing run (/start-listing).
 # See LISTING-PLAN.md at the repo root.
 #
-#   powershell -ExecutionPolicy Bypass -File scripts\start-listing.ps1 [-Hours 10] [-DryPublish]
+#   powershell -ExecutionPolicy Bypass -File scripts\start-listing.ps1 [-Source maps|zomato] [-Hours 10] [-DryPublish]
+#
+# -Source: maps = Google Maps (/start-listing), zomato = Zomato (/start-listing-zomato).
 #
 # Runs scripts/listing-loop.ts in THIS window and keeps Windows awake until it
 # ends (the keep-awake request dies with the window, so closing it is a stop).
 # Stop gracefully any time by creating E:\listing\STOP — the loop finishes the
 # cycle it is in and exits.
 param(
+  [ValidateSet('maps', 'zomato')][string]$Source = 'maps',
   [double]$Hours = 10,
   [switch]$DryPublish,
   # Test knobs; normally left to scripts/listing-plan.json.
@@ -20,7 +23,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 Set-Location $repo
-$Host.UI.RawUI.WindowTitle = "Localo listing run ($Hours h) - do not close"
+$Host.UI.RawUI.WindowTitle = "Localo listing run - $Source ($Hours h) - do not close"
 
 # A STOP file left over from last time would end this run immediately.
 $stopFile = if ($Root) { Join-Path $Root 'STOP' } else { 'E:\listing\STOP' }
@@ -38,7 +41,7 @@ Write-Host "Localo listing run started $(Get-Date -Format 'HH:mm') for $Hours h.
 Write-Host "Stop gracefully: create the file E:\listing\STOP   (or close this window to stop at once)."
 Write-Host ""
 
-$loopArgs = @('tsx', 'scripts/listing-loop.ts', '--hours', "$Hours")
+$loopArgs = @('tsx', 'scripts/listing-loop.ts', '--source', $Source, '--hours', "$Hours")
 if ($DryPublish) { $loopArgs += '--dry-publish' }
 if ($Interval -gt 0) { $loopArgs += @('--interval', "$Interval") }
 if ($PerCycle -gt 0) { $loopArgs += @('--per-cycle', "$PerCycle") }

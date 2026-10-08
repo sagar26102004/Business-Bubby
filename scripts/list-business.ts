@@ -201,7 +201,7 @@ function holdReasons(dir: string, dup: ReturnType<typeof findDuplicate>): string
   if (files.some((f) => /^menu \d+\./i.test(f)) && !files.includes('menu.json')) reasons.push('menu pending');
   if (dup?.kind === 'near') reasons.push('similar name nearby');
   const review = files.includes('review.txt') ? readFileSync(join(dir, 'review.txt'), 'utf8') : '';
-  if (/page loaded only partly/.test(review)) reasons.push('Maps page loaded only partly');
+  if (/basics missing/.test(review)) reasons.push('Maps page did not load (no address/pin)');
   if (/hours incomplete/.test(review)) reasons.push('opening hours incomplete');
   return reasons;
 }
@@ -307,6 +307,26 @@ async function listFolder(sb: SupabaseClient | null, ownerId: string, dir: strin
   // ── uploads ──
   const coverImageUrl = cover ? await uploadImage(sb, join(dir, cover)) : undefined;
   if (cover) console.log(`   ↑ ${cover}`);
+  if (menu) {
+    // Dish photos the collector saved beside the menu ("photo": "dishes/3.jpg").
+    // A photo that isn't a local file is dropped: nothing should hot-link a
+    // third-party site.
+    let dishes = 0;
+    const withPhoto = menu.filter((m) => m.imageUrl);
+    for (let i = 0; i < withPhoto.length; i += 4) {
+      // 4 uploads at a time: a café can have 100+ dish photos.
+      await Promise.all(
+        withPhoto.slice(i, i + 4).map(async (m) => {
+          const file = join(dir, m.imageUrl!);
+          if (!/^https?:/i.test(m.imageUrl!) && existsSync(file)) {
+            m.imageUrl = await uploadImage(sb, file).catch(() => undefined);
+            if (m.imageUrl) dishes++;
+          } else m.imageUrl = undefined;
+        }),
+      );
+    }
+    if (dishes) console.log(`   ↑ ${dishes} dish photo(s)`);
+  }
   const portfolio: PortfolioItem[] = [];
   for (const f of showcase) {
     portfolio.push({ id: randomUUID(), kind: 'photo', url: await uploadImage(sb, join(dir, f)), createdAt: new Date().toISOString() });

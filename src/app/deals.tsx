@@ -63,6 +63,7 @@ import { shareText } from '@/lib/share';
 import { Icon, Text } from '@/components/ui';
 import { DealReelCard, REEL } from '@/features/ads/DealReelCard';
 import { radius, spacing } from '@/theme/theme';
+import { isDemoViewer, isListedPublicly } from '@/lib/onHold';
 
 /**
  * The ranges on offer live in domain/ads.ts beside the plans, so "views within
@@ -106,8 +107,11 @@ export default function DealsScreen() {
   const near = place?.point;
 
   const { data, loading, error, reload } = useAsync(
-    () => repos.ads.listPlacements(near, { radiusKm: rangeKm }),
-    [near?.latitude, near?.longitude, rangeKm],
+    () =>
+      repos.ads
+        .listPlacements(near, { radiusKm: rangeKm })
+        .then((ps) => ps.filter((p) => isListedPublicly(p.business))),
+    [near?.latitude, near?.longitude, rangeKm, isDemoViewer()],
   );
 
   const all = useMemo(() => data ?? [], [data]);

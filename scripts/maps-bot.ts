@@ -50,7 +50,7 @@ const MAX_MENU_PHOTOS = 8;
 const MAX_UNHEALTHY = 3;
 
 /** Google category → Localo tags (names from TAG_CATALOG in src/domain/tags.ts). */
-const CATEGORY_TAGS: [RegExp, string[]][] = [
+export const CATEGORY_TAGS: [RegExp, string[]][] = [
   [/coffee|cafe|café|tea house|tea/i, ['Cafe']],
   [/bakery|cake|patisserie/i, ['Bakery']],
   [/sweet|mithai|dessert|ice cream/i, ['Sweet Shop']],
@@ -116,7 +116,7 @@ async function blocked(page: Page): Promise<boolean> {
 /** lh3 photo URL at a chosen size. */
 const sized = (src: string, w: number) => src.replace(/=[whs]\d+[^/?#]*$/, `=w${w}`);
 
-async function download(url: string, base: string): Promise<string | null> {
+export async function download(url: string, base: string): Promise<string | null> {
   const res = await fetch(url);
   if (!res.ok) return null;
   const type = res.headers.get('content-type') ?? '';
@@ -208,13 +208,15 @@ async function scrapePlace(page: Page, place: { name: string; href: string }, ro
   // The name paints first; the tabs (Overview/Menu/…) and the rest arrive ~2 s
   // later. Reading before they land is how a place with a menu looks menu-less.
   await page.waitForSelector(`${panel} [role=tab]`, { timeout: 15000 }).catch(() => {});
-  // A full place page has Overview / (Menu) / Reviews / About. When Google
-  // quietly throttles a connection it serves a REDUCED page — no About, no
-  // Menu — that looks like a café with no menu. Treat it as a failed load.
+  // A full place page has Overview / (Menu) / Reviews / About. Automated
+  // browsers now usually get a REDUCED page (Overview / Reviews only): every
+  // fact we list is still there, only the menu photos are missing, so the menu
+  // comes from Zomato / the web instead. A page is only BAD when the basics
+  // (address, pin) are missing — that's what counts toward Google's throttle.
   const tabNames = await page
     .$$eval(`${panel} [role=tab]`, (ts) => ts.map((t) => t.textContent?.trim() ?? ''))
     .catch(() => [] as string[]);
-  const tabsLoaded = tabNames.includes('About');
+  const reduced = !tabNames.includes('About');
   await sleep(1500);
 
   const name = place.name.trim();
@@ -356,10 +358,11 @@ async function scrapePlace(page: Page, place: { name: string; href: string }, ro
   }
   const dayTotal = Object.keys(hours).length;
 
-  if (!tabsLoaded) review.push(`page loaded only partly (tabs: ${tabNames.join(' / ') || 'none'} — Google throttling?) — re-collect later`);
+  const basics = !!address && !!pin;
+  if (!basics) review.push(`basics missing (address/pin) — page didn't load; re-collect later`);
   if (review.length) appendFileSync(join(dir, 'review.txt'), review.map((r) => `${r}\n`).join(''));
-  const text = `${listing.tags.join(', ')} · ${dayTotal}/7 days · ${menuPhotos} menu photo(s)${existsSync(join(dir, 'menu.online.json')) ? ' + typed menu' : ''}${tabsLoaded ? '' : ' · PARTIAL PAGE'}`;
-  return { text, healthy: tabsLoaded, made: true };
+  const text = `${listing.tags.join(', ')} · ${dayTotal}/7 days · ${menuPhotos} menu photo(s)${existsSync(join(dir, 'menu.online.json')) ? ' + typed menu' : ''}${reduced ? ' · reduced page' : ''}${basics ? '' : ' · NOT LOADED'}`;
+  return { text, healthy: basics, made: true };
 }
 
 /* ───────────────────────────── collect ──────────────────────────────────── */

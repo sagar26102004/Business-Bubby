@@ -2,7 +2,9 @@
 /**
  * LISTING LOOP — the unattended run behind /start-listing. See LISTING-PLAN.md.
  *
- *   npx tsx scripts/listing-loop.ts [--hours 10] [--interval 30] [--per-cycle 20] [--dry-publish] [--root E:/listing] [--plan file]
+ *   npx tsx scripts/listing-loop.ts [--source maps|zomato] [--hours 10] [--interval 30] [--per-cycle 20] [--dry-publish] [--root E:/listing] [--plan file]
+ *
+ * --source picks the collector: maps (Google Maps, /start-listing) or zomato (/start-listing-zomato).
  *   TESTS ONLY: --simulate ok|throttle replaces the collector (no Google) to exercise the schedule, STOP and back-off.
  *
  * Every `intervalMinutes` (a "slot") it runs one cycle:
@@ -11,14 +13,15 @@
  *   3. collect up to `perCycle` new places (maps-bot), walking the query list
  *   4. publish what is safe without a person (list-business --auto); the rest is HELD
  *
- * If Google slows the collector down, the next 3 slots are skipped; two
+ * If the site slows the collector down, the next slot (Google) or two (Zomato) are skipped; two
  * throttles in a row end the run. The query position and running totals live
  * in E:\listing\loop-state.json, so the next run picks up where this one ended.
  * Everything is logged to E:\listing\logs\run-<timestamp>.log.
  */
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { collect } from './maps-bot';
+import { collect as collectMaps } from './maps-bot';
+import { collect as collectZomato } from './zomato-bot';
 import { ensureMenu, menuPhotos } from './menu-from-photos';
 import { publish } from './list-business';
 import { sleep } from './listing-lib';
@@ -31,11 +34,18 @@ interface Plan {
   hours: number;
   /** Claude model that reads menu photos (sonnet / opus / haiku). */
   menuModel?: string;
+  /** Where places come from when --source isn't given: "maps" (default) or "zomato". */
+  source?: 'zomato' | 'maps';
+  /** Google Maps searches (source "maps"). */
   queries: string[];
+  /** Zomato list pages under the city, e.g. "restaurants/cafes" (source "zomato"). */
+  zomatoQueries?: string[];
 }
 
 interface LoopState {
   queryIndex: number;
+  /** Position in plan.zomatoQueries (queryIndex is the Google Maps list's). */
+  zomatoQueryIndex?: number;
   cycles: number;
   collected: number;
   published: number;
@@ -43,7 +53,8 @@ interface LoopState {
   lastRun?: string;
 }
 
-const SKIP_SLOTS_AFTER_THROTTLE = 3;
+/** Slots to rest after a slowdown: Google 1 (30 min), Zomato 2 (1 h) — a Zomato block is a real block page. */
+const SKIP_SLOTS_AFTER_THROTTLE = { maps: 1, zomato: 2 } as const;
 const MAX_THROTTLES_IN_A_ROW = 2;
 
 function arg(name: string): string | undefined {
@@ -60,6 +71,12 @@ async function main() {
   const dryPublish = process.argv.includes('--dry-publish');
   const simulate = arg('simulate'); // 'ok' | 'throttle' — tests only
   const typeDir = join(root, plan.type);
+  const source = (arg('source') ?? plan.source ?? 'maps') as 'maps' | 'zomato';
+  if (source !== 'maps' && source !== 'zomato') throw new Error(`--source must be maps or zomato, not "${source}"`);
+  const queries = source === 'zomato' ? (plan.zomatoQueries ?? []) : plan.queries;
+  const indexKey = source === 'zomato' ? 'zomatoQueryIndex' : 'queryIndex';
+  const collect = source === 'zomato' ? collectZomato : collectMaps;
+  const site = source === 'zomato' ? 'Zomato' : 'Google';
 
   mkdirSync(join(root, 'logs'), { recursive: true });
   const logFile = join(root, 'logs', `run-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.log`);
@@ -94,8 +111,9 @@ async function main() {
   let throttlesInARow = 0;
   let endReason = 'time is up';
 
-  log(`START — ${hours} h, ${perCycle} per ${intervalMs / 60_000} min, type "${plan.type}", ${dryPublish ? 'DRY publish' : 'publishing live'}`);
-  log(`queries ${state.queryIndex + 1}–${plan.queries.length} remaining; log: ${logFile}`);
+  state[indexKey] ??= 0;
+  log(`START — ${hours} h, ${perCycle} per ${intervalMs / 60_000} min, type "${plan.type}", source ${site}, ${dryPublish ? 'DRY publish' : 'publishing live'}`);
+  log(`queries ${state[indexKey]! + 1}–${queries.length} remaining; log: ${logFile}`);
 
   for (let slot = 0; ; slot++) {
     const slotStart = start + slot * intervalMs;
@@ -108,10 +126,10 @@ async function main() {
     }
     if (skipSlots > 0) {
       skipSlots--;
-      log(`slot ${slot + 1}: resting after a Google slowdown (${skipSlots} more to skip)`);
+      log(`slot ${slot + 1}: resting after a ${site} slowdown (${skipSlots} more to skip)`);
       continue;
     }
-    if (state.queryIndex >= plan.queries.length) {
+    if (state[indexKey]! >= queries.length) {
       endReason = 'every search in the plan is used up — add more queries to scripts/listing-plan.json';
       break;
     }
@@ -134,8 +152,8 @@ async function main() {
     // 2. Collect, moving down the query list as searches run dry.
     let got = 0;
     let throttled = false;
-    while (got < perCycle && state.queryIndex < plan.queries.length) {
-      const query = plan.queries[state.queryIndex];
+    while (got < perCycle && state[indexKey]! < queries.length) {
+      const query = queries[state[indexKey]!];
       if (simulate) log(`(simulated collector: ${simulate})`);
       const r = await (simulate
         ? Promise.resolve({ made: [] as string[], throttled: simulate === 'throttle', exhausted: false })
@@ -152,7 +170,7 @@ async function main() {
       if (simulate === 'ok') break;
       if (r.exhausted) {
         log(`search "${query}" has nothing new left — next search`);
-        state.queryIndex++;
+        state[indexKey] = state[indexKey]! + 1;
       }
     }
     run.collected += got;
@@ -175,11 +193,11 @@ async function main() {
     if (throttled) {
       throttlesInARow++;
       if (throttlesInARow >= MAX_THROTTLES_IN_A_ROW) {
-        endReason = 'Google slowed us down twice in a row — ending the run; try again tomorrow';
+        endReason = `${site} slowed us down twice in a row — ending the run; try again tomorrow`;
         break;
       }
-      skipSlots = SKIP_SLOTS_AFTER_THROTTLE;
-      log(`Google slowed us down — resting for ${SKIP_SLOTS_AFTER_THROTTLE} slots`);
+      skipSlots = SKIP_SLOTS_AFTER_THROTTLE[source];
+      log(`${site} slowed us down — resting for ${SKIP_SLOTS_AFTER_THROTTLE[source]} slot(s)`);
     } else throttlesInARow = 0;
   }
 
