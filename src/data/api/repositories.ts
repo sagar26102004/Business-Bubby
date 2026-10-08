@@ -161,6 +161,17 @@ export function createApiUsers(): UserRepository {
       return user ?? fallbackUser(userId, input.name);
     },
     update: (id, patch) => http.patch<User>(`/users/${seg(id)}`, patch),
+    // Same yes/no function as Path A (migration 0024) — identity and the
+    // `platform_admins` grant are Supabase's on both backends, so there is no
+    // Express twin to keep in sync.
+    listPlatformAdminIds: async () => {
+      try {
+        const { data, error } = await getSupabase().rpc('platform_admin_ids');
+        return error || !Array.isArray(data) ? [] : (data as string[]);
+      } catch {
+        return [];
+      }
+    },
   };
 }
 

@@ -11,11 +11,13 @@
  *  - With a category picked, a row of that category's tags (→ /browse/[intent]?sub=).
  *  - "Neighborhood deals near you" — the AD SLOT (domain/ads.ts), filtered to
  *    the picked category; what goes in it is decided by AdRepository.
- *  - "Near you now" — the listing cards, sorted Popular or Nearest.
+ *  - "Near you now" — the listing cards, in a RANDOM order by default so the
+ *    same business isn't on top every time the app opens. Popular and Nearest
+ *    are on/off switches: tap one to sort by it, tap it again to go back to
+ *    the shuffle.
  *
- * The list is bounded by COUNT, not distance: the HOME_NEARBY_COUNT listings
- * closest to the active place. Search and the category pages stay unbounded —
- * see the constant's note for why.
+ * Which listings: everything within HOME_RADIUS_KM, or — where that's thin —
+ * the HOME_MIN_COUNT nearest. Search and the category pages stay unbounded.
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -28,7 +30,9 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { setStatusBarStyle } from 'expo-status-bar';
 import type { PlaceKind, SavedPlace } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
 import { INTENT_CATEGORIES, intentMatches, tagEmoji, type IntentCategory } from '@/domain/intents';
@@ -56,25 +60,37 @@ import { radius, spacing, useColors } from '@/theme/theme';
 import { isListedPublicly } from '@/lib/onHold';
 
 /**
- * How much Home shows: the N nearest listings, nearest first.
- *
- * This used to be a 20 km ring, and a ring is the wrong shape for the job. It
- * asks "how far is too far?" when the question people actually have is "what is
- * around me?" — so the same number that keeps a dense market from padding the
- * scroll leaves a thin town staring at "No results" with a perfectly good shop
- * 22 km up the road. A COUNT adapts on its own: it fills the screen wherever
- * you stand, and quietly reaches further where things are sparse.
+ * How much Home shows: every listing within HOME_RADIUS_KM — unless that's
+ * fewer than HOME_MIN_COUNT, in which case the HOME_MIN_COUNT nearest. The ring
+ * keeps a dense city to the neighbourhood; the floor keeps a thin town from
+ * staring at "No results" with a perfectly good shop 22 km up the road.
  *
  * Deliberately NOT applied to search or the category pages: someone who typed
  * "bullet rental" or opened Rentals is looking for a specific thing and would
- * rather travel for it than be told there are no results. The ad slot has its
- * own reach rules (domain/ads.ts) and the deals feed lets the customer pick a
- * range up to Anywhere — this constant governs the Home list only.
+ * rather travel for it. The ad slot has its own reach rules (domain/ads.ts).
  *
  * With no `near` point yet (a device still waiting on GPS) there is no distance
- * to rank by, so this is simply the newest 100 rather than an empty screen.
+ * to rank by, so this is simply the first HOME_MIN_COUNT rather than an empty screen.
  */
-const HOME_NEARBY_COUNT = 100;
+const HOME_RADIUS_KM = 20;
+const HOME_MIN_COUNT = 100;
+
+/**
+ * Seed for Home's random order — fixed for the life of the app, so the list
+ * doesn't reshuffle under you on every refetch (useAsync refetches on focus),
+ * but a fresh open of the app deals a fresh order.
+ */
+const SHUFFLE_SEED = Math.floor(Math.random() * 2 ** 31);
+
+/** A stable pseudo-random rank for an id under SHUFFLE_SEED (FNV-1a + seed). */
+const shuffleRank = (id: string) => {
+  let h = 2166136261 ^ SHUFFLE_SEED;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+};
 
 const placeIcon = (kind: PlaceKind) =>
   kind === 'current' ? '📍' : kind === 'home' ? '🏠' : kind === 'work' ? '💼' : '⭐';
@@ -97,7 +113,8 @@ export default function BrowseScreen() {
   // null = "For You" (everything). Otherwise the strip filters Home inline.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected: IntentCategory | undefined = INTENT_CATEGORIES.find((c) => c.id === selectedId);
-  const [sort, setSort] = useState<'popular' | 'nearest'>('nearest');
+  // null = neither switch on: the shuffled order.
+  const [sort, setSort] = useState<'popular' | 'nearest' | null>(null);
 
   const { data: places } = useAsync(() => repos.places.listPlaces(), []);
   const activePlace = places?.find((p) => p.id === activePlaceId) ?? places?.[0];
@@ -106,9 +123,13 @@ export default function BrowseScreen() {
   const { data, loading, error, reload } = useAsync(
     // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
     () =>
-      repos.businesses
-        .list({ near, sortByDistance: true, limit: HOME_NEARBY_COUNT })
-        .then((l) => l.filter(isListedPublicly)),
+      repos.businesses.list({ near, sortByDistance: true }).then((l) => {
+        const listed = l.filter(isListedPublicly); // nearest first
+        const inRing = listed.filter(
+          (b) => typeof b.distanceKm === 'number' && b.distanceKm <= HOME_RADIUS_KM,
+        );
+        return inRing.length >= HOME_MIN_COUNT ? inRing : listed.slice(0, HOME_MIN_COUNT);
+      }),
     [near?.latitude, near?.longitude],
   );
 
@@ -129,12 +150,20 @@ export default function BrowseScreen() {
   const businesses = useMemo(() => {
     const all = data ?? [];
     const inCategory = selected ? all.filter((b) => intentMatches(b, selected)) : all;
-    if (sort === 'nearest') return inCategory; // already nearest-first
+    type B = (typeof all)[number];
+    // Ties (same distance, same popularity) fall back to the shuffle, so equals
+    // swap places from one app open to the next instead of always one winning.
+    const byShuffle = (a: B, b: B) => shuffleRank(a.id) - shuffleRank(b.id);
+    if (sort === null) return [...inCategory].sort(byShuffle);
+    if (sort === 'nearest') {
+      // To the 10 m — finer than that, "the same distance" never happens.
+      const dist = (b: B) => Math.round((b.distanceKm ?? Infinity) * 100);
+      return [...inCategory].sort((a, b) => dist(a) - dist(b) || byShuffle(a, b));
+    }
     // Popular = a rating weighted by how many people gave it, so one 5★ review
     // doesn't outrank a hundred 4.7s.
-    const score = (b: (typeof all)[number]) =>
-      (b.ratingAvg ?? 0) * Math.log10(1 + (b.ratingCount ?? 0));
-    return [...inCategory].sort((a, b) => score(b) - score(a));
+    const score = (b: B) => (b.ratingAvg ?? 0) * Math.log10(1 + (b.ratingCount ?? 0));
+    return [...inCategory].sort((a, b) => score(b) - score(a) || byShuffle(a, b));
   }, [data, selected, sort]);
 
   // How many nearby listings each category holds — the counts on the chips.
@@ -257,18 +286,22 @@ export default function BrowseScreen() {
     });
   };
 
+  // The top section opens on dark green, so the status bar's icons go light
+  // while Home is in front (and back to the app-wide dark style when it isn't).
+  useFocusEffect(
+    useCallback(() => {
+      setStatusBarStyle('light');
+      return () => setStatusBarStyle('dark');
+    }, []),
+  );
+
   const header = useMemo(
     () => (
       <View>
-        <View
-          style={[
-            styles.sheet,
-            {
-              paddingTop: insets.top + spacing.md,
-              backgroundColor: colors.headerTint,
-              borderBottomColor: colors.border,
-            },
-          ]}
+        {/* Top section: brand green at the top, fading down into the feed's mint. */}
+        <LinearGradient
+          colors={[colors.brand, colors.homeBackground]}
+          style={[styles.sheet, { paddingTop: insets.top + spacing.md }]}
         >
           {/* Brand row */}
           <View style={styles.brandRow}>
@@ -290,10 +323,10 @@ export default function BrowseScreen() {
               )}
             </Pressable>
             <View style={styles.flex}>
-              <Text variant="subheading" weight="bold">
+              <Text variant="subheading" weight="bold" tone="inverse">
                 One Place
               </Text>
-              <Text variant="caption" tone="muted" numberOfLines={1}>
+              <Text variant="caption" tone="inverse" numberOfLines={1} style={styles.onDarkFaint}>
                 ● {activePlace ? activePlace.label : 'Near you'} · local hub
               </Text>
             </View>
@@ -362,7 +395,7 @@ export default function BrowseScreen() {
           >
             <SearchScanBar />
           </View>
-        </View>
+        </LinearGradient>
 
         {/* Intent chips — filter THIS screen inline, with live counts. */}
         <ScrollView
@@ -438,9 +471,11 @@ export default function BrowseScreen() {
           subtitle="Neighborhood providers around you, open and active"
           right={
             <SegmentedControl
+              look="pills"
               fill={false}
               value={sort}
               onChange={setSort}
+              onClear={() => setSort(null)}
               options={[
                 { id: 'popular', label: 'Popular' },
                 { id: 'nearest', label: 'Nearest' },
@@ -475,7 +510,7 @@ export default function BrowseScreen() {
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
 
   return (
-    <View style={[styles.screen, { backgroundColor: colors.background }]}>
+    <View style={[styles.screen, { backgroundColor: colors.homeBackground }]}>
       <FlatList
         // Keyed to remount when the responsive column count changes.
         key={`cols-${cardColumns}`}
@@ -520,7 +555,7 @@ export default function BrowseScreen() {
             styles.stickySearch,
             {
               paddingTop: insets.top + spacing.sm,
-              backgroundColor: colors.background,
+              backgroundColor: colors.homeHeader,
               borderBottomColor: colors.border,
             },
           ]}
@@ -578,9 +613,9 @@ const styles = StyleSheet.create({
     marginHorizontal: -spacing.lg,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
-    borderBottomWidth: 1,
   },
   brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  onDarkFaint: { opacity: 0.8 },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',

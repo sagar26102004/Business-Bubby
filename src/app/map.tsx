@@ -5,8 +5,9 @@
  * (Expo Go) with no map SDK, no native rebuild and no API key.
  *
  * Full-bleed, no navigator header. Floating over the map:
- *  - Top row: back · a "● You | rings 1·3·5 km | N nearby" pill · list view.
- *  - Category chips (All + every intent category with listings in range) that
+ *  - Top row: back · a "● You | rings 1·3·5 km | N on map" pill · list view.
+ *    Every listed business is plotted, not just those within the rings.
+ *  - Category chips (All + every intent category with listings) that
  *    filter the pins, with live counts — the same categories as Explore.
  *  - Zoom +/− on the left; locate-me and street ⇄ satellite on the right.
  *  - A preview card for the selected business (the nearest one to start):
@@ -31,8 +32,10 @@ import RealMap, { type RealMapCommand, type RealMapMarker } from '@/components/R
 import { hasShowableCoordinates } from '@/features/businesses/location';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { isListedPublicly } from '@/lib/onHold';
+import { useServiceGate } from '@/features/businesses/serviceGate';
 
-const RADIUS_KM = 5; // area shown around the user
+// Every listed business is plotted, however far away — the rings are only a
+// sense of scale around the user, not a cut-off.
 const RING_KMS = [1, 3, 5];
 
 /** The first Explore category a business falls under — its pin's tint and icon. */
@@ -60,13 +63,15 @@ export default function MapScreen() {
   const [command, setCommand] = useState<RealMapCommand | undefined>();
   const [headerH, setHeaderH] = useState(0);
 
+  // Call on a platform-held listing shows "not active" instead.
+  const gate = useServiceGate();
+
   const send = (kind: RealMapCommand['kind']) => setCommand((c) => ({ id: (c?.id ?? 0) + 1, kind }));
 
   const { data, loading, error, reload } = useAsync(async () => {
     const center = await repos.places.getCurrentPlace();
     const businesses = await repos.businesses.list({
       near: center.point,
-      maxDistanceKm: RADIUS_KM,
       sortByDistance: true,
     });
     // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
@@ -156,7 +161,7 @@ export default function MapScreen() {
               |
             </Text>
             <Text variant="caption" weight="bold" tone="brand">
-              {visible.length} nearby
+              {visible.length} on map
             </Text>
           </View>
           <RoundButton icon="list" label="Switch to list view" onPress={() => router.navigate('/')} />
@@ -221,7 +226,7 @@ export default function MapScreen() {
           <PreviewCard
             business={selected}
             onOpen={() => router.push(`/business/${selected.id}`)}
-            onCall={() => router.push(`/call/${selected.id}`)}
+            onCall={() => gate.guard(selected, 'Calling', () => router.push(`/call/${selected.id}`))}
             onDirections={
               hasShowableCoordinates(selected.location)
                 ? () => router.push(`/directions/${selected.id}`)
@@ -231,14 +236,15 @@ export default function MapScreen() {
         ) : (
           <View style={[styles.sheet, floating(colors)]}>
             <Text weight="semibold" style={styles.center}>
-              {intent ? `No ${intent.label.toLowerCase()} within ${RADIUS_KM} km` : `Nothing listed within ${RADIUS_KM} km yet`}
+              {intent ? `No ${intent.label.toLowerCase()} listed yet` : 'Nothing listed yet'}
             </Text>
             <Text variant="caption" tone="muted" style={styles.center}>
-              Try another category, or search — search looks everywhere.
+              Try another category, or search for what you need.
             </Text>
           </View>
         )}
       </View>
+      {gate.popup}
     </View>
   );
 }

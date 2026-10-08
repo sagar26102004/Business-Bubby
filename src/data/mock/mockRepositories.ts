@@ -747,6 +747,12 @@ class MockUserRepository implements UserRepository {
     return found ? clone(found) : null;
   }
 
+  // Dev mode grants by phone (see domain/superAdmin.ts) — the live app never does.
+  async listPlatformAdminIds(): Promise<string[]> {
+    await delay(30);
+    return users.filter((u) => isSuperAdminPhone(u.phone)).map((u) => u.id);
+  }
+
   async list(): Promise<User[]> {
     await delay(50);
     return users.map(clone);

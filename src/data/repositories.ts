@@ -267,6 +267,13 @@ export interface UserRepository {
   /** Create a new account (used by dev tools). */
   create(input: NewUserInput): Promise<User>;
   update(id: string, patch: Partial<User>): Promise<User>;
+  /**
+   * The platform admins' user ids. A listing OWNED by one is still held by the
+   * platform for its real owner (bulk-listed), so calls, chats, orders and
+   * bookings reach no one — see features/businesses/serviceGate.tsx. Fetched
+   * once per session; answers [] on any failure, so it can never block a page.
+   */
+  listPlatformAdminIds(): Promise<string[]>;
 }
 
 /**

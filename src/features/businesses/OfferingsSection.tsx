@@ -50,7 +50,7 @@ export interface CatalogEntry {
   category?: string;
   /** One line under the name — a product's specs, "1.5 Ton · Split". */
   subcategory?: string;
-  /** Thumbnail. Falls back to the group's icon when the business added no photo. */
+  /** Thumbnail. Rows without one show no image at all. */
   imageUrl?: string;
   /**
    * Where this sits INSIDE its category, as folder segments:
@@ -81,8 +81,6 @@ export interface OfferingGroup {
   /** Line under the title, e.g. "12 dishes · per day". */
   subtitle?: string;
   entries: CatalogEntry[];
-  /** Emoji stand-in on rows whose item has no photo. */
-  icon?: string;
   /** Link out to the block's own full-catalog screen. */
   seeAll?: { label: string; onPress: () => void };
   /**
@@ -164,18 +162,12 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
       return next;
     });
 
-  const icon = group.icon;
   // A single unnamed bucket means the block has no real categories — nothing to
   // fold, so it just lists what it has.
   const hasCategories = categories.length > 1 || categories[0].name !== OTHER;
 
   const head = (
     <View style={styles.head}>
-      {icon ? (
-        <View style={[styles.headIcon, { backgroundColor: colors.brandSoft }]}>
-          <Text style={styles.headEmoji}>{icon}</Text>
-        </View>
-      ) : null}
       <View style={styles.headInfo}>
         <Text variant="subheading" weight="bold">
           {group.title}
@@ -217,7 +209,6 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
           entries={categories[0].entries}
           depth={0}
           label={group.title}
-          icon={icon}
           seeAll={group.seeAll}
         />
         {foot}
@@ -255,8 +246,7 @@ function OfferingBlock({ group }: { group: OfferingGroup }) {
                   entries={cat.entries}
                   depth={0}
                   label={cat.name}
-                  icon={icon}
-                  seeAll={group.seeAll}
+                          seeAll={group.seeAll}
                 />
               ) : null}
             </View>
@@ -273,13 +263,11 @@ function FolderContents({
   entries,
   depth,
   label,
-  icon,
   seeAll,
 }: {
   entries: CatalogEntry[];
   depth: number;
   label: string;
-  icon?: string;
   seeAll?: { label: string; onPress: () => void };
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -310,7 +298,7 @@ function FolderContents({
 
   return (
     <>
-      <EntryRows entries={rows} icon={icon} />
+      <EntryRows entries={rows} />
       {rest > 0 ? (
         <Pressable
           onPress={() => (seeAll ? seeAll.onPress() : setExpanded(true))}
@@ -328,7 +316,6 @@ function FolderContents({
           name={folder.name}
           entries={folder.items}
           depth={depth + 1}
-          icon={icon}
           seeAll={seeAll}
         />
       ))}
@@ -345,13 +332,11 @@ function SubFolder({
   name,
   entries,
   depth,
-  icon,
   seeAll,
 }: {
   name: string;
   entries: CatalogEntry[];
   depth: number;
-  icon?: string;
   seeAll?: { label: string; onPress: () => void };
 }) {
   const colors = useColors();
@@ -380,14 +365,14 @@ function SubFolder({
         </View>
       </Pressable>
       {open ? (
-        <FolderContents entries={entries} depth={depth} label={name} icon={icon} seeAll={seeAll} />
+        <FolderContents entries={entries} depth={depth} label={name} seeAll={seeAll} />
       ) : null}
     </View>
   );
 }
 
 /** The item rows themselves — the same row for a dish, a product or a service. */
-function EntryRows({ entries, icon }: { entries: CatalogEntry[]; icon?: string }) {
+function EntryRows({ entries }: { entries: CatalogEntry[] }) {
   const colors = useColors();
   return (
     <View style={styles.list}>
@@ -399,12 +384,9 @@ function EntryRows({ entries, icon }: { entries: CatalogEntry[]; icon?: string }
             i > 0 && { borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth },
           ]}
         >
+          {/* A photo only when the business added one — no stand-in tile. */}
           {entry.imageUrl ? (
             <Image source={{ uri: entry.imageUrl }} style={styles.thumb} resizeMode="cover" />
-          ) : icon ? (
-            <View style={[styles.thumb, styles.thumbBlank, { backgroundColor: colors.surfaceAlt }]}>
-              <Text style={styles.thumbIcon}>{icon}</Text>
-            </View>
           ) : null}
           <View style={styles.rowInfo}>
             {typeof entry.item?.isVeg === 'boolean' ? <VegDot veg={entry.item.isVeg} /> : null}
@@ -511,14 +493,6 @@ function Stepper({ businessId, item }: { businessId: string; item: CatalogItem }
 }
 
 const styles = StyleSheet.create({
-  headIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headEmoji: { fontSize: 20, lineHeight: 26 },
   seeAll: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   chevOpen: { transform: [{ rotate: '180deg' }] },
   veg: {
@@ -547,8 +521,6 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headInfo: { flex: 1 },
   thumb: { width: 56, height: 56, borderRadius: radius.md },
-  thumbBlank: { alignItems: 'center', justifyContent: 'center' },
-  thumbIcon: { fontSize: 20 },
   dropdowns: { marginTop: spacing.sm },
   subHead: {
     flexDirection: 'row',

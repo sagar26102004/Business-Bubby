@@ -16,6 +16,10 @@
  * scrolls the page to that section. Rows can be added to the cart in place
  * (the same cart as the full catalog), and a sticky order bar appears once
  * something is picked. The page closes with the owner and the member-only tools.
+ *
+ * A listing the PLATFORM still holds for its real owner (bulk-listed, owned by
+ * a platform admin) has nobody behind Call, Chat or its order/enrol door, so
+ * those run through the service gate and show "not active for this business".
  */
 import { useCallback, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -57,6 +61,7 @@ import { PortfolioGallery } from '@/features/businesses/PortfolioGallery';
 import { ShowcaseLinks } from '@/features/businesses/ShowcaseLinks';
 import { ReviewsSection } from '@/features/businesses/ReviewsSection';
 import { OwnerPicker } from '@/features/businesses/OwnerPicker';
+import { useServiceGate } from '@/features/businesses/serviceGate';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { ON_HOLD } from '@/lib/onHold';
 
@@ -100,6 +105,9 @@ export default function BusinessDetailScreen() {
       : null;
     return { business, employees, owner, myTrackedItems, myOrders, places, reviews, myReview };
   }, [id, currentUser?.id]);
+
+  // Call / Chat / the door on a platform-held listing show "not active" instead.
+  const gate = useServiceGate();
 
   // Super-admin: reassign-owner panel state.
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -192,7 +200,6 @@ export default function BusinessDetailScreen() {
               .filter(Boolean)
               .join(' · ')
           : view.subtitle,
-      icon: view.icon,
       entries: view.items.map((item) => ({
         name: item.name,
         price: item.price,
@@ -217,15 +224,17 @@ export default function BusinessDetailScreen() {
       action: hasModule(business, view.module)
         ? {
             label: view.actionLabel,
-            onPress: () => {
-              if (view.bucket !== 'plans') {
-                router.push(catalogLink(business.id, view.bucket));
-              } else if (isGuest) {
-                router.push('/sign-in');
-              } else {
-                router.push(`/enroll/${business.id}`);
-              }
-            },
+            // Gated: a platform-held listing says "not active" instead.
+            onPress: () =>
+              gate.guard(business, view.bucket === 'plans' ? 'Enrolling' : 'Ordering', () => {
+                if (view.bucket !== 'plans') {
+                  router.push(catalogLink(business.id, view.bucket));
+                } else if (isGuest) {
+                  router.push('/sign-in');
+                } else {
+                  router.push(`/enroll/${business.id}`);
+                }
+              }),
           }
         : undefined,
     }));
@@ -237,7 +246,6 @@ export default function BusinessDetailScreen() {
       key: 'party',
       title: 'Party packages',
       subtitle: `${business.partyPackages!.length} package${business.partyPackages!.length === 1 ? '' : 's'}`,
-      icon: '🎉',
       entries: business.partyPackages!.map((pkg) => ({
         name: pkg.name,
         price: pkg.price,
@@ -253,15 +261,23 @@ export default function BusinessDetailScreen() {
   // The hero's action row: Call · Chat · the lead block's own door · Route.
   const lead = groups.find((g) => g.action);
   const heroActions: HeroAction[] = [
-    { icon: 'phone', label: 'Call', onPress: () => router.push(`/call/${business.id}`) },
-    { icon: 'chat', label: 'Chat', onPress: () => router.push(`/chat/${business.id}`) },
+    {
+      icon: 'phone',
+      label: 'Call',
+      onPress: () => gate.guard(business, 'Calling', () => router.push(`/call/${business.id}`)),
+    },
+    {
+      icon: 'chat',
+      label: 'Chat',
+      onPress: () => gate.guard(business, 'Chat', () => router.push(`/chat/${business.id}`)),
+    },
     ...(lead?.action
       ? [
           {
             icon: doorIcon(lead.key),
             // "🛒 Order" → "Order": the tile carries its own icon.
             label: lead.action.label.replace(/^\S+\s/, ''),
-            onPress: lead.action.onPress,
+            onPress: lead.action.onPress, // already gated
             primary: true,
           },
         ]
@@ -352,10 +368,12 @@ export default function BusinessDetailScreen() {
       <OffersSection
         offers={offers}
         onPress={(offer) =>
-          router.push({
-            pathname: '/order/new/[businessId]',
-            params: { businessId: business.id, offer: offer.id },
-          })
+          gate.guard(business, 'Ordering', () =>
+            router.push({
+              pathname: '/order/new/[businessId]',
+              params: { businessId: business.id, offer: offer.id },
+            }),
+          )
         }
       />
 
@@ -464,7 +482,7 @@ export default function BusinessDetailScreen() {
           <Button
             title="🎉 Plan a party"
             variant="secondary"
-            onPress={() => router.push(`/party/${business.id}`)}
+            onPress={() => gate.guard(business, 'Ordering', () => router.push(`/party/${business.id}`))}
             style={styles.actionBtn}
           />
         ) : null}
@@ -474,7 +492,7 @@ export default function BusinessDetailScreen() {
         hasModule(business, 'bookings') ? (
           <Button
             title="📅 Book an appointment"
-            onPress={() => router.push(`/book/${business.id}`)}
+            onPress={() => gate.guard(business, 'Booking', () => router.push(`/book/${business.id}`))}
             style={styles.actionBtn}
           />
         ) : null}
@@ -654,10 +672,13 @@ export default function BusinessDetailScreen() {
             title="Place order"
             icon="cart"
             variant="cta"
-            onPress={() => router.push(`/cart/${business.id}`)}
+            onPress={() => gate.guard(business, 'Ordering', () => router.push(`/cart/${business.id}`))}
           />
         </View>
       ) : null}
+
+      {/* "Not active" popup for a platform-held listing (features/businesses/serviceGate). */}
+      {gate.popup}
     </View>
   );
 }

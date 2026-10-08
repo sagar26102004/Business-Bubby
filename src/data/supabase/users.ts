@@ -38,6 +38,17 @@ export function createSupabaseUsers(): UserRepository {
       return fetchProfile(id);
     },
 
+    // `platform_admins` only shows a session its own row, so the list comes
+    // through a function that returns the ids and nothing else (migration 0024).
+    async listPlatformAdminIds(): Promise<string[]> {
+      try {
+        const { data, error } = await sb.rpc('platform_admin_ids');
+        return error || !Array.isArray(data) ? [] : (data as string[]);
+      } catch {
+        return [];
+      }
+    },
+
     async list(): Promise<User[]> {
       const { data, error } = await sb.from('profiles').select('data');
       if (error) throw error;

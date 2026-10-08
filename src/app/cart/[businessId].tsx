@@ -27,10 +27,13 @@ import { useCart } from '@/features/orders/CartContext';
 import { FULFILLMENT_META, totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
+import { useServiceGate } from '@/features/businesses/serviceGate';
 
 export default function CartScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
+  // A platform-held listing (no owner behind it yet) says "not active" instead of sending.
+  const gate = useServiceGate();
   const router = useRouter();
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -302,7 +305,7 @@ export default function CartScreen() {
               </Text>
             </View>
             <Pressable
-              onPress={submit}
+              onPress={() => gate.guard(business, 'Ordering', submit)}
               disabled={!canSend || submitting}
               accessibilityRole="button"
               style={({ pressed }) => [
@@ -320,6 +323,7 @@ export default function CartScreen() {
           </View>
         </>
       )}
+      {gate.popup}
     </View>
   );
 }

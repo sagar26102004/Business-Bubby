@@ -14,10 +14,14 @@
  * `action` adds one button that is NOT a tab — the raised terracotta Deals
  * button in the middle, which opens a full-screen route over the tabs rather
  * than switching between them, so it never shows as "active".
+ *
+ * On Home (the `index` tab) the bar joins Home's colour grading: no top border,
+ * and a fade from Home's mint down to white instead of the flat linen tint.
  */
 import type { ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import type { Tabs } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Icon, Text, type IconName } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 
@@ -41,6 +45,9 @@ export function BottomTabBar({
 }: TabBarProps & { icons: Record<string, IconName>; action?: TabBarAction }) {
   const colors = useColors();
   const tabRoutes = state.routes.filter((route) => icons[route.name]);
+  const onHome = state.routes[state.index]?.name === 'index';
+  // What the badge/disc rims blend into — the bar's own colour at its top.
+  const barTint = onHome ? colors.homeBackground : colors.headerTint;
 
   const actionButton = action ? (
     <Pressable
@@ -55,7 +62,7 @@ export function BottomTabBar({
           <View
             style={[
               styles.actionDisc,
-              { backgroundColor: colors.cta, borderColor: colors.headerTint },
+              { backgroundColor: colors.cta, borderColor: barTint },
               pressed && styles.actionPressed,
             ]}
           >
@@ -69,17 +76,8 @@ export function BottomTabBar({
     </Pressable>
   ) : null;
 
-  return (
-    <View
-      style={[
-        styles.bar,
-        {
-          backgroundColor: colors.headerTint,
-          borderTopColor: colors.border,
-          paddingBottom: insets.bottom + spacing.sm,
-        },
-      ]}
-    >
+  const tabs = (
+    <>
       {tabRoutes.map((route, position) => {
         const icon = icons[route.name];
         const { options } = descriptors[route.key];
@@ -117,7 +115,7 @@ export function BottomTabBar({
                   <View
                     style={[
                       styles.badge,
-                      { backgroundColor: badgeColor, borderColor: colors.headerTint },
+                      { backgroundColor: badgeColor, borderColor: barTint },
                     ]}
                   >
                     <Text style={styles.badgeText} weight="bold">
@@ -139,6 +137,28 @@ export function BottomTabBar({
         return action && position === action.after ? [actionButton, tab] : tab;
       })}
       {action && action.after >= tabRoutes.length ? actionButton : null}
+    </>
+  );
+
+  return onHome ? (
+    <LinearGradient
+      colors={[colors.homeBackground, colors.surface]}
+      style={[styles.bar, styles.barSeamless, { paddingBottom: insets.bottom + spacing.sm }]}
+    >
+      {tabs}
+    </LinearGradient>
+  ) : (
+    <View
+      style={[
+        styles.bar,
+        {
+          backgroundColor: colors.headerTint,
+          borderTopColor: colors.border,
+          paddingBottom: insets.bottom + spacing.sm,
+        },
+      ]}
+    >
+      {tabs}
     </View>
   );
 }
@@ -150,6 +170,7 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingHorizontal: spacing.xs,
   },
+  barSeamless: { borderTopWidth: 0 },
   // Each tab gets an equal fifth; the pill fills its slot so the longest label
   // ("Subscriptions") fits on a phone without truncating.
   slot: { flex: 1, paddingHorizontal: 2 },

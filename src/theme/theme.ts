@@ -37,6 +37,8 @@ export const palette = {
   sageWash: '#F2EFEB', // header sheet + tab bar (soft linen tint)
   sageLine: '#E8E4DC', // warm stone card outline (DESIGN.md)
   linen: '#FBF9F5', // app background (warm paper)
+  mint: '#F0FDF1', // Home's canvas — a faint green so the feed isn't flat white
+  mintDeep: '#E4F1E6', // Home's top section — the same green, a step darker
   linenAlt: '#F2EFEB', // secondary button / chip fill / segmented track
   // DESIGN.md names #E06D53, but white on it is ~3:1 and fails AA for button
   // labels; this is the mockups' own darker `secondary`, same hue.
@@ -112,6 +114,10 @@ export interface ColorScheme {
   accentSoft: string;
   /** Background for the home screens' top sheet — colored, not white. */
   headerTint: string;
+  /** Canvas behind the Home feed and its top section — tinted in the forest look so it isn't flat white. */
+  homeBackground: string;
+  /** Home's top section (brand row, location, search, chips) — a step darker than homeBackground. */
+  homeHeader: string;
   /**
    * Secondary "go" action (terracotta in the forest look) — Claim deal, View
    * menu, Buy now. Never for navigation or primary submit; that stays `brand`.
@@ -135,6 +141,8 @@ export interface ColorScheme {
 /** Nextdoor-inspired structure, monochrome identity: black on a grey ramp. */
 const neighborhood: ColorScheme = {
   background: palette.paper,
+  homeBackground: palette.paper,
+  homeHeader: palette.paper,
   surface: palette.white,
   surfaceAlt: palette.mist,
   border: palette.line,
@@ -167,6 +175,8 @@ const neighborhood: ColorScheme = {
 /** Forest green on warm linen — the high-fidelity neighborhood redesign. */
 const forest: ColorScheme = {
   background: palette.linen,
+  homeBackground: palette.mint,
+  homeHeader: palette.mintDeep,
   surface: palette.white,
   surfaceAlt: palette.linenAlt,
   border: palette.sageLine,
@@ -195,6 +205,8 @@ const forest: ColorScheme = {
 /** The original navy/blue directory look. */
 const classic: ColorScheme = {
   background: palette.bg,
+  homeBackground: palette.bg,
+  homeHeader: palette.bg,
   surface: palette.white,
   surfaceAlt: palette.neutral50,
   border: palette.neutral200,
@@ -225,6 +237,8 @@ const light: ColorScheme =
 
 const dark: ColorScheme = {
   background: palette.black,
+  homeBackground: palette.black,
+  homeHeader: palette.black,
   surface: palette.gray900,
   surfaceAlt: palette.gray800,
   border: palette.gray800,

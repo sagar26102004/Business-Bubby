@@ -29,6 +29,7 @@ import {
 import { OfferingGroup, keyOf, type Offering } from '@/features/orders/OfferingPicker';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
+import { useServiceGate } from '@/features/businesses/serviceGate';
 
 export default function NewOrderScreen() {
   const { businessId, offer: offerId } = useLocalSearchParams<{
@@ -36,6 +37,8 @@ export default function NewOrderScreen() {
     offer?: string;
   }>();
   const repos = useRepositories();
+  // A platform-held listing (no owner behind it yet) says "not active" instead of sending.
+  const gate = useServiceGate();
   const router = useRouter();
   const colors = useColors();
   const { currentUser, signInGuest } = useAuth();
@@ -413,7 +416,7 @@ export default function NewOrderScreen() {
 
       <Button
         title={openOrder ? 'Add to my order' : `Send ${vocab.requestNoun}`}
-        onPress={submit}
+        onPress={() => gate.guard(business, 'Ordering', submit)}
         loading={submitting}
         // Only an EMPTY order disables the button. With something picked but a
         // choice still missing it stays live on purpose: pressing it explains
@@ -421,6 +424,7 @@ export default function NewOrderScreen() {
         disabled={picked.length === 0 || submitting}
         style={styles.submit}
       />
+      {gate.popup}
     </Screen>
   );
 }

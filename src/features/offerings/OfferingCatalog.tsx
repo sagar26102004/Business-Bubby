@@ -197,7 +197,6 @@ function CatalogBody({
             key={root.key || 'ungrouped'}
             node={root}
             depth={0}
-            icon={view.icon}
             toggled={toggled}
             onToggle={toggle}
             cart={cart}
@@ -287,7 +286,6 @@ function CatalogBody({
 function CatalogGroup({
   node,
   depth,
-  icon,
   toggled,
   onToggle,
   cart,
@@ -295,7 +293,6 @@ function CatalogGroup({
 }: {
   node: CatalogNode;
   depth: number;
-  icon: string;
   toggled: Set<string>;
   onToggle: (key: string) => void;
   cart: ReturnType<typeof useCart>;
@@ -354,7 +351,6 @@ function CatalogGroup({
               key={child.key}
               node={child}
               depth={depth + 1}
-              icon={icon}
               toggled={toggled}
               onToggle={onToggle}
               cart={cart}
@@ -365,7 +361,6 @@ function CatalogGroup({
             <ItemCard
               key={item.key}
               item={item}
-              icon={icon}
               quantity={cart.quantityOf(item)}
               onBump={(d) => cart.bump(item, d)}
               onEnroll={onEnroll ? () => onEnroll(item) : undefined}
@@ -381,14 +376,12 @@ function CatalogGroup({
 /** One offering: details left, photo + ADD button right. */
 function ItemCard({
   item,
-  icon,
   quantity,
   onBump,
   onEnroll,
   divider,
 }: {
   item: CatalogItem;
-  icon: string;
   quantity: number;
   onBump: (delta: number) => void;
   /** Plans only — taking one is a request, not a quantity. */
@@ -396,6 +389,8 @@ function ItemCard({
   divider: boolean;
 }) {
   const colors = useColors();
+  const hasPhoto = !!item.imageUrl;
+  const addPos = hasPhoto ? undefined : styles.addBtnInline;
 
   return (
     <View
@@ -433,14 +428,12 @@ function ItemCard({
         ) : null}
       </View>
 
-      <View style={styles.itemMedia}>
-        {item.imageUrl ? (
-          <Image source={{ uri: thumbUrl(item.imageUrl) }} style={styles.photo} resizeMode="cover" />
-        ) : (
-          <View style={[styles.photo, styles.photoBlank, { backgroundColor: colors.surfaceAlt }]}>
-            <Text style={styles.photoIcon}>{icon}</Text>
-          </View>
-        )}
+      {/* A photo only when the business added one — no stand-in tile. Without
+          it the ADD button stands on its own beside the details. */}
+      <View style={hasPhoto ? styles.itemMedia : styles.itemMediaBare}>
+        {hasPhoto ? (
+          <Image source={{ uri: thumbUrl(item.imageUrl!) }} style={styles.photo} resizeMode="cover" />
+        ) : null}
 
         {/* The ADD button overlaps the photo's bottom edge, delivery-app style.
             A plan sits in the same spot but says what taking it means. */}
@@ -451,6 +444,7 @@ function ItemCard({
             accessibilityLabel={`Enroll in ${item.name}`}
             style={({ pressed }) => [
               styles.addBtn,
+              addPos,
               {
                 backgroundColor: colors.surface,
                 borderColor: colors.brand,
@@ -469,6 +463,7 @@ function ItemCard({
             accessibilityLabel={`Add ${item.name}`}
             style={({ pressed }) => [
               styles.addBtn,
+              addPos,
               {
                 backgroundColor: colors.surface,
                 borderColor: colors.brand,
@@ -485,6 +480,7 @@ function ItemCard({
           <View
             style={[
               styles.addBtn,
+              addPos,
               styles.stepper,
               { backgroundColor: colors.brand, borderColor: colors.brand },
             ]}
@@ -546,8 +542,7 @@ const styles = StyleSheet.create({
   // Extra bottom room for the ADD button that hangs off the photo.
   itemMedia: { width: PHOTO, alignItems: 'center', paddingBottom: spacing.lg },
   photo: { width: PHOTO, height: PHOTO, borderRadius: radius.md },
-  photoBlank: { alignItems: 'center', justifyContent: 'center' },
-  photoIcon: { fontSize: 32 },
+  itemMediaBare: { justifyContent: 'center' },
   addBtn: {
     position: 'absolute',
     bottom: 0,
@@ -561,6 +556,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minWidth: 96,
   },
+  // No photo to hang off: the button sits in normal flow, centred on the row.
+  addBtnInline: { position: 'relative', bottom: undefined },
   stepper: { flexDirection: 'row', justifyContent: 'space-between', gap: spacing.md },
   bar: {
     position: 'absolute',

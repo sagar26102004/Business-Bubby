@@ -43,6 +43,7 @@ import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Text } 
 import { EnrollFormFill } from '@/features/memberships/EnrollFormFill';
 import { spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
+import { useServiceGate } from '@/features/businesses/serviceGate';
 
 /** One person being signed up: which plan, and who it's for. */
 interface Enrollee {
@@ -85,6 +86,8 @@ export default function EnrollScreen() {
     plan?: string;
   }>();
   const repos = useRepositories();
+  // A platform-held listing (no owner behind it yet) says "not active" instead of sending.
+  const gate = useServiceGate();
   const router = useRouter();
   const dismiss = useDismiss(`/business/${businessId}`);
   const colors = useColors();
@@ -383,10 +386,11 @@ export default function EnrollScreen() {
             ? `Request ${verb.toLowerCase()} for ${entries.length}`
             : `Request to ${verb.toLowerCase()}`
         }
-        onPress={submit}
+        onPress={() => gate.guard(business, 'Enrolling', submit)}
         loading={submitting}
         style={styles.submit}
       />
+      {gate.popup}
     </Screen>
   );
 }

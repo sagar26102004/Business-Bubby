@@ -13,12 +13,15 @@ import { useAsync } from '@/lib/useAsync';
 import { Button, EmptyView, ErrorView, Input, LoadingView, Screen, Tag, Text } from '@/components/ui';
 import { spacing } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
+import { useServiceGate } from '@/features/businesses/serviceGate';
 
 const GENERAL: ServiceItem = { name: 'General appointment' };
 
 export default function BookScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
+  // A platform-held listing (no owner behind it yet) says "not active" instead of sending.
+  const gate = useServiceGate();
   const router = useRouter();
   const dismiss = useDismiss(`/business/${businessId}`);
   const { currentUser, signInGuest } = useAuth();
@@ -107,7 +110,14 @@ export default function BookScreen() {
         style={styles.note}
       />
 
-      <Button title="Request booking" onPress={submit} loading={submitting} disabled={!canSubmit} style={styles.submit} />
+      <Button
+        title="Request booking"
+        onPress={() => gate.guard(business, 'Booking', submit)}
+        loading={submitting}
+        disabled={!canSubmit}
+        style={styles.submit}
+      />
+      {gate.popup}
     </Screen>
   );
 }

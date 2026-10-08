@@ -19,17 +19,17 @@ import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Business, PlaceKind } from '@/domain/types';
 import { openState } from '@/domain/hours';
-import { formatDistance, getType, rentalBasisLabel } from '@/domain/catalog';
+import { formatDistance, rentalBasisLabel } from '@/domain/catalog';
 import { offeringBuckets, type OfferingBucket } from '@/domain/offerings';
-import { tagEmoji } from '@/domain/intents';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { haversineKm } from '@/lib/geo';
-import { Button, Card, Icon, IconTile, Tag, Text } from '@/components/ui';
+import { Button, Card, Icon, Tag, Text } from '@/components/ui';
 import { catalogLink } from '@/features/offerings/links';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { THUMB_WIDTH, thumbUrl } from '@/lib/media';
 import { ON_HOLD } from '@/lib/onHold';
+import { useServiceGate } from '@/features/businesses/serviceGate';
 
 const PLACE_ICONS: Record<PlaceKind, string> = {
   current: '🧭',
@@ -51,6 +51,8 @@ export function BusinessCard({ business }: { business: Business }) {
   const router = useRouter();
   const colors = useColors();
   const repos = useRepositories();
+  // Call / Chat / the door on a platform-held listing show "not active" instead.
+  const gate = useServiceGate();
 
   const distance = formatDistance(business.distanceKm);
   const status = openState(business);
@@ -85,7 +87,6 @@ export function BusinessCard({ business }: { business: Business }) {
   const door = lead ? DOOR[lead.bucket] : undefined;
 
   const tags = business.tags ?? [];
-  const typeIcon = getType(business.type)?.icon ?? '🏪';
   const basis = isRental ? rentalBasisLabel(business.rentalBasis) : undefined;
   const cover = business.coverImageUrl;
   const open = () => router.push(`/business/${business.id}`);
@@ -110,11 +111,10 @@ export function BusinessCard({ business }: { business: Business }) {
         style={({ pressed }) => [styles.body, pressed && styles.pressed]}
       >
         <View style={styles.top}>
+          {/* The cover photo only when the business uploaded one — no stand-in tile. */}
           {cover ? (
             <Image source={{ uri: thumbUrl(cover, THUMB_WIDTH) }} style={styles.thumb} resizeMode="cover" />
-          ) : (
-            <IconTile emoji={tagEmoji(tags[0] ?? '', typeIcon)} size={72} />
-          )}
+          ) : null}
 
           <View style={styles.main}>
             <View style={styles.chipRow}>
@@ -229,12 +229,12 @@ export function BusinessCard({ business }: { business: Business }) {
         <RoundAction
           icon="phone"
           label={`Call ${business.name}`}
-          onPress={() => router.push(`/call/${business.id}`)}
+          onPress={() => gate.guard(business, 'Calling', () => router.push(`/call/${business.id}`))}
         />
         <RoundAction
           icon="chat"
           label={`Chat with ${business.name}`}
-          onPress={() => router.push(`/chat/${business.id}`)}
+          onPress={() => gate.guard(business, 'Chat', () => router.push(`/chat/${business.id}`))}
         />
         {lead && door ? (
           <Button
@@ -242,13 +242,18 @@ export function BusinessCard({ business }: { business: Business }) {
             icon={door.icon}
             variant={door.variant}
             size="sm"
-            onPress={() => router.push(catalogLink(business.id, lead.bucket))}
+            onPress={() =>
+              gate.guard(business, lead.bucket === 'plans' ? 'Enrolling' : 'Ordering', () =>
+                router.push(catalogLink(business.id, lead.bucket)),
+              )
+            }
             style={styles.door}
           />
         ) : (
           <Button title="View page" variant="secondary" size="sm" onPress={open} style={styles.door} />
         )}
       </View>
+      {gate.popup}
     </Card>
   );
 }

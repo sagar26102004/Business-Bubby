@@ -13,6 +13,7 @@ import { useAsync } from '@/lib/useAsync';
 import { Button, Card, EmptyView, ErrorView, Input, LoadingView, Screen, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
+import { useServiceGate } from '@/features/businesses/serviceGate';
 
 /** Index of the "describe your own party" choice in the package list. */
 const CUSTOM = -1;
@@ -20,6 +21,8 @@ const CUSTOM = -1;
 export default function PartyScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
   const repos = useRepositories();
+  // A platform-held listing (no owner behind it yet) says "not active" instead of sending.
+  const gate = useServiceGate();
   const router = useRouter();
   const colors = useColors();
   const { currentUser, signInGuest } = useAuth();
@@ -195,7 +198,7 @@ export default function PartyScreen() {
 
       <Button
         title="🎉 Send party request"
-        onPress={submit}
+        onPress={() => gate.guard(business, 'Ordering', submit)}
         loading={submitting}
         disabled={!ready || submitting}
         style={styles.submit}
@@ -205,6 +208,7 @@ export default function PartyScreen() {
           Pick a package (or “Something else”) to send your request.
         </Text>
       ) : null}
+      {gate.popup}
     </Screen>
   );
 }
