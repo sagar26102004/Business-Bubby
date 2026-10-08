@@ -7,7 +7,7 @@
  *
  * Every `intervalMinutes` (a "slot") it runs one cycle:
  *   1. stop if E:\listing\STOP exists
- *   2. retry menu photos still waiting to be read (Claude, headless)
+ *   2. retry menus still pending (photos Claude couldn't read yet)
  *   3. collect up to `perCycle` new places (maps-bot), walking the query list
  *   4. publish what is safe without a person (list-business --auto); the rest is HELD
  *
@@ -19,7 +19,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { collect } from './maps-bot';
-import { menuFromPhotos, menuPhotos } from './menu-from-photos';
+import { ensureMenu, menuPhotos } from './menu-from-photos';
 import { publish } from './list-business';
 import { sleep } from './listing-lib';
 
@@ -126,7 +126,7 @@ async function main() {
         const dir = join(typeDir, d);
         if (menuPhotos(dir).length && !existsSync(join(dir, 'menu.json'))) {
           log(`retry menu: ${d}`);
-          await menuFromPhotos(dir, log, plan.menuModel).catch((e) => log(`   menu retry failed: ${e}`));
+          await ensureMenu(dir, log, plan.menuModel).catch((e) => log(`   menu retry failed: ${e}`));
         }
       }
     }

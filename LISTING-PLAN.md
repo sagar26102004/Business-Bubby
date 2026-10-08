@@ -7,7 +7,9 @@ How real Indore businesses get onto Localo in bulk, one business type at a time 
 | Script | Job | Touches the live app? |
 |---|---|---|
 | `maps-bot.ts` | Searches Google Maps and makes one folder per new place | No |
-| `menu-from-photos.ts` | Reads the menu photos with Claude (headless `claude -p`, on your Claude plan) and writes `menu.json` | No |
+| `menu-from-photos.ts` | Gets each place a `menu.json` from the best source that has one (the menu rule, below) | No |
+| `zomato.ts` | Finds the place's Zomato page in our own browser for the menu rule | No |
+| `add-menus.ts` | Gives **live** food listings that have no menu one (Zomato, then the web), as the super-admin | **Yes** |
 | `list-business.ts` | Signs in as super-admin and publishes each ready folder | **Yes** |
 | `listing-loop.ts` | The unattended schedule: collect → publish, every 30 min | Yes, through the publisher |
 | `start-listing.ps1` | Launcher: own window, keeps Windows awake | — |
@@ -23,11 +25,24 @@ Secrets live in `scripts/.listing.env` (gitignored): `LISTING_LOGIN`, `LISTING_P
 | `listing.json` | name, type, tags, phone, address, `location.point` (pin), hours (`"mon": "09:00-23:30"`), source URL |
 | `cover.jpg` | the place's main Google photo, full size |
 | `menu 1.jpg` … | the printed-menu photos, full size (`=w2000`) |
-| `menu.json` | the menu, in the register wizard's paste format (see CLAUDE.md, "Pasting a whole catalog") |
-| `menu.online.json` | Google's typed menu. **Delivery-app prices**, often higher than in the café, so it's only a fallback when there are no photos |
+| `menu.json` | the menu, in the register wizard's paste format (see CLAUDE.md, "Pasting a whole catalog"); `review.txt` says which source it came from |
+| `menu.online.json` | Google's typed menu (delivery-app prices) |
+| `zomato.txt` | the Zomato page text, when the menu came from Zomato |
 | `review.txt` | anything a person should look at |
 
 Folders made by hand work too. Put a `<lat>, <lng>.png` map screenshot (its file name is the pin), `cover.jpg`, `1.jpg…` (showcase) and `menu.json` in the folder; Claude writes the `listing.json` from the screenshot.
+
+## The menu rule: any menu beats no menu
+
+Sagar's rule (8 Oct 2026): get the menu **from wherever it can be found**. `ensureMenu` in `menu-from-photos.ts` tries these in order and keeps the first that works:
+
+1. **Menu photos** from Google, read by Claude. These are the in-café prices, so they come first.
+2. **Google's typed menu** (delivery-app prices). Used when there are no photos, or when Claude can't read them.
+3. **Zomato.** Our own browser searches Zomato for the place and opens its order page (`zomato.ts`). The page is **accepted only when its phone number matches the one Google gave us**, or the exact name plus two address words, or a close name (one inside the other) plus three address words. Claude then turns the page text into the menu, using the original (not discounted) price. Swiggy is not used, because it shows bots an error page.
+4. **The wider web:** Claude searches the place's own site, Magicpin and similar, again accepting only a page that is clearly this place. It rarely finds anything, because Claude's own web tools can't open Zomato or Swiggy.
+5. **Nothing found:** the place is listed without a menu.
+
+Claude runs headless (`claude -p`, Sonnet, on your Claude plan) with only the tools each step needs, and every reply is checked by the publisher's parser before it's saved. A place is **held** only when it has menu photos that Claude couldn't read *and* no other source worked. It's retried in the next cycle.
 
 ## Never listing the same business twice
 
@@ -47,8 +62,8 @@ Every **30 minutes** (one *slot*) the loop runs one cycle:
 
 | Outcome | When |
 |---|---|
-| **Published** | menu read (or Google has none), no duplicate, no similar name nearby |
-| **Held** | menu still pending (Claude couldn't read it yet), opening hours incomplete, similar name within 50 m, or the Maps page loaded only partly |
+| **Published** | menu from any source (or none exists anywhere), full hours, no duplicate, no similar name nearby |
+| **Held** | menu photos Claude couldn't read yet *and* no other menu source worked, opening hours incomplete, similar name within 50 m, or the Maps page loaded only partly |
 | **Dropped** | exact duplicate; recorded in the key file, folder deleted |
 
 10 hours = 20 slots = **up to 400 places**.
@@ -63,7 +78,7 @@ Every **30 minutes** (one *slot*) the loop runs one cycle:
 ### Realistic expectations
 
 - **A night gives 200–400**, depending on Google slowdowns and how many places each search really has.
-- **Menus are read by Claude (Sonnet by default, `menuModel` in `listing-plan.json`).** That takes about 1 minute per café with menu photos and counts against your Claude plan's usage. If a usage limit is hit, menu reads pause for an hour, and those cafés are held as "menu pending" rather than published without a menu.
+- **Menus cost time and Claude usage.** Each café takes about 1 minute (photos or Zomato) on Sonnet (`menuModel` in `listing-plan.json`), and that counts against your Claude plan's usage. If a usage limit is hit, Claude's steps pause for an hour. Cafés still get Google's typed menu where there is one; only cafés with unread photos and no other source are held.
 - **After the run, ask Claude to "check the listing run".** It reports the totals, reads any pending menu photos, and shows you anything that needs a decision.
 - **Leave the laptop plugged in with the lid open.** The launcher blocks sleep, but closing the lid can still put it to sleep depending on your Windows settings.
 
@@ -84,6 +99,7 @@ npx tsx scripts/menu-from-photos.ts "E:\listing\cafe"
 npx tsx scripts/list-business.ts "E:\listing\cafe" --summary      # what's waiting + warnings
 npx tsx scripts/list-business.ts "E:\listing\cafe" --dry-run      # what would happen
 npx tsx scripts/list-business.ts "E:\listing\cafe" [--auto] [--keep]
+npx tsx scripts/add-menus.ts [--dry-run]                          # live listings without a menu
 npx tsx scripts/listing-loop.ts --hours 0.2 --interval 2 --per-cycle 2 --dry-publish --root <scratch>   # quick test
 ```
 

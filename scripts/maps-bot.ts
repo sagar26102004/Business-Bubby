@@ -9,9 +9,10 @@
  *   listing.json       name, tags, address, pin, hours, phone, source URL
  *   cover.jpg          the place's main photo, full size
  *   menu 1.jpg, …      the printed-menu photos, full size (kept until the menu is read)
- *   menu.json          read from those photos by Claude (scripts/menu-from-photos.ts)
- *   menu.online.json   Google's typed menu, when it has one — DELIVERY-APP prices,
- *                      often higher than in the café; used only when there are no photos
+ *   menu.json          the menu from the best source that has one: the photos (read by
+ *                      Claude), Google's typed menu, or the web (Zomato / Swiggy / own
+ *                      site) — see ensureMenu in scripts/menu-from-photos.ts
+ *   menu.online.json   Google's typed menu, when it has one (delivery-app prices)
  *   review.txt         anything a person should look at before publishing
  *
  * Places already known are skipped, so re-running with a bigger --limit just
@@ -39,7 +40,7 @@ import {
   sleep,
   type KnownListing,
 } from './listing-lib';
-import { menuFromPhotos } from './menu-from-photos';
+import { ensureMenu } from './menu-from-photos';
 
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -322,12 +323,6 @@ async function scrapePlace(page: Page, place: { name: string; href: string }, ro
     const online = await typedMenu(page, panel);
     if (online) writeFileSync(join(dir, 'menu.online.json'), JSON.stringify(online, null, 2));
   }
-  if (!menuPhotos) {
-    if (existsSync(join(dir, 'menu.online.json'))) {
-      copyFileSync(join(dir, 'menu.online.json'), join(dir, 'menu.json'));
-      review.push('menu taken from Google\'s typed menu (delivery-app prices, may be higher than in the café)');
-    } else review.push('no menu on Google');
-  }
 
   if (partialDays < 7) {
     // Google shows hours three ways: the full week inline (read above), a
@@ -376,7 +371,7 @@ export interface CollectOptions {
   /** Parent folder; places land in <root>/<type>/. */
   root: string;
   headful?: boolean;
-  /** Read menu photos with Claude after collecting (default true). */
+  /** Build each place's menu after collecting (default true). */
   menuAi?: boolean;
   /** Claude model for menu photos (default sonnet). */
   menuModel?: string;
@@ -468,14 +463,12 @@ export async function collect(opts: CollectOptions): Promise<CollectResult> {
     await browser.close();
   }
 
-  // Menus from photos, after the browser is closed.
+  // Menus, after the browser is closed: photos → Google's typed menu → the
+  // web (Zomato, Swiggy, own site) → none. See ensureMenu in menu-from-photos.ts.
   if (opts.menuAi !== false) {
     for (const dir of made) {
-      if (existsSync(join(dir, 'menu.json'))) continue;
-      if (!readdirSync(dir).some((f) => /^menu \d+\./i.test(f))) continue;
       log(`menu: ${dir.split(/[\\/]/).pop()}`);
-      const ok = await menuFromPhotos(dir, log, opts.menuModel);
-      if (!ok) appendFileSync(join(dir, 'review.txt'), 'menu pending — Claude could not read it yet; photos kept\n');
+      await ensureMenu(dir, log, opts.menuModel);
     }
   }
   return { made, throttled, exhausted };
