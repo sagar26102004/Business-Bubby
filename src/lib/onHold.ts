@@ -19,11 +19,18 @@ export const ON_HOLD = {
 /**
  * DEMO LISTINGS (`Business.demo`) — sample businesses made by
  * scripts/demo-listings.ts to show owners what the Deals feed looks like.
- * They are NOT real businesses, so they never reach a real customer: every
- * public list hides them unless the signed-in viewer is a platform admin or a
+ * Hidden from every public list unless DEMO_LISTINGS_PUBLIC (below) is on, or
+ * the signed-in viewer is a platform admin or a
  * `bot…` demo account (set by DataProvider via `setDemoViewer`).
  */
 let demoViewer = false;
+
+/**
+ * Show demo listings to EVERYONE — guests and signed-out visitors included —
+ * so a fresh install opens onto a full Deals feed. Sagar's call (2026-10-09):
+ * they're promotional samples. Flip back to false to hide them again.
+ */
+export const DEMO_LISTINGS_PUBLIC = true;
 
 export function setDemoViewer(on: boolean) {
   demoViewer = on;
@@ -39,6 +46,6 @@ export function isDemoViewer(): boolean {
  */
 export function isListedPublicly(b: { type: string; demo?: boolean }): boolean {
   if (ON_HOLD.stalls && b.type === 'item') return false;
-  if (b.demo && !demoViewer) return false;
+  if (b.demo && !demoViewer && !DEMO_LISTINGS_PUBLIC) return false;
   return true;
 }
