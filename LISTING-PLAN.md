@@ -69,12 +69,14 @@ Two commands, one loop; they differ only in where places come from:
 | `/start-listing-zomato` | **Zomato only** (`zomato-bot.ts`): menus as data, no Google traffic | `zomatoQueries` |
 | `/start-listing` | Google Maps (`maps-bot.ts`), menus from the ladder | `queries` |
 
-Both take the same arguments: `/start-listing-zomato 4` for 4 hours, or `/start-listing-zomato 10 dry` to collect without publishing. Claude runs pre-flight checks and opens a PowerShell window titled **"Localo listing run - zomato"** (or `- maps`), which runs `listing-loop.ts --source zomato|maps` through `start-listing.ps1 -Source`. Never run both at once: they share `E:\listing\cafe`.
+Both take the same arguments: `/start-listing-zomato 4` for 4 hours, or `/start-listing-zomato 10 dry` to collect without publishing.
+
+**Cities (Zomato only, 9 Oct 2026).** Add city names: `/start-listing-zomato 8 bhopal delhi` (any order, spaces or commas). With none, the run uses `cities` in `listing-plan.json` (Indore). Cities run **in the order given**: the first city walks every `zomatoQueries` list, then the run moves on to the next. Each city remembers its own position in `loop-state.json` → `zomatoCities`, so a city that's used up (Indore, after the 8 Oct run) is skipped at once. Delhi, New Delhi, Noida, Gurgaon and Ghaziabad are all Zomato's **`ncr`** (`zomatoCity` in `zomato-bot.ts`), so they count as one city. `zomato-seen.json` stores places outside Indore as `city/slug`. Underneath, this is `start-listing.ps1 -Cities "bhopal,delhi"` → `listing-loop.ts --cities bhopal,delhi`. Claude runs pre-flight checks and opens a PowerShell window titled **"Localo listing run - zomato"** (or `- maps`), which runs `listing-loop.ts --source zomato|maps` through `start-listing.ps1 -Source`. Never run both at once: they share `E:\listing\cafe`.
 
 Every **30 minutes** (one *slot*) the loop runs one cycle:
 1. If `E:\listing\STOP` exists, stop.
 2. Retry menu photos that couldn't be read last time.
-3. Collect up to **20** new places from the run's source (`zomato`: the `zomatoQueries` list pages, e.g. `restaurants/cafes`; `maps`: the Google `queries`). It walks the list in order and moves on when one has nothing new left. Each source's position is saved in `E:\listing\loop-state.json` (`zomatoQueryIndex` / `queryIndex`), so the next run continues from there.
+3. Collect up to **20** new places from the run's source (`zomato`: the `zomatoQueries` list pages, e.g. `restaurants/cafes`; `maps`: the Google `queries`). It walks the list in order and moves on when one has nothing new left. Each source's position is saved in `E:\listing\loop-state.json` (`zomatoCities.<city>` / `queryIndex`; an old `zomatoQueryIndex` is moved to `zomatoCities.indore` on load), so the next run continues from there.
 4. Publish everything that's safe without a person (`list-business --auto`). Anything else is **held**: left in its folder for later.
 
 | Outcome | When |

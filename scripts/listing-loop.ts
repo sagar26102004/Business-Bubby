@@ -2,9 +2,13 @@
 /**
  * LISTING LOOP — the unattended run behind /start-listing. See LISTING-PLAN.md.
  *
- *   npx tsx scripts/listing-loop.ts [--source maps|zomato] [--hours 10] [--interval 30] [--per-cycle 20] [--dry-publish] [--root E:/listing] [--plan file]
+ *   npx tsx scripts/listing-loop.ts [--source maps|zomato] [--cities indore,bhopal] [--hours 10] [--interval 30] [--per-cycle 20] [--dry-publish] [--root E:/listing] [--plan file]
  *
  * --source picks the collector: maps (Google Maps, /start-listing) or zomato (/start-listing-zomato).
+ * --cities (Zomato only; default the plan's `cities`, else indore): the cities to collect from, in order.
+ *   Each city walks the whole `zomatoQueries` list before the run moves to the next city, and each
+ *   city's position is remembered on its own (loop-state.json → zomatoCities), so a city that is
+ *   already used up is skipped in seconds.
  *   TESTS ONLY: --simulate ok|throttle replaces the collector (no Google) to exercise the schedule, STOP and back-off.
  *
  * Every `intervalMinutes` (a "slot") it runs one cycle:
@@ -21,7 +25,7 @@
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { collect as collectMaps } from './maps-bot';
-import { collect as collectZomato } from './zomato-bot';
+import { collect as collectZomato, zomatoCity } from './zomato-bot';
 import { ensureMenu, menuPhotos } from './menu-from-photos';
 import { publish } from './list-business';
 import { sleep } from './listing-lib';
@@ -40,12 +44,16 @@ interface Plan {
   queries: string[];
   /** Zomato list pages under the city, e.g. "restaurants/cafes" (source "zomato"). */
   zomatoQueries?: string[];
+  /** Cities for source "zomato" when --cities isn't given (default ["indore"]). */
+  cities?: string[];
 }
 
 interface LoopState {
   queryIndex: number;
-  /** Position in plan.zomatoQueries (queryIndex is the Google Maps list's). */
+  /** Before there were cities: Indore's position in plan.zomatoQueries. Moved into zomatoCities on load. */
   zomatoQueryIndex?: number;
+  /** Each city's position in plan.zomatoQueries (queryIndex is the Google Maps list's). */
+  zomatoCities?: Record<string, number>;
   cycles: number;
   collected: number;
   published: number;
@@ -74,7 +82,12 @@ async function main() {
   const source = (arg('source') ?? plan.source ?? 'maps') as 'maps' | 'zomato';
   if (source !== 'maps' && source !== 'zomato') throw new Error(`--source must be maps or zomato, not "${source}"`);
   const queries = source === 'zomato' ? (plan.zomatoQueries ?? []) : plan.queries;
-  const indexKey = source === 'zomato' ? 'zomatoQueryIndex' : 'queryIndex';
+  // Google searches name their own area, so maps runs have one unnamed "city".
+  const cities =
+    source === 'zomato'
+      ? [...new Set((arg('cities')?.split(',') ?? plan.cities ?? ['indore']).map((c) => zomatoCity(c)).filter(Boolean))]
+      : [''];
+  if (!cities.length) throw new Error('--cities is empty');
   const collect = source === 'zomato' ? collectZomato : collectMaps;
   const site = source === 'zomato' ? 'Zomato' : 'Google';
 
@@ -111,9 +124,26 @@ async function main() {
   let throttlesInARow = 0;
   let endReason = 'time is up';
 
-  state[indexKey] ??= 0;
+  if (state.zomatoQueryIndex !== undefined) {
+    state.zomatoCities = { indore: state.zomatoQueryIndex, ...state.zomatoCities };
+    delete state.zomatoQueryIndex;
+  }
+  state.zomatoCities ??= {};
+  const posOf = (city: string) => (source === 'zomato' ? (state.zomatoCities![city] ?? 0) : state.queryIndex);
+  const setPos = (city: string, i: number) => {
+    if (source === 'zomato') state.zomatoCities![city] = i;
+    else state.queryIndex = i;
+  };
+  /** The first city in the list that still has searches left. */
+  const currentCity = () => cities.find((c) => posOf(c) < queries.length);
+  const cityLabel = (c: string) => (c ? ` in ${c}` : '');
+
   log(`START — ${hours} h, ${perCycle} per ${intervalMs / 60_000} min, type "${plan.type}", source ${site}, ${dryPublish ? 'DRY publish' : 'publishing live'}`);
-  log(`queries ${state[indexKey]! + 1}–${queries.length} remaining; log: ${logFile}`);
+  for (const c of cities) {
+    const left = queries.length - posOf(c);
+    log(`${c ? `${c}: ` : ''}${left > 0 ? `queries ${posOf(c) + 1}–${queries.length} remaining` : 'every search already used up — skipped'}`);
+  }
+  log(`log: ${logFile}`);
 
   for (let slot = 0; ; slot++) {
     const slotStart = start + slot * intervalMs;
@@ -129,8 +159,8 @@ async function main() {
       log(`slot ${slot + 1}: resting after a ${site} slowdown (${skipSlots} more to skip)`);
       continue;
     }
-    if (state[indexKey]! >= queries.length) {
-      endReason = 'every search in the plan is used up — add more queries to scripts/listing-plan.json';
+    if (!currentCity()) {
+      endReason = `every search in the plan is used up${source === 'zomato' ? ` in ${cities.join(', ')} — add more cities or queries` : ' — add more queries to scripts/listing-plan.json'}`;
       break;
     }
 
@@ -149,15 +179,15 @@ async function main() {
       }
     }
 
-    // 2. Collect, moving down the query list as searches run dry.
+    // 2. Collect, moving down the query list as searches run dry, then on to the next city.
     let got = 0;
     let throttled = false;
-    while (got < perCycle && state[indexKey]! < queries.length) {
-      const query = queries[state[indexKey]!];
+    for (let city = currentCity(); got < perCycle && city !== undefined; city = currentCity()) {
+      const query = queries[posOf(city)];
       if (simulate) log(`(simulated collector: ${simulate})`);
       const r = await (simulate
         ? Promise.resolve({ made: [] as string[], throttled: simulate === 'throttle', exhausted: false })
-        : collect({ query, type: plan.type, limit: perCycle - got, root, log, menuModel: plan.menuModel })
+        : collect({ query, type: plan.type, limit: perCycle - got, root, log, menuModel: plan.menuModel, ...(city ? { city } : {}) })
       ).catch((e) => {
         log(`collector error: ${e instanceof Error ? e.message : e}`);
         return { made: [] as string[], throttled: true, exhausted: false };
@@ -169,8 +199,9 @@ async function main() {
       }
       if (simulate === 'ok') break;
       if (r.exhausted) {
-        log(`search "${query}" has nothing new left — next search`);
-        state[indexKey] = state[indexKey]! + 1;
+        setPos(city, posOf(city) + 1);
+        const next = currentCity();
+        log(`search "${query}"${cityLabel(city)} has nothing new left — ${next === city ? 'next search' : next ? `${city} is done, moving to ${next}` : 'every city is done'}`);
       }
     }
     run.collected += got;

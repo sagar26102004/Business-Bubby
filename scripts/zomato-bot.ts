@@ -6,10 +6,12 @@
  * automated browsers a reduced page with no menu, while every Zomato page
  * carries the whole listing as data.
  *
- *   npx tsx scripts/zomato-bot.ts --query "restaurants/cafes" --type cafe --limit 20 [--headful] [--list-only]
+ *   npx tsx scripts/zomato-bot.ts --query "restaurants/cafes" --type cafe --limit 20 [--city bhopal] [--headful] [--list-only]
  *
  * --query is a Zomato list page under the city, e.g. "restaurants/cafes"
  * (https://www.zomato.com/indore/restaurants/cafes) or "vijay-nagar-restaurants".
+ * --city picks the city (default indore); "Delhi", "Noida", "Gurgaon" all mean Zomato's "ncr"
+ * (zomatoCity). Places seen in a city other than Indore are remembered as "city/slug".
  *
  * Each restaurant page embeds its data (window.__PRELOADED_STATE__), so nothing
  * is read off the screen:
@@ -85,8 +87,39 @@ const ZOMATO_TAGS: [RegExp, string[]][] = [
   [/mithai/i, ['Sweet Shop']],
   [/north indian|south indian|chinese|biryani|mughlai|thali|continental|italian|asian|rajasthani|gujarati|maharashtrian/i, ['Restaurant']],
 ];
-/** Zomato gives the city, not the state. */
-const CITY_REGION: Record<string, string> = { indore: 'Madhya Pradesh', bhopal: 'Madhya Pradesh', ujjain: 'Madhya Pradesh' };
+/** Zomato gives the city, not the state. Keyed by the city name on the place's own page. */
+const CITY_REGION: Record<string, string> = {
+  indore: 'Madhya Pradesh', bhopal: 'Madhya Pradesh', ujjain: 'Madhya Pradesh', gwalior: 'Madhya Pradesh', jabalpur: 'Madhya Pradesh',
+  delhi: 'Delhi', 'new delhi': 'Delhi', gurgaon: 'Haryana', gurugram: 'Haryana', faridabad: 'Haryana',
+  noida: 'Uttar Pradesh', 'greater noida': 'Uttar Pradesh', ghaziabad: 'Uttar Pradesh', lucknow: 'Uttar Pradesh', kanpur: 'Uttar Pradesh', agra: 'Uttar Pradesh', varanasi: 'Uttar Pradesh',
+  mumbai: 'Maharashtra', 'navi mumbai': 'Maharashtra', thane: 'Maharashtra', pune: 'Maharashtra', nagpur: 'Maharashtra', nashik: 'Maharashtra', aurangabad: 'Maharashtra',
+  bangalore: 'Karnataka', bengaluru: 'Karnataka', mysore: 'Karnataka', mangalore: 'Karnataka',
+  hyderabad: 'Telangana', secunderabad: 'Telangana', chennai: 'Tamil Nadu', coimbatore: 'Tamil Nadu', kolkata: 'West Bengal',
+  ahmedabad: 'Gujarat', surat: 'Gujarat', vadodara: 'Gujarat', rajkot: 'Gujarat',
+  jaipur: 'Rajasthan', udaipur: 'Rajasthan', jodhpur: 'Rajasthan', kota: 'Rajasthan',
+  chandigarh: 'Chandigarh', mohali: 'Punjab', ludhiana: 'Punjab', amritsar: 'Punjab', dehradun: 'Uttarakhand',
+  raipur: 'Chhattisgarh', patna: 'Bihar', ranchi: 'Jharkhand', bhubaneswar: 'Odisha', guwahati: 'Assam', goa: 'Goa',
+  kochi: 'Kerala', trivandrum: 'Kerala', thiruvananthapuram: 'Kerala', visakhapatnam: 'Andhra Pradesh', vijayawada: 'Andhra Pradesh',
+};
+
+/** Zomato's URL name for a city where it isn't just the name: Delhi and its suburbs are all "ncr". */
+const ZOMATO_CITY_ALIASES: Record<string, string> = {
+  delhi: 'ncr', 'new-delhi': 'ncr', 'delhi-ncr': 'ncr', gurgaon: 'ncr', gurugram: 'ncr', noida: 'ncr', 'greater-noida': 'ncr',
+  ghaziabad: 'ncr', faridabad: 'ncr', bengaluru: 'bangalore', 'navi-mumbai': 'mumbai', thane: 'mumbai', secunderabad: 'hyderabad',
+  trivandrum: 'thiruvananthapuram', vizag: 'visakhapatnam', mysuru: 'mysore', mangaluru: 'mangalore',
+};
+
+/** "New Delhi" / "Bengaluru" / "bhopal" → the city part of a Zomato URL ("ncr", "bangalore", "bhopal"). */
+export function zomatoCity(name: string): string {
+  const slug = name.trim().toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '');
+  return ZOMATO_CITY_ALIASES[slug] ?? slug;
+}
+
+/**
+ * zomato-seen.json key. Indore's places were recorded as the bare slug before
+ * there were other cities, so Indore keeps that; every other city is "city/slug".
+ */
+const seenKey = (city: string, slug: string) => (city === 'indore' ? slug : `${city}/${slug}`);
 
 function arg(name: string, fallback?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -256,7 +289,7 @@ async function menuPhotoUrls(page: Page, url: string): Promise<string[]> {
 const SLUG = /zomato\.com\/([a-z-]+)\/([a-z0-9-]+)\/(?:info|order)(?:[?#]|$)/;
 
 /** Scroll a Zomato list page until `want` unseen restaurant slugs are listed or the list stops growing. */
-async function listSlugs(page: Page, url: string, want: number, seen: Set<string>): Promise<string[]> {
+async function listSlugs(page: Page, url: string, city: string, want: number, seen: Set<string>): Promise<string[]> {
   const res = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(3500 + Math.random() * 2000);
   const block = await blockedPage(page, res?.status());
@@ -267,8 +300,10 @@ async function listSlugs(page: Page, url: string, want: number, seen: Set<string
     const hrefs = await page.$$eval('a[href]', (as) => as.map((a) => (a as HTMLAnchorElement).href));
     const before = found.length;
     for (const h of hrefs) {
-      const slug = SLUG.exec(h)?.[2];
-      if (slug && !seen.has(slug) && !found.includes(slug)) found.push(slug);
+      const m = SLUG.exec(h);
+      // Only this city's places: a link into another city would be opened under the wrong URL.
+      const slug = m && m[1] === city ? m[2] : undefined;
+      if (slug && !seen.has(seenKey(city, slug)) && !found.includes(slug)) found.push(slug);
     }
     still = found.length === before ? still + 1 : 0;
     await page.mouse.wheel(0, 1500 + Math.random() * 2000);
@@ -394,12 +429,12 @@ const readSeen = (root: string): string[] => {
 /** One collection run: list page → open each unseen place → folder. Never publishes. */
 export async function collect(opts: CollectOptions & { city?: string; listOnly?: boolean }): Promise<CollectResult> {
   const log = opts.log ?? ((l: string) => console.log(l));
-  const city = (opts.city ?? 'indore').toLowerCase();
+  const city = zomatoCity(opts.city ?? 'indore');
   const typeRoot = join(opts.root, opts.type);
   mkdirSync(typeRoot, { recursive: true });
   const seen = new Set(readSeen(opts.root));
   const remember = (slug: string) => {
-    seen.add(slug);
+    seen.add(seenKey(city, slug));
     writeFileSync(seenFile(opts.root), JSON.stringify([...seen], null, 0));
   };
   const known = [...(await loadLiveListings(anonClient())), ...loadKeyFile(), ...loadLocalListings(typeRoot)];
@@ -428,7 +463,7 @@ export async function collect(opts: CollectOptions & { city?: string; listOnly?:
     // Ask the list for extra: some places turn out known, closed or delivery-only.
     let slugs: string[];
     try {
-      slugs = await listSlugs(page, listUrl, opts.limit * 3, seen);
+      slugs = await listSlugs(page, listUrl, city, opts.limit * 3, seen);
     } catch (e) {
       if (!(e instanceof Blocked)) throw e;
       log(`Zomato blocked the list page (${e.message}) — stopping; the loop will rest.`);
