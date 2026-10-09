@@ -8,10 +8,13 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "runtimeVersion": {
-      "policy": "fingerprint"
+      "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/f7a13fa0-fd47-4aba-a7d7-a36f008d2186"
+      "url": "https://u.expo.dev/f7a13fa0-fd47-4aba-a7d7-a36f008d2186",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
     },
     "plugins": [
       "expo-router",
