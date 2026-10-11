@@ -130,6 +130,7 @@ export interface Offer {
   active: boolean;
   /** ISO date it stops showing. */
   endsAt?: string;
+  startsAt?: string;
   createdAt: string;
 }
 

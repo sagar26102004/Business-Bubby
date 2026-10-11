@@ -32,6 +32,7 @@ import type {
   PlanItem,
   MonthlySpend,
   Offer,
+  OfferViewStats,
   OfferingKind,
   OpeningHours,
   Order,
@@ -164,6 +165,14 @@ export interface BusinessRepository {
    * so team-membership checks follow the new owner.
    */
   reassignOwner(id: string, newOwnerId: string): Promise<Business>;
+  /**
+   * Count one customer view of an offer (business page or deals feed). Anyone
+   * may call it, signed in or not; it never throws — a lost count must not
+   * break the screen that showed the offer.
+   */
+  recordOfferView(businessId: string, offerId: string): Promise<void>;
+  /** View counts for every offer of a business — team members only. */
+  listOfferViews(businessId: string): Promise<OfferViewStats[]>;
   /**
    * Take a listing down for good — the OWNER's call (that is exactly what the
    * `businesses_delete` RLS policy allows, and the mock enforces the same).

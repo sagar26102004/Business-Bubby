@@ -321,6 +321,7 @@ export default function RootLayout() {
           <Stack.Screen name="workspace/[businessId]/fleet" options={{ title: 'Fleet & tracking' }} />
           <Stack.Screen name="workspace/[businessId]/team" options={{ title: 'Team & access' }} />
           <Stack.Screen name="workspace/[businessId]/offers" options={{ title: 'Offers' }} />
+          <Stack.Screen name="workspace/[businessId]/offer" options={{ title: 'Create an Offer' }} />
           <Stack.Screen name="promote/[businessId]" options={{ title: 'Promote' }} />
           <Stack.Screen name="member/[membershipId]" options={{ title: 'Member' }} />
           <Stack.Screen name="member-account/[businessId]/[customerId]" options={{ title: 'Member' }} />

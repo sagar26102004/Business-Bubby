@@ -9,6 +9,7 @@
 import type {
   AdCampaign,
   AppNotification,
+  OfferViewStats,
   Bill,
   BillLine,
   BizChatMessage,
@@ -170,6 +171,10 @@ const locationShares: LocationShare[] = seed(seedLocationShares);
 const logEntries: LogEntry[] = seed(seedLogEntries);
 /** Device push tokens -> platform. Mock-only: nothing here ever sends a push. */
 const pushTokens = new Map<string, string>();
+/** Offer views: `businessId:offerId` -> India-time day -> count (mirrors `offer_views`). */
+const offerViews = new Map<string, Map<string, number>>();
+/** Today's date in India time, YYYY-MM-DD — the day `offer_views` buckets by. */
+const indiaDay = (): string => new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
 
 /** Push a notification (used by chat + bookings). */
 function notify(n: Omit<AppNotification, 'id' | 'read' | 'createdAt'>): void {
@@ -536,6 +541,31 @@ class MockBusinessRepository implements BusinessRepository {
     if (!business) throw new Error(`Business ${id} not found`);
     business.ownerId = newOwnerId;
     return clone(business);
+  }
+
+  async recordOfferView(businessId: string, offerId: string): Promise<void> {
+    // Like the offer_record_view RPC: only offers that exist on the business count.
+    const business = businesses.find((b) => b.id === businessId);
+    if (!business?.offers?.some((o) => o.id === offerId)) return;
+    const key = `${businessId}:${offerId}`;
+    const days = offerViews.get(key) ?? new Map<string, number>();
+    const today = indiaDay();
+    days.set(today, (days.get(today) ?? 0) + 1);
+    offerViews.set(key, days);
+  }
+
+  async listOfferViews(businessId: string): Promise<OfferViewStats[]> {
+    await delay(60);
+    const today = indiaDay();
+    const out: OfferViewStats[] = [];
+    offerViews.forEach((days, key) => {
+      const split = key.indexOf(':');
+      if (key.slice(0, split) !== businessId) return;
+      let total = 0;
+      days.forEach((n) => (total += n));
+      out.push({ offerId: key.slice(split + 1), total, today: days.get(today) ?? 0 });
+    });
+    return out;
   }
 
   async remove(id: string, actorId: string): Promise<void> {

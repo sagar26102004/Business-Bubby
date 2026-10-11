@@ -16,6 +16,7 @@ import type {
   Membership,
   MembershipPayment,
   MonthlySpend,
+  OfferViewStats,
   Order,
   PaymentStatus,
   ProductItem,
@@ -114,6 +115,23 @@ export function createApiBusinesses(): BusinessRepository {
     update: (id, patch) => http.patch<Business>(`/businesses/${seg(id)}`, patch),
     reassignOwner: (id, newOwnerId) =>
       http.post<Business>(`/businesses/${seg(id)}/reassign-owner`, { newOwnerId }),
+    // [SYNC-049]: the server endpoints don't exist yet. Until they land, the
+    // counter swallows the 404 (it never throws, by contract) and the list
+    // reads as "no views yet".
+    recordOfferView: async (businessId, offerId) => {
+      try {
+        await http.post<void>(`/businesses/${seg(businessId)}/offers/${seg(offerId)}/views`);
+      } catch {
+        /* engagement, not billing */
+      }
+    },
+    listOfferViews: async (businessId) => {
+      try {
+        return await http.get<OfferViewStats[]>(`/businesses/${seg(businessId)}/offer-views`);
+      } catch {
+        return [];
+      }
+    },
     remove: async (id) => {
       await http.del(`/businesses/${seg(id)}`);
     },

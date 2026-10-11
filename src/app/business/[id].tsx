@@ -21,7 +21,7 @@
  * a platform admin) has nobody behind Call, Chat or its order/enrol door, so
  * those run through the service gate and show "not active for this business".
  */
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -55,6 +55,7 @@ import { totalLabel, totalOf } from '@/features/orders/orderUtils';
 import { OfferingsSection, type OfferingGroup } from '@/features/businesses/OfferingsSection';
 import { catalogLink } from '@/features/offerings/links';
 import { OffersSection } from '@/features/businesses/OffersSection';
+import { countOfferView } from '@/features/businesses/offerViews';
 import { liveOffers } from '@/features/businesses/offerUtils';
 import { ProductTile } from '@/features/businesses/ProductTile';
 import { PortfolioGallery } from '@/features/businesses/PortfolioGallery';
@@ -131,6 +132,16 @@ export default function BusinessDetailScreen() {
       setReassigning(false);
     }
   }, [newOwner, data, repos, reload]);
+
+  // Each live offer on this page is a view for the business's Offers screen
+  // (once per session; the owner looking at their own page doesn't count).
+  const viewedBusiness = data?.business;
+  useEffect(() => {
+    if (!viewedBusiness) return;
+    liveOffers(viewedBusiness).forEach((o) =>
+      countOfferView(repos.businesses, viewedBusiness.id, o.id, currentUser?.id, viewedBusiness.ownerId),
+    );
+  }, [viewedBusiness, repos, currentUser?.id]);
 
   if (loading && data === undefined) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;

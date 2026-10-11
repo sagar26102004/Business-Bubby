@@ -388,7 +388,23 @@ export interface Offer {
   active: boolean;
   /** ISO date the offer stops showing. Undefined = runs until switched off. */
   endsAt?: string;
+  /**
+   * ISO date the offer starts showing. Before it the offer is "scheduled":
+   * listed in the workspace, hidden from customers. Undefined = from creation.
+   */
+  startsAt?: string;
   createdAt: string;
+}
+
+/**
+ * How many times customers have seen one offer — on the business page or in
+ * the deals feed. Counted per day (India time) in `offer_views`, so "today" is
+ * a real figure, not an estimate. Engagement only: any viewer can add one.
+ */
+export interface OfferViewStats {
+  offerId: string;
+  total: number;
+  today: number;
 }
 
 /**

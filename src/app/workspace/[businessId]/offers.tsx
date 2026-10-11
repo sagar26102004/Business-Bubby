@@ -1,65 +1,56 @@
 /**
- * Workspace › Offers — the business's own promotions.
+ * Workspace › Offers — the business's own promotions, as a list.
  *
- * An offer bundles things the business ALREADY lists (a menu dish, a service, a
- * product, a rental) at a special price: "Cold coffee + sandwich · ₹99". You
- * pick the items from your own catalog, the screen adds up what they normally
- * cost, and you type what you want to charge instead — the difference becomes
- * the "Save 34%" a customer sees.
+ * Two stats (Active — offers live right now; Views — how often customers saw
+ * them, with today's count), tabs for Live now · Scheduled · Past / Expired,
+ * and one card per offer: status + badge, the photo or reel, price with the
+ * struck-through "was" and the saving, when it ends (or starts), its view
+ * count, and Edit. Creating and editing — and pausing or promoting — happen on
+ * the offer's own screen, `./offer` (`?offer=<id>` to edit).
  *
- * Live offers show on the business page directly under the description. Pausing
- * one keeps it here but takes it off the page, so a weekend special can be
- * switched back on rather than rebuilt.
+ * Views are real: counted once per viewer session on the business page and in
+ * the deals feed (features/businesses/offerViews.ts → `offer_views`, migration
+ * 0025). There is no "claimed" figure: offers don't record claims.
  *
  * Access-gated: the owner grants "Offers" per member on the Access screen.
  */
-import { useMemo, useState } from 'react';
-import { StyleSheet, Switch, View } from 'react-native';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import type { Offer, OfferLine } from '@/domain/types';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import type { Offer, OfferViewStats } from '@/domain/types';
 import { canAccessService, isBusinessTeamMember } from '@/domain/access';
 import { isSuperAdminUser } from '@/domain/superAdmin';
 import { SuperAdminBanner } from '@/features/businesses/SuperAdminBanner';
-import { PhotosField } from '@/features/media/PhotosField';
-import { MAX_SECONDS, VideoField } from '@/features/media/VideoField';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
-import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
+import { thumbUrl } from '@/lib/media';
 import {
+  BottomActionBar,
   Button,
-  Card,
   EmptyView,
   ErrorView,
-  Input,
+  Icon,
   LoadingView,
   Screen,
+  SegmentedControl,
   Tag,
   Text,
 } from '@/components/ui';
-import { spacing, useColors } from '@/theme/theme';
-import { showAlert } from '@/lib/alert';
+import { radius, spacing, useColors } from '@/theme/theme';
 import {
-  isOfferLive,
-  linesTotalLabel,
-  offerLineLabel,
+  offerEndsLabel,
   offerSavingPercent,
-  pickableOfferings,
-  savingPercent,
-  type PickableOffering,
+  offerStatus,
 } from '@/features/businesses/offerUtils';
 
-/** Shout labels offered as one-tap chips; anything else can be typed. */
-const TAG_SUGGESTIONS = ['COMBO', 'NEW', '20% OFF', '50% OFF', 'WEEKEND', 'LIMITED'];
-const EMOJI_SUGGESTIONS = ['🎉', '🔥', '☕', '🍔', '🍕', '💇', '🧺', '🚗', '💰'];
+type Tab = 'live' | 'scheduled' | 'past';
 
-/** "150" / "4.5" → "₹150" / "₹4.50"; blank/junk → undefined. */
-function toPriceLabel(raw: string): string | undefined {
-  const amount = parsePrice(raw);
-  return amount !== undefined ? formatMoney(amount) : undefined;
-}
+const editorHref = (businessId: string, offerId?: string): Href =>
+  (offerId
+    ? `/workspace/${businessId}/offer?offer=${encodeURIComponent(offerId)}`
+    : `/workspace/${businessId}/offer`) as Href;
 
-const newId = (): string =>
-  `offer_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+const views = (n: number): string => `${n} ${n === 1 ? 'view' : 'views'}`;
 
 export default function WorkspaceOffersScreen() {
   const { businessId } = useLocalSearchParams<{ businessId: string }>();
@@ -67,48 +58,49 @@ export default function WorkspaceOffersScreen() {
   const colors = useColors();
   const router = useRouter();
   const { currentUser } = useAuth();
+  const [tab, setTab] = useState<Tab>('live');
 
-  const { data, loading, error, reload } = useAsync(async () => {
+  const { data, loading, error, reload, refresh } = useAsync(async () => {
     const business = await repos.businesses.getById(businessId);
     if (!business) return null;
     const employees = await repos.employees.listByBusiness(business.id);
     const meEmployee = employees.find((e) => e.userId && e.userId === currentUser?.id);
     const isMember = isBusinessTeamMember(business, meEmployee, currentUser);
     const canUse = canAccessService(business, meEmployee, currentUser, 'offers');
-    return { business, isMember, canUse };
+    // Counts are a nice-to-have on this screen — never let them blank it.
+    const stats: OfferViewStats[] = canUse
+      ? await repos.businesses.listOfferViews(business.id).catch(() => [])
+      : [];
+    return { business, isMember, canUse, stats };
   }, [businessId, currentUser?.id]);
 
-  // The offer being built or edited. `editingId` null = building a new one.
-  const [open, setOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [tag, setTag] = useState('');
-  const [emoji, setEmoji] = useState('🎉');
-  const [imageUrl, setImageUrl] = useState<string | undefined>();
-  const [videoUrl, setVideoUrl] = useState<string | undefined>();
-  const [price, setPrice] = useState('');
-  const [lines, setLines] = useState<OfferLine[]>([]);
-  const [formError, setFormError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  // Coming back from the editor: show what was just saved.
+  const focusedOnce = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (focusedOnce.current) refresh();
+      focusedOnce.current = true;
+    }, [refresh]),
+  );
 
   const business = data?.business;
   const offers = useMemo(
     () => [...(business?.offers ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
     [business?.offers],
   );
-  const catalog = useMemo(() => (business ? pickableOfferings(business) : []), [business]);
-  const groups = useMemo(() => {
-    const byGroup = new Map<string, PickableOffering[]>();
-    catalog.forEach((item) => {
-      const list = byGroup.get(item.group) ?? [];
-      list.push(item);
-      byGroup.set(item.group, list);
+  const byTab = useMemo(() => {
+    const now = Date.now();
+    const out: Record<Tab, Offer[]> = { live: [], scheduled: [], past: [] };
+    offers.forEach((o) => {
+      const s = offerStatus(o, now);
+      out[s === 'live' ? 'live' : s === 'scheduled' ? 'scheduled' : 'past'].push(o);
     });
-    return Array.from(byGroup.entries());
-  }, [catalog]);
-
-  const wasLabel = linesTotalLabel(lines);
+    return out;
+  }, [offers]);
+  const statsById = useMemo(
+    () => new Map((data?.stats ?? []).map((s) => [s.offerId, s])),
+    [data?.stats],
+  );
 
   if (loading) return <LoadingView />;
   if (error) return <ErrorView message={error.message} onRetry={reload} />;
@@ -130,456 +122,295 @@ export default function WorkspaceOffersScreen() {
     );
   }
 
-  const resetForm = () => {
-    setEditingId(null);
-    setTitle('');
-    setDescription('');
-    setTag('');
-    setEmoji('🎉');
-    setImageUrl(undefined);
-    setVideoUrl(undefined);
-    setPrice('');
-    setLines([]);
-    setFormError(null);
-  };
+  // Only offers still on the business count — a deleted offer's views go with it.
+  let totalViews = 0;
+  let todayViews = 0;
+  offers.forEach((o) => {
+    const s = statsById.get(o.id);
+    totalViews += s?.total ?? 0;
+    todayViews += s?.today ?? 0;
+  });
 
-  const startNew = () => {
-    resetForm();
-    setOpen(true);
-  };
-
-  const startEdit = (offer: Offer) => {
-    setEditingId(offer.id);
-    setTitle(offer.title);
-    setDescription(offer.description ?? '');
-    setTag(offer.tag ?? '');
-    setEmoji(offer.emoji ?? '🎉');
-    setImageUrl(offer.imageUrl);
-    setVideoUrl(offer.videoUrl);
-    const amount = parsePrice(offer.price);
-    setPrice(amount === undefined ? '' : String(amount));
-    setLines(offer.lines);
-    setFormError(null);
-    setOpen(true);
-  };
-
-  /** Add one of the business's offerings, or bump its quantity if already in. */
-  const addLine = (item: PickableOffering) => {
-    setFormError(null);
-    setLines((prev) => {
-      const at = prev.findIndex((l) => l.kind === item.kind && l.name === item.name);
-      if (at === -1) {
-        return [...prev, { kind: item.kind, name: item.name, price: item.price, quantity: 1 }];
-      }
-      return prev.map((l, i) => (i === at ? { ...l, quantity: (l.quantity ?? 1) + 1 } : l));
-    });
-  };
-
-  /** Step a line down, dropping it entirely at zero. */
-  const removeLine = (index: number) => {
-    setLines((prev) =>
-      prev.flatMap((l, i) => {
-        if (i !== index) return [l];
-        const qty = (l.quantity ?? 1) - 1;
-        return qty > 0 ? [{ ...l, quantity: qty }] : [];
-      }),
-    );
-  };
-
-  /** Write the whole offers list back onto the business. */
-  const persist = async (next: Offer[], done?: () => void) => {
-    setSaving(true);
-    try {
-      await repos.businesses.update(business.id, { offers: next });
-      reload();
-      done?.();
-    } catch (err) {
-      showAlert('Could not save', err instanceof Error ? err.message : 'Try again.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const submit = async () => {
-    if (!title.trim()) {
-      setFormError('Give the offer a name — that’s the headline customers read.');
-      return;
-    }
-    if (lines.length === 0) {
-      setFormError('Pick at least one thing from your list — an offer is what’s included.');
-      return;
-    }
-    const existing = offers.find((o) => o.id === editingId);
-    const offer: Offer = {
-      id: editingId ?? newId(),
-      title: title.trim(),
-      description: description.trim() || undefined,
-      tag: tag.trim() || undefined,
-      emoji,
-      imageUrl,
-      videoUrl,
-      lines,
-      price: toPriceLabel(price),
-      // Recomputed on every save so the struck-through figure always matches
-      // what the picked items cost right now.
-      wasPrice: wasLabel,
-      active: existing?.active ?? true,
-      createdAt: existing?.createdAt ?? new Date().toISOString(),
-    };
-    const next = existing
-      ? offers.map((o) => (o.id === offer.id ? offer : o))
-      : [offer, ...offers];
-    await persist(next, () => {
-      resetForm();
-      setOpen(false);
-    });
-  };
-
-  const toggleActive = (offer: Offer) =>
-    persist(offers.map((o) => (o.id === offer.id ? { ...o, active: !o.active } : o)));
-
-  const confirmDelete = (offer: Offer) =>
-    showAlert('Delete offer?', `“${offer.title}” will be removed from your page.`, [
-      { text: 'Keep', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => persist(offers.filter((o) => o.id !== offer.id)),
-      },
-    ]);
-
-  // Live preview of the discount as the price is typed.
-  const draftSaving = savingPercent(wasLabel, toPriceLabel(price));
+  const shown = byTab[tab];
+  const liveWithoutReel = byTab.live.some((o) => !o.videoUrl);
 
   return (
-    <Screen scroll>
-      <Stack.Screen options={{ title: 'Offers' }} />
-
-      {currentUser?.id !== business.ownerId && isSuperAdminUser(currentUser) ? (
-        <SuperAdminBanner businessName={business.name} what="offers" />
-      ) : null}
-
-      <Text variant="title" weight="bold">
-        Offers
-      </Text>
-
-      {catalog.length === 0 ? (
-        <Card style={styles.card}>
-          <Text weight="semibold">Nothing to bundle yet</Text>
-          <Text variant="caption" tone="muted">
-            Add your menu, products or services first (Manage › What you provide) — an offer is
-            built from things you already list.
-          </Text>
-        </Card>
-      ) : !open ? (
-        <Button title="＋ Create an offer" onPress={startNew} />
-      ) : null}
-
-      {/* ── The builder ── */}
-      {open ? (
-        <Card style={styles.card}>
-          <Text weight="semibold" style={styles.formTitle}>
-            {editingId ? 'Edit offer' : 'New offer'}
-          </Text>
-
-          <Input placeholder="Cold coffee + sandwich" value={title} onChangeText={setTitle} />
-          <View style={styles.field}>
-            <Input
-              placeholder="What's in it (optional)"
-              value={description}
-              onChangeText={setDescription}
-              multiline
+    <Screen padded={false}>
+      <Stack.Screen
+        options={{
+          title: 'Offers',
+          headerRight: () => (
+            <Button
+              title="New Offer"
+              icon="plus"
+              size="sm"
+              onPress={() => router.push(editorHref(business.id))}
             />
-          </View>
+          ),
+        }}
+      />
+      <ScrollView contentContainerStyle={styles.body}>
+        {currentUser?.id !== business.ownerId && isSuperAdminUser(currentUser) ? (
+          <SuperAdminBanner businessName={business.name} what="offers" />
+        ) : null}
 
-          {/* What's included, picked from the business's own lists. */}
-          <Text variant="label" weight="semibold" style={styles.label}>
-            What’s included
-          </Text>
-          {lines.length > 0 ? (
-            <View style={styles.picked}>
-              {lines.map((line, i) => (
-                <View key={`${line.kind}-${line.name}-${i}`} style={styles.pickedRow}>
-                  <Text style={styles.pickedName}>{offerLineLabel(line)}</Text>
-                  {line.price ? (
-                    <Text variant="caption" tone="muted">
-                      {line.price}
-                    </Text>
-                  ) : null}
-                  <Text tone="danger" weight="semibold" onPress={() => removeLine(i)}>
-                    ✕
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text variant="caption" tone="muted" style={styles.label}>
-              Tap anything below to add it. Tap it again for a second one.
+        <Text tone="muted">Manage your local discounts and instant deals.</Text>
+
+        <View style={[styles.stats, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+          <View style={styles.stat}>
+            <Text variant="caption" tone="muted" style={styles.eyebrow}>
+              Active
             </Text>
-          )}
-
-          {groups.map(([group, items]) => (
-            <View key={group}>
-              <Text variant="caption" weight="bold" tone="muted" style={styles.groupTitle}>
-                {group.toUpperCase()}
+            <View style={styles.statValueRow}>
+              <Text variant="title" weight="bold">
+                {byTab.live.length}
               </Text>
-              <View style={styles.chipRow}>
-                {items.map((item, i) => (
-                  <Tag
-                    key={`${item.kind}-${item.name}-${i}`}
-                    label={item.price ? `${item.name} · ${item.price}` : item.name}
-                    onPress={() => addLine(item)}
-                    style={styles.chip}
-                  />
-                ))}
-              </View>
+              {byTab.live.length > 0 ? (
+                <View style={[styles.statDot, { backgroundColor: colors.success }]} />
+              ) : null}
             </View>
-          ))}
-
-          {/* Price — normal total is computed, offer price is typed. */}
-          <Text variant="label" weight="semibold" style={styles.label}>
-            Offer price
-          </Text>
-          <View style={styles.priceRow}>
-            <View style={styles.priceField}>
-              <Input
-                placeholder="₹"
-                value={price}
-                onChangeText={(t) => setPrice(sanitizePriceInput(t))}
-                keyboardType="numeric"
-              />
-            </View>
-            <View style={styles.priceInfo}>
-              {wasLabel ? (
-                <Text variant="caption" tone="muted">
-                  Normally {wasLabel}
-                  {draftSaving !== undefined ? ` · saves ${draftSaving}%` : ''}
-                </Text>
-              ) : (
-                <Text variant="caption" tone="muted">
-                  Add priced items to show a “was” price.
-                </Text>
-              )}
-            </View>
-          </View>
-
-          <Text variant="label" weight="semibold" style={styles.label}>
-            Badge
-          </Text>
-          <View style={styles.chipRow}>
-            {TAG_SUGGESTIONS.map((t) => (
-              <Tag
-                key={t}
-                label={t}
-                selected={tag === t}
-                onPress={() => setTag(tag === t ? '' : t)}
-                style={styles.chip}
-              />
-            ))}
-          </View>
-          <Input placeholder="Or type your own badge" value={tag} onChangeText={setTag} />
-
-          <Text variant="label" weight="semibold" style={styles.label}>
-            Icon
-          </Text>
-          <View style={styles.chipRow}>
-            {EMOJI_SUGGESTIONS.map((e) => (
-              <Tag
-                key={e}
-                label={e}
-                selected={emoji === e}
-                onPress={() => setEmoji(e)}
-                style={styles.chip}
-              />
-            ))}
-          </View>
-
-          {/* One photo, used as the background if this offer is ever promoted
-              onto the Home ad slot. Without it the card falls back to the icon
-              above on a colored panel. */}
-          <View style={styles.field}>
-            <PhotosField
-              label="Photo (optional) — the picture on your ad"
-              value={imageUrl ? [imageUrl] : []}
-              onChange={(photos) => setImageUrl(photos[0])}
-              max={1}
-            />
-          </View>
-
-          {/* The reel. Same offer, better creative — it costs nothing extra and
-              plays full-screen in the deals feed, where a still photo would
-              just sit there. The photo above stays the poster frame. */}
-          <View style={styles.field}>
-            <VideoField
-              label="Video ad (optional) — your reel"
-              value={videoUrl}
-              onChange={setVideoUrl}
-              hint={`Up to ${MAX_SECONDS}s, filmed upright. It plays full-screen in Deals near you; the photo above is what shows everywhere else.`}
-            />
-          </View>
-
-          {formError ? (
-            <Text variant="caption" tone="danger" style={styles.label}>
-              {formError}
+            <Text variant="caption" tone="muted">
+              Deals live now
             </Text>
-          ) : null}
+          </View>
+          <View style={[styles.statRule, { backgroundColor: colors.border }]} />
+          <View style={styles.stat}>
+            <Text variant="caption" tone="muted" style={styles.eyebrow}>
+              Views
+            </Text>
+            <Text variant="title" weight="bold">
+              {totalViews}
+            </Text>
+            <Text
+              variant="caption"
+              tone={todayViews > 0 ? 'success' : 'muted'}
+              weight={todayViews > 0 ? 'semibold' : undefined}
+            >
+              {todayViews > 0 ? `↑ ${todayViews} today` : 'None yet today'}
+            </Text>
+          </View>
+        </View>
 
-          <View style={styles.actions}>
-            <View style={styles.action}>
-              <Button
-                title="Cancel"
-                variant="ghost"
-                onPress={() => {
-                  resetForm();
-                  setOpen(false);
-                }}
-              />
+        <SegmentedControl
+          options={[
+            { id: 'live', label: `Live now (${byTab.live.length})` },
+            { id: 'scheduled', label: `Scheduled (${byTab.scheduled.length})` },
+            { id: 'past', label: `Past / Expired (${byTab.past.length})` },
+          ]}
+          value={tab}
+          onChange={setTab}
+          fill
+        />
+
+        {shown.map((offer) => (
+          <OfferCard
+            key={offer.id}
+            offer={offer}
+            viewCount={statsById.get(offer.id)?.total ?? 0}
+            onEdit={() => router.push(editorHref(business.id, offer.id))}
+          />
+        ))}
+
+        {shown.length === 0 ? (
+          <View style={[styles.empty, { borderColor: colors.border }]}>
+            <Text weight="semibold">
+              {tab === 'live'
+                ? 'No live offers'
+                : tab === 'scheduled'
+                  ? 'Nothing scheduled'
+                  : 'Nothing past or paused'}
+            </Text>
+            <Text variant="caption" tone="muted" style={styles.emptyText}>
+              {tab === 'live'
+                ? offers.length === 0
+                  ? 'A good first one: a photo or short reel of something people already love, with a little off the price.'
+                  : 'Create a new one, or edit a past one to run it again.'
+                : tab === 'scheduled'
+                  ? 'Pick a later start when you create an offer, and it waits here until then.'
+                  : 'Offers you pause or that pass their end date land here. Edit one to run it again.'}
+            </Text>
+          </View>
+        ) : null}
+
+        {/* A real tip, not a made-up stat: reels get the full-screen slot. */}
+        {liveWithoutReel ? (
+          <View style={[styles.tip, { backgroundColor: colors.brandSoft, borderColor: colors.border }]}>
+            <View style={[styles.tipIcon, { backgroundColor: colors.surface }]}>
+              <Text>💡</Text>
             </View>
-            <View style={styles.action}>
-              <Button
-                title={saving ? 'Saving…' : editingId ? 'Save changes' : 'Create offer'}
-                onPress={submit}
-                disabled={saving}
-              />
+            <View style={styles.tipText}>
+              <Text variant="caption" weight="bold" tone="brand" style={styles.eyebrow}>
+                Workspace tip
+              </Text>
+              <Text variant="caption">
+                Offers with a short upright <Text variant="caption" weight="bold">video reel</Text>{' '}
+                play full-screen in Deals near you — a photo-only offer shows as a still.
+              </Text>
             </View>
           </View>
-        </Card>
-      ) : null}
+        ) : null}
+      </ScrollView>
 
-      {/* ── What's running ── */}
-      {offers.length > 0 ? (
-        <Text variant="label" weight="semibold" style={styles.listHeading}>
-          Your offers
-        </Text>
-      ) : null}
-
-      {offers.map((offer) => {
-        const live = isOfferLive(offer);
-        const saving = offerSavingPercent(offer);
-        return (
-          <Card key={offer.id} style={styles.card}>
-            <View style={styles.offerTop}>
-              <Text variant="heading">{offer.emoji ?? '🎉'}</Text>
-              <View style={styles.offerHead}>
-                <Text weight="semibold">{offer.title}</Text>
-                <Text variant="caption" tone={live ? 'success' : 'muted'}>
-                  {live ? '● Live on your page' : '○ Paused — hidden from customers'}
-                </Text>
-              </View>
-              {/* A reel plays full-screen in the deals feed instead of sitting
-                  as a still — worth saying at a glance which offers have one. */}
-              {offer.videoUrl ? <Tag label="🎬 Reel" /> : null}
-              {offer.tag ? <Tag label={offer.tag} tone="brand" /> : null}
-            </View>
-
-            {offer.lines.length > 0 ? (
-              <Text variant="caption" tone="muted" style={styles.offerLines}>
-                {offer.lines.map(offerLineLabel).join(' + ')}
-              </Text>
-            ) : null}
-
-            <View style={[styles.offerPrice, { borderTopColor: colors.border }]}>
-              {offer.price ? (
-                <Text weight="bold" tone="brand">
-                  {offer.price}
-                </Text>
-              ) : null}
-              {offer.wasPrice ? (
-                <Text
-                  variant="caption"
-                  tone="muted"
-                  style={{ textDecorationLine: 'line-through' }}
-                >
-                  {offer.wasPrice}
-                </Text>
-              ) : null}
-              {saving !== undefined ? (
-                <Text variant="caption" weight="bold" tone="success">
-                  Save {saving}%
-                </Text>
-              ) : null}
-            </View>
-
-            <View style={[styles.switchRow, { borderTopColor: colors.border }]}>
-              <Text>Show on my page</Text>
-              <Switch value={offer.active} onValueChange={() => toggleActive(offer)} />
-            </View>
-
-            {/* Only a LIVE offer can be promoted — a paused one has nothing to
-                show. The ad slot itself is explained on the promote screen. */}
-            {live ? (
-              <View style={styles.cta}>
-                <Button
-                  title="📣 Promote this offer"
-                  variant="secondary"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/promote/[businessId]',
-                      params: { businessId: business.id, offer: offer.id },
-                    })
-                  }
-                />
-              </View>
-            ) : null}
-
-            <View style={styles.actions}>
-              <View style={styles.action}>
-                <Button title="Edit" variant="secondary" onPress={() => startEdit(offer)} />
-              </View>
-              <View style={styles.action}>
-                <Button title="Delete" variant="ghost" onPress={() => confirmDelete(offer)} />
-              </View>
-            </View>
-          </Card>
-        );
-      })}
-
-      {offers.length === 0 && !open && catalog.length > 0 ? (
-        <Text tone="muted" style={styles.empty}>
-          No offers yet. A good first one: pair two things people already buy together and knock a
-          little off the total.
-        </Text>
-      ) : null}
+      <BottomActionBar
+        primary={{
+          title: 'Create New Offer',
+          icon: 'plus',
+          onPress: () => router.push(editorHref(business.id)),
+        }}
+      />
     </Screen>
   );
 }
 
+function OfferCard({
+  offer,
+  viewCount,
+  onEdit,
+}: {
+  offer: Offer;
+  viewCount: number;
+  onEdit: () => void;
+}) {
+  const colors = useColors();
+  const status = offerStatus(offer);
+  const saving = offerSavingPercent(offer);
+  const when = offerEndsLabel(offer);
+  const thumb = offer.imageUrl ? thumbUrl(offer.imageUrl) : undefined;
+
+  return (
+    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+      <View style={styles.cardTags}>
+        {status === 'live' ? (
+          <Tag label="Live on Deals Feed" tone="status" dot size="sm" />
+        ) : status === 'scheduled' ? (
+          <Tag label="Scheduled" tone="soft" dot size="sm" />
+        ) : status === 'paused' ? (
+          <Tag label="Paused" size="sm" />
+        ) : (
+          <Tag label="Expired" tone="danger" size="sm" />
+        )}
+        {offer.tag ? <Tag label={offer.tag} tone="warning" size="sm" /> : null}
+      </View>
+
+      <Pressable onPress={onEdit} style={styles.cardBody} accessibilityRole="button">
+        <View style={[styles.thumb, { backgroundColor: colors.brandSoft }]}>
+          {thumb ? (
+            <Image source={{ uri: thumb }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ) : (
+            <Text style={styles.thumbEmoji}>{offer.emoji ?? '🎉'}</Text>
+          )}
+          <View style={styles.thumbLabel}>
+            <Text variant="caption" weight="semibold" style={styles.onDark}>
+              {offer.videoUrl ? '▶ Reel' : thumb ? 'Photo Ad' : 'No media'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.cardInfo}>
+          <Text weight="bold" numberOfLines={2}>
+            {offer.title}
+          </Text>
+          {offer.price || offer.wasPrice ? (
+            <View style={styles.priceRow}>
+              {offer.price ? (
+                <Text variant="heading" weight="bold" tone="brand">
+                  {offer.price}
+                </Text>
+              ) : null}
+              {offer.wasPrice ? (
+                <Text tone="muted" style={styles.struck}>
+                  {offer.wasPrice}
+                </Text>
+              ) : null}
+              {saving !== undefined ? <Tag label={`${saving}% OFF`} tone="status" size="sm" /> : null}
+            </View>
+          ) : null}
+          <View style={styles.whenRow}>
+            <Icon name="clock" size={14} color={when.urgent ? colors.cta : colors.textMuted} />
+            <Text variant="caption" tone={when.urgent ? 'cta' : 'muted'} style={styles.whenText}>
+              {when.text}
+            </Text>
+          </View>
+        </View>
+      </Pressable>
+
+      <View style={[styles.cardFoot, { borderTopColor: colors.border }]}>
+        <View style={styles.footLeft}>
+          <Icon name="eye" size={16} color={colors.textMuted} />
+          <Text variant="caption" tone="muted">
+            {views(viewCount)}
+          </Text>
+        </View>
+        <Button title="Edit" icon="edit" variant="secondary" size="sm" onPress={onEdit} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  card: { marginBottom: spacing.md },
-  formTitle: { marginBottom: spacing.md },
-  field: { marginTop: spacing.sm },
-  label: { marginTop: spacing.md, marginBottom: spacing.sm },
-  groupTitle: { marginTop: spacing.sm, marginBottom: spacing.xs, letterSpacing: 0.5 },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.sm },
-  chip: { marginRight: 0 },
-  picked: { gap: spacing.xs, marginBottom: spacing.sm },
-  pickedRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  pickedName: { flex: 1 },
-  priceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  priceField: { width: 110 },
-  priceInfo: { flex: 1 },
-  cta: { marginTop: spacing.md },
-  actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  action: { flex: 1 },
-  listHeading: { marginTop: spacing.lg, marginBottom: spacing.sm },
-  offerTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  offerHead: { flex: 1 },
-  offerLines: { marginTop: spacing.sm },
-  offerPrice: {
+  body: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing.xl },
+  stats: {
     flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-    paddingTop: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
   },
-  switchRow: {
+  stat: { flex: 1, paddingHorizontal: spacing.md, gap: 2 },
+  statRule: { width: 1, marginVertical: spacing.xs },
+  statValueRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statDot: { width: 8, height: 8, borderRadius: 4 },
+  eyebrow: { textTransform: 'uppercase', letterSpacing: 1 },
+  card: { borderWidth: 1, borderRadius: radius.lg, padding: spacing.md, gap: spacing.sm },
+  cardTags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  cardBody: { flexDirection: 'row', gap: spacing.md },
+  thumb: {
+    width: 92,
+    height: 92,
+    borderRadius: radius.md,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbEmoji: { fontSize: 34, lineHeight: 42 },
+  thumbLabel: {
+    position: 'absolute',
+    left: 6,
+    bottom: 6,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  onDark: { color: '#fff' },
+  cardInfo: { flex: 1, gap: 4 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
+  struck: { textDecorationLine: 'line-through' },
+  whenRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  whenText: { flex: 1 },
+  cardFoot: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: spacing.sm,
-    paddingTop: spacing.sm,
+    gap: spacing.sm,
     borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: spacing.sm,
   },
-  empty: { marginTop: spacing.md },
+  footLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  empty: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  emptyText: { textAlign: 'center', marginTop: spacing.xs },
+  tip: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    alignItems: 'flex-start',
+  },
+  tipIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  tipText: { flex: 1, gap: 2 },
 });

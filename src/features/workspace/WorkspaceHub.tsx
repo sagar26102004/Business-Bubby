@@ -4,7 +4,8 @@
  * passed in as `header`) and the `/workspace/[businessId]` route.
  *
  * Top to bottom:
- *  - open-state banner (from opening hours — there is no "accepting orders"
+ *  - the "Offers & deals" action (members with Offers access), or for everyone
+ *    else the open-state banner (from opening hours — there is no "accepting orders"
  *    switch in the data, so this reports, it doesn't toggle),
  *  - the driver's live-share card and the join-request banner when relevant,
  *  - "Today's pulse": a 2×2 of numbers computed from what this screen already
@@ -493,6 +494,29 @@ export function WorkspaceHub({ businessId, header }: WorkspaceHubProps) {
     <>
       <BackgroundLocationDisclosure {...disclosureProps} />
 
+      {/* Offers & deals leads the hub, styled like the two primary actions
+          below. A member without Offers access keeps the open-state banner. */}
+      {canUse('offers') ? (
+        <>
+          <BigAction
+            icon="megaphone"
+            title="Offers & deals"
+            sub={
+              liveOfferCount > 0
+                ? `${liveOfferCount} live now · create, edit or promote`
+                : 'Post a deal with a photo or reel — shows in Deals near you'
+            }
+            color={colors.brandText}
+            onPress={() => router.push(`${base}/offers` as Href)}
+          />
+          <View style={styles.roleRow}>
+            <Tag label={`You: ${role}`} tone="soft" size="sm" />
+            {hasChatAccess ? <Tag label="Chat access" lineIcon="chat" size="sm" /> : null}
+            {takesCalls ? <Tag label="Takes calls" lineIcon="phone" size="sm" /> : null}
+          </View>
+        </>
+      ) : (
+      <>
       {/* Open-state banner */}
       <View
         style={[
@@ -522,6 +546,8 @@ export function WorkspaceHub({ businessId, header }: WorkspaceHubProps) {
         {hasChatAccess ? <Tag label="Chat access" lineIcon="chat" size="sm" /> : null}
         {takesCalls ? <Tag label="Takes calls" lineIcon="phone" size="sm" /> : null}
       </View>
+      </>
+      )}
 
       {/* A driver's headline control: share live location for the shift. */}
       {myVehicles.length > 0 ? (

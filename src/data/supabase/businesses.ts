@@ -4,7 +4,7 @@
  * business (a customer can't update a business under RLS) — they're computed
  * live from the `reviews` table on read, which also keeps them drift-free.
  */
-import type { Business, Employee, ProductItem } from '@/domain/types';
+import type { Business, Employee, OfferViewStats, ProductItem } from '@/domain/types';
 import { normalizeRole } from '@/domain/roles';
 import type {
   BusinessQuery,
@@ -288,6 +288,35 @@ export function createSupabaseBusinesses(): BusinessRepository {
         await captureBusinessOfferings(next);
       }
       return this.getById(id) as Promise<Business>;
+    },
+
+    // Viewers are strangers to the business and can't write its row, so a view
+    // goes through the SECURITY DEFINER `offer_record_view` RPC (migration
+    // 0025), which only ever adds 1 to an offer that exists. Never throws.
+    async recordOfferView(businessId: string, offerId: string): Promise<void> {
+      try {
+        await sb().rpc('offer_record_view', { p_business_id: businessId, p_offer_id: offerId });
+      } catch {
+        /* engagement, not billing */
+      }
+    },
+
+    // RLS lets only the business's team read `offer_views`.
+    async listOfferViews(businessId: string): Promise<OfferViewStats[]> {
+      const { data, error } = await sb()
+        .from('offer_views')
+        .select('offer_id, day, views')
+        .eq('business_id', businessId);
+      if (error) throw error;
+      const today = new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10);
+      const byOffer = new Map<string, OfferViewStats>();
+      for (const row of (data ?? []) as { offer_id: string; day: string; views: number }[]) {
+        const s = byOffer.get(row.offer_id) ?? { offerId: row.offer_id, total: 0, today: 0 };
+        s.total += Number(row.views);
+        if (row.day === today) s.today += Number(row.views);
+        byOffer.set(row.offer_id, s);
+      }
+      return [...byOffer.values()];
     },
 
     async reassignOwner(id: string, newOwnerId: string): Promise<Business> {

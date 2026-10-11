@@ -66,6 +66,7 @@ import { Icon, Text } from '@/components/ui';
 import { DealReelCard, REEL } from '@/features/ads/DealReelCard';
 import { radius, spacing } from '@/theme/theme';
 import { isDemoViewer, isListedPublicly } from '@/lib/onHold';
+import { countOfferView } from '@/features/businesses/offerViews';
 
 /**
  * The ranges on offer live in domain/ads.ts beside the plans, so "views within
@@ -154,6 +155,9 @@ export default function DealsScreen() {
     if (!first || first.index == null) return;
     setActiveIndex(first.index);
     const placement = first.item as AdPlacement;
+    // Every deal on screen is one of a business's offers — count it for the
+    // business's own Offers screen (paid or not; deduped per session).
+    countOfferView(repos.businesses, placement.business.id, placement.offer.id);
     const campaignId = placement.campaign?.id;
     if (campaignId && !counted.current.has(campaignId)) {
       counted.current.add(campaignId);

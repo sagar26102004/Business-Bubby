@@ -491,3 +491,36 @@ re-derivation from the Supabase diff is required:
 - **DB/migration:** none — document model, both fields live inside `data jsonb`.
 - **Verify:** `npm run typecheck` in `backend/`; enrol from a business that has a joining form
   and confirm the pending request on Workspace › Members prints "📋 Their details".
+
+## [SYNC-049] Offer views + scheduled offers (`Offer.startsAt`)
+
+- **Area:** BusinessRepository / offers (two new methods) + offer liveness
+- **Supabase change:** `src/data/supabase/businesses.ts` gains `recordOfferView`
+  (calls RPC `offer_record_view(p_business_id, p_offer_id)`, swallows every error) and
+  `listOfferViews` (selects `offer_id, day, views` from `offer_views` for the business and
+  folds them into `{ offerId, total, today }`, "today" = the India-time date
+  `new Date(Date.now() + 5.5h).toISOString().slice(0, 10)`).
+- **Domain/interface (already shared):** `Offer.startsAt?: string` (ISO; before it the offer
+  is "scheduled" — `isOfferLive` returns false), new `OfferViewStats` type in
+  `src/domain/types.ts`; `recordOfferView(businessId, offerId): Promise<void>` and
+  `listOfferViews(businessId): Promise<OfferViewStats[]>` on `BusinessRepository`. Mock done.
+- **Path B — backend/:**
+  1. `backend/src/domain/types.ts` — add `startsAt?: string` to `Offer`, add `OfferViewStats`.
+  2. `backend/src/domain/offers.ts` — `isOfferLive`: `if (offer.startsAt && new Date(offer.startsAt).getTime() > now) return false;`
+     right after the `active` check (keeps ads/placements from showing a scheduled offer).
+  3. Service (`backend/src/services/businesses.ts`): `recordOfferView(businessId, offerId)` —
+     `select offer_record_view($1::uuid, $2)` via `prisma.$executeRaw` (the function already
+     refuses unknown offers); `listOfferViews(businessId)` — raw select from `offer_views`
+     and fold exactly like the Supabase version.
+  4. Router: `POST /businesses/:id/offers/:offerId/views` — PUBLIC (no auth required; anon
+     viewers count), always 204, never errors to the client.
+     `GET /businesses/:id/offer-views` — `requireBusinessMember` (owner/employee/super-admin),
+     returns `OfferViewStats[]`.
+- **Path B — src/data/api/:** already calls those two paths in `createApiBusinesses()`
+  (`recordOfferView` swallows errors; `listOfferViews` returns `[]` on failure until the
+  routes exist) — just remove the "[SYNC-049]" stub comment once the routes land.
+- **DB/migration:** `supabase/migrations/0025_offer_views.sql` (table `offer_views`, RLS
+  select for business members, SECURITY DEFINER `offer_record_view`). Shared DB — apply once.
+- **Verify:** `npm run typecheck` in `backend/`; open a business page as a customer, then the
+  owner's Workspace › Offers shows 1 view on that offer; an offer with a future `startsAt`
+  sits under "Scheduled" and is absent from the deals feed.

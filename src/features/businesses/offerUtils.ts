@@ -52,6 +52,52 @@ export function offerSavingPercent(offer: Offer): number | undefined {
  */
 export { isOfferLive, liveOffers } from '@/domain/offers';
 
+/**
+ * Where an offer stands, for the workspace list: live, scheduled (its start is
+ * still ahead), paused (switched off by hand), or ended (past its end date).
+ * The list's "Past / Expired" tab holds both paused and ended.
+ */
+export type OfferStatus = 'live' | 'scheduled' | 'paused' | 'ended';
+
+export function offerStatus(offer: Offer, now: number = Date.now()): OfferStatus {
+  if (offer.endsAt && new Date(offer.endsAt).getTime() < now) return 'ended';
+  if (!offer.active) return 'paused';
+  if (offer.startsAt && new Date(offer.startsAt).getTime() > now) return 'scheduled';
+  return 'live';
+}
+
+const dayLabel = (d: Date): string =>
+  d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+
+/**
+ * The "when" line on an offer card, and whether it's urgent (under a day
+ * left): "Expires in 4h 30m", "Ends Sat 12 Oct", "Ended 10 Oct", "Starts Sat
+ * 12 Oct", "Paused", "Runs until you pause it".
+ */
+export function offerEndsLabel(
+  offer: Offer,
+  now: number = Date.now(),
+): { text: string; urgent: boolean } {
+  const status = offerStatus(offer, now);
+  if (status === 'paused') return { text: 'Paused — hidden from customers', urgent: false };
+  if (status === 'scheduled' && offer.startsAt) {
+    const start = new Date(offer.startsAt);
+    const time = start.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+    return { text: `Starts ${dayLabel(start)}, ${time}`, urgent: false };
+  }
+  if (!offer.endsAt) return { text: 'Runs until you pause it', urgent: false };
+  const end = new Date(offer.endsAt);
+  const left = end.getTime() - now;
+  const day = dayLabel(end);
+  if (left <= 0) return { text: `Ended ${day}`, urgent: false };
+  if (left < 24 * 3600_000) {
+    const h = Math.floor(left / 3600_000);
+    const m = Math.floor((left % 3600_000) / 60_000);
+    return { text: `Expires in ${h > 0 ? `${h}h ` : ''}${m}m`, urgent: true };
+  }
+  return { text: `Ends ${day}`, urgent: false };
+}
+
 /** "2 × Cold coffee" / "Cold coffee" — one line of an offer, for display. */
 export function offerLineLabel(line: OfferLine): string {
   const qty = line.quantity ?? 1;
