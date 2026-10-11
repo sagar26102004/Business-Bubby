@@ -208,7 +208,8 @@ A separate **Next.js** project at `website/` gives every business a free public 
 (`/<business-name>`, plus `/b/<id>` → redirect) that opens without the app, reading the live Supabase
 data with the anon key. It never imports from `src/` (copies live in `website/lib/`, each naming its
 source file), and it is excluded from the app's `tsconfig`. Live at **https://oneplace-website.vercel.app**,
-deployed with the Vercel **CLI** on Sagar's account (`sagar-gajodhar`), never the claude.ai Vercel
+auto-deployed by Vercel on every push to `main` that touches `website/` (Root Directory `website`),
+on Sagar's account (`sagar-gajodhar`, managed with the CLI), never the claude.ai Vercel
 connector, which belongs to someone else. Read `website/README.md` before changing it. The app links
 to it through `src/lib/website.ts` (`WEBSITE_URL` — change it there when a domain lands) and the
 Workspace's **"Your website"** card (`features/workspace/ShareWebsiteCard.tsx`, Share + Open).

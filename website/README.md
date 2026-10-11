@@ -56,13 +56,25 @@ npm run build                # must pass before deploying
 
 ## Deploy (Vercel, Sagar's account via the CLI)
 
-The Vercel project's **Root Directory is `website`**. Env vars on Vercel: `SUPABASE_URL`,
+The Vercel project (`oneplace-website`) is connected to GitHub (`sagar26102004/Business-Bubby`,
+branch `main`) with **Root Directory `website`** — set 2026-10-11; before that it was blank and
+every push failed with "No Next.js version detected". Env vars on Vercel: `SUPABASE_URL`,
 `SUPABASE_ANON_KEY`, and — once a domain exists — `NEXT_PUBLIC_SITE_URL`.
+
+**A push to `main` that touches `website/` deploys it to production by itself.** Pushes that don't
+touch `website/` are skipped (the project's "Ignored Build Step" is `git diff HEAD^ HEAD --quiet -- .`).
+
+To redeploy without a push (e.g. after changing an env var), rebuild the latest deployment:
 
 ```bash
 cd website
-npx vercel deploy --prod
+npx vercel ls oneplace-website            # copy the newest Production URL
+npx vercel redeploy <that-url> --target production
 ```
+
+⚠️ Don't use `npx vercel deploy --prod` from `website/` any more: with Root Directory set, Vercel
+looks for `website/website` and fails. And don't run it from the repo root either — that would
+upload the whole repo, including the gitignored credential files there.
 
 ## Next (Phase 2)
 
