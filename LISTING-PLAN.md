@@ -14,6 +14,8 @@ How real Indore businesses get onto Localo in bulk, one business type at a time 
 | `zomato.ts` | Finds the place's Zomato page in our own browser for the menu rule | No |
 | `add-menus.ts` | Gives **live** food listings that have no menu one (Zomato, then the web), as the super-admin | **Yes** |
 | `list-business.ts` | Signs in as super-admin and publishes each ready folder | **Yes** |
+| `export-contacts.ts` | Outreach list of every published food place (super-admin's listings): `E:\listing\food-contacts.xlsx` (+ `.csv`), business name + contact number, one sheet per city, one row per number. With `--link` each row gets a WhatsApp **Send** link carrying `outreach-message.txt` (sending stays manual). Re-run after each run; Sent?/Notes and the link are kept, new places marked | No (reads only) |
+| `outreach-sender.ts` | Local page that walks the outreach sheet: opens each chat in WhatsApp with the message typed, **you** press send, it records it in `E:\listing\outreach-sent.json` (copied into Sent? on the next export). No daily limit unless `--daily N`; `--city` starts on one city. Never sends by itself: automating WhatsApp gets the number banned | No |
 | `listing-loop.ts` | The unattended schedule: collect → publish, every 30 min | Yes, through the publisher |
 | `start-listing.ps1` | Launcher: own window, keeps Windows awake | — |
 | `listing-lib.ts` | Shared helpers: env, duplicate key, key file | — |
@@ -129,6 +131,8 @@ npx tsx scripts/list-business.ts "E:\listing\cafe" --summary      # what's waiti
 npx tsx scripts/list-business.ts "E:\listing\cafe" --dry-run      # what would happen
 npx tsx scripts/list-business.ts "E:\listing\cafe" [--auto] [--keep]
 npx tsx scripts/add-menus.ts [--dry-run]                          # live listings without a menu
+npx tsx scripts/export-contacts.ts [--link <download url>] [--out <file.xlsx>] [--all-types]   # owner outreach list
+npx tsx scripts/outreach-sender.ts [--city Indore] [--daily N] # http://localhost:8790: open each chat, YOU press send
 npx tsx scripts/listing-loop.ts --hours 0.2 --interval 2 --per-cycle 2 --dry-publish --root <scratch>   # quick test
 ```
 

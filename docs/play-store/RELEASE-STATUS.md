@@ -588,6 +588,27 @@ the push, now has nothing in the app that tells them so. If call delivery become
 theme, the answer is a small customer-facing version (the failing rows and the "Open app
 settings" button, without the test rings or the log), not un-gating this one.
 
+### 9. Release builds are minified with R8
+
+Decided 9 Oct 2026. Play Console flagged 1.1.0 (versionCode 16): **"DEX code optimization is
+below our threshold — Obfuscation (1%)"**, warning that any category under 25% may limit
+visibility and publishing. Cause: nothing ever turned R8 on, so every release shipped raw DEX.
+Fix: `expo-build-properties` with `android.enableMinifyInReleaseBuilds: true` in `app.json`
+(prebuild writes it into `gradle.properties`; both CI workflows and EAS pick it up).
+
+- **Resource shrinking is deliberately left OFF.** `CallNotifications.kt` finds the ringtone by
+  name (`getIdentifier("call_ringtone", "raw", …)`), and so does expo-notifications for custom
+  sounds; a shrinker that misses one silently gives a call no ring. It doesn't affect the score.
+- **Keep rules come from the libraries.** `org.webrtc.**` (LiveKit), Expo `Module` subclasses
+  (expo-modules-core) and React Native ship their own; the call activity, services and receiver
+  are named in the manifest, which R8 always keeps. Add `extraProguardRules` in the plugin config
+  only when a build proves a gap: a `ClassNotFoundException`/`NoSuchMethodError` in release only.
+- `android-aab.yml` **fails the build** if the bundle carries no R8 mapping, and keeps
+  `mapping.txt` as an artifact. Play reads the copy embedded in the bundle for crash traces.
+- ⚠️ **Test the first minified build on a phone before promoting it**, especially an incoming
+  call from a closed app (the lock-screen call screen, Answer/Decline) and an in-call audio route.
+  Those are the reflection/JNI-heavy paths most likely to break only under R8.
+
 ---
 
 ## Fourth pass record — 16 Aug 2026

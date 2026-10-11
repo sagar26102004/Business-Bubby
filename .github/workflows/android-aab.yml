@@ -80,9 +80,9 @@ on:
   workflow_dispatch:
     inputs:
       versionCode:
-        description: 'versionCode — must be higher than every code Play has ever accepted (known burned: 1, 2, 3, 5, 10). Confirm against Test and release → App bundle explorer, NOT the Releases list, before running. Gaps are free — overshoot rather than guess.'
+        description: 'versionCode — must be higher than every code Play has ever accepted (known burned: 1, 2, 3, 5, 10, 16 — 16 is 1.1.0, live on Play). Confirm against Test and release → App bundle explorer, NOT the Releases list, before running. Gaps are free — overshoot rather than guess.'
         required: true
-        default: '11'
+        default: '17'
         type: string
       architectures:
         description: 'CPU architectures to compile'
@@ -280,6 +280,21 @@ jobs:
             exit 1
           fi
 
+      - name: Confirm R8 ran on the bundle
+        # Play flagged 1.1.0 (versionCode 16) for "DEX code optimization: 1%
+        # obfuscation" because release builds were never minified. R8 is turned
+        # on by expo-build-properties (enableMinifyInReleaseBuilds in app.json);
+        # if that ever stops reaching gradle.properties, the bundle silently goes
+        # back to unobfuscated. AGP embeds the R8 mapping in the bundle only when
+        # R8 actually ran, so its absence is the tell.
+        run: |
+          BUNDLE=android/app/build/outputs/bundle/release/app-release.aab
+          if ! unzip -l "$BUNDLE" | grep -q 'proguard.map'; then
+            echo "::error::Bundle has no R8 mapping — minification did not run."
+            exit 1
+          fi
+          echo "Uncompressed DEX bytes: $(unzip -l "$BUNDLE" | grep -E '\.dex$' | awk '{s+=$1} END {print s}')"
+
       - name: Upload the bundle
         uses: actions/upload-artifact@v4
         with:
@@ -287,6 +302,16 @@ jobs:
           path: android/app/build/outputs/bundle/release/app-release.aab
           if-no-files-found: error
           retention-days: 14
+
+      - name: Keep the R8 mapping
+        # Play reads the copy embedded in the bundle; this one is for
+        # de-obfuscating a stack trace by hand (retrace) without the bundle.
+        uses: actions/upload-artifact@v4
+        with:
+          name: localo-r8-mapping
+          path: android/app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Keep the build log on failure
         if: failure()

@@ -6,16 +6,20 @@
  *    business's emoji — carrying three overlay chips: open state / today's
  *    hours, distance, and how many showcase photos there are.
  *  - The identity block on plain paper: name, tagline, ★ rating with the
- *    review count, and the address row with "Get directions ›".
+ *    review count, the address row with "Get directions ›", and — when the
+ *    owner gave one — the phone row: the number, Tap to call (the dialer) and
+ *    Copy.
  *  - The ACTION ROW: four equal tiles — Call · Chat · the business's own door
  *    (Order / Request / Enroll…) · Route — passed in by the page.
  *  - Description, weekly hours and the home-based / rental-distance notes.
  */
-import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Image, Linking, Pressable, StyleSheet, View } from 'react-native';
 import type { Business, PlaceKind, SavedPlace } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
 import { openState, summarizeHours } from '@/domain/hours';
 import { tagEmoji } from '@/domain/intents';
+import { copyText } from '@/lib/clipboard';
 import { haversineKm } from '@/lib/geo';
 import { Icon, Tag, Text, type IconName } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
@@ -208,6 +212,8 @@ export function BusinessHero({
               );
             })
           : null}
+
+        {business.phone?.trim() ? <PhoneRow phone={business.phone.trim()} /> : null}
       </View>
 
       {/* Action row */}
@@ -251,6 +257,87 @@ export function BusinessHero({
           </Text>
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * "+91 98765 43210" from whatever the owner typed. A 10-digit Indian mobile
+ * (with or without the 91 / 0 prefix) is spaced 5-5; anything else is shown
+ * exactly as entered, so a landline with an STD code isn't mangled.
+ */
+export function formatPhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  const local =
+    digits.length === 10
+      ? digits
+      : digits.length === 12 && digits.startsWith('91')
+        ? digits.slice(2)
+        : digits.length === 11 && digits.startsWith('0')
+          ? digits.slice(1)
+          : undefined;
+  return local ? `+91 ${local.slice(0, 5)} ${local.slice(5)}` : raw;
+}
+
+/** The phone row: number, Tap to call (opens the dialer) and Copy. */
+function PhoneRow({ phone }: { phone: string }) {
+  const colors = useColors();
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(t);
+  }, [copied]);
+
+  const shown = formatPhone(phone);
+  const dial = () => {
+    Linking.openURL(`tel:${shown.replace(/[^\d+]/g, '')}`).catch(() => {});
+  };
+  const copy = async () => {
+    if (await copyText(shown)) setCopied(true);
+  };
+
+  return (
+    <View style={[styles.phoneBlock, { borderTopColor: colors.border }]}>
+      <View style={styles.phoneLine}>
+        <Icon name="phone" size={16} color={colors.text} />
+        <Text variant="label" weight="bold">
+          Direct line:
+        </Text>
+        <Text variant="label" weight="bold" selectable style={styles.flex} numberOfLines={1}>
+          {shown}
+        </Text>
+      </View>
+      <View style={styles.phoneChips}>
+        <Pressable
+          onPress={dial}
+          accessibilityRole="button"
+          accessibilityLabel={`Call ${shown}`}
+          style={({ pressed }) => [
+            styles.phoneChip,
+            { backgroundColor: colors.surfaceAlt },
+            pressed && styles.pressed,
+          ]}
+        >
+          <Icon name="phone" size={14} color={colors.text} />
+          <Text variant="caption" weight="bold">
+            Tap to call
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={copy}
+          accessibilityRole="button"
+          accessibilityLabel="Copy phone number"
+          style={({ pressed }) => [
+            styles.phoneChip,
+            { backgroundColor: copied ? colors.successSoft : colors.surfaceAlt },
+            pressed && styles.pressed,
+          ]}
+        >
+          <Icon name={copied ? 'check' : 'copy'} size={14} color={colors.text} />
+          <Text variant="caption">{copied ? 'Copied' : 'Copy'}</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -316,6 +403,22 @@ const styles = StyleSheet.create({
   },
   directions: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   note: { marginTop: spacing.xs },
+  phoneBlock: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: spacing.sm,
+  },
+  phoneLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  phoneChips: { flexDirection: 'row', gap: spacing.sm },
+  phoneChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+  },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
   action: {
     flex: 1,

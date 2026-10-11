@@ -50,6 +50,7 @@ import {
   loadKeyFile,
   loadLiveListings,
   need,
+  signIn,
   type KnownListing,
 } from './listing-lib';
 
@@ -142,21 +143,6 @@ async function uploadImage(sb: SupabaseClient, file: string): Promise<string> {
     throw new Error(`Cloudinary refused ${basename(file)}: ${body?.error?.message ?? res.status}`);
   }
   return storedUrl(body.secure_url, 'image');
-}
-
-/* ───────────────────────────── sign-in ──────────────────────────────────── */
-
-/** Mirrors src/data/supabase/auth.ts: `<login>@localo.app`, then the phone lookup RPC. */
-async function signIn(sb: SupabaseClient): Promise<string> {
-  const login = need('LISTING_LOGIN').trim().toLowerCase();
-  const password = need('LISTING_PASSWORD');
-  let res = await sb.auth.signInWithPassword({ email: `${login}@localo.app`, password });
-  if (res.error && /^\d+$/.test(login)) {
-    const { data: email } = await sb.rpc('resolve_login_email', { p_phone: login, p_password: password });
-    if (typeof email === 'string' && email) res = await sb.auth.signInWithPassword({ email, password });
-  }
-  if (res.error || !res.data.user) throw new Error(`Sign-in failed: ${res.error?.message ?? 'no user'}`);
-  return res.data.user.id;
 }
 
 /* ───────────────────────────── one folder ───────────────────────────────── */

@@ -8,7 +8,8 @@
  *
  * Bottom half rotates the written reviews one card at a time, the same motion
  * as the showcase and the home screen's deals, so a long review list never
- * turns the page into a wall of text.
+ * turns the page into a wall of text. Star-only ratings count in the score and
+ * the bars but get no card — the stars already say everything they would.
  */
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
@@ -49,7 +50,8 @@ export function ReviewsSection({
   }, [reviews]);
 
   const written = reviews.length;
-  const shown = filter ? reviews.filter((r) => r.rating === filter) : reviews;
+  const withText = reviews.filter((r) => r.comment?.trim());
+  const shown = filter ? withText.filter((r) => r.rating === filter) : withText;
   const avg = ratingAvg ?? (written > 0 ? reviews.reduce((s, r) => s + r.rating, 0) / written : undefined);
 
   return (
@@ -133,6 +135,7 @@ export function ReviewsSection({
         <View style={styles.slider}>
           <AutoCarousel
             items={shown}
+            showDots={false}
             keyExtractor={(r) => r.id}
             renderItem={(r) => (
               <Card style={styles.reviewCard}>
@@ -149,7 +152,7 @@ export function ReviewsSection({
                   {formatReviewDate(r)}
                 </Text>
                 <Text variant="label" style={styles.reviewComment} numberOfLines={5}>
-                  {r.comment?.trim() || `Rated ${r.rating} out of 5.`}
+                  {r.comment?.trim()}
                 </Text>
               </Card>
             )}
@@ -158,7 +161,7 @@ export function ReviewsSection({
       ) : (
         <Text variant="label" tone="muted" style={styles.empty}>
           {filter
-            ? `No ${filter}★ reviews yet.`
+            ? `No written ${filter}★ reviews yet.`
             : 'No written reviews yet — be the first to rate this business.'}
         </Text>
       )}

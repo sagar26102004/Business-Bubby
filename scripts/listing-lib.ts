@@ -163,6 +163,24 @@ export const describeDuplicate = (d: NonNullable<DuplicateCheck>) =>
  */
 export const KEYS_FILE = 'E:/listing/published-keys.json';
 
+/**
+ * Who the outreach sender has messaged, keyed by listing id — written by
+ * outreach-sender.ts, read back into the sheet's Sent? column by export-contacts.ts.
+ */
+export const OUTREACH_LOG = 'E:/listing/outreach-sent.json';
+export interface OutreachMark {
+  status: 'sent' | 'skipped';
+  at: string;
+  number: string;
+}
+export function readOutreachLog(path = OUTREACH_LOG): Record<string, OutreachMark> {
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
+}
+export function writeOutreachLog(log: Record<string, OutreachMark>, path = OUTREACH_LOG): void {
+  writeFileSync(`${path}.tmp`, JSON.stringify(log, null, 2));
+  renameSync(`${path}.tmp`, path);
+}
+
 export interface KeyEntry {
   key: string;
   name: string;
@@ -189,4 +207,18 @@ export function appendKey(entry: Omit<KeyEntry, 'key' | 'publishedAt'>, path = K
   all.push({ key: normName(entry.name), ...entry, publishedAt: new Date().toISOString() });
   writeFileSync(`${path}.tmp`, JSON.stringify(all, null, 2));
   renameSync(`${path}.tmp`, path);
+}
+
+/** Signs in as the listing super-admin (LISTING_LOGIN / LISTING_PASSWORD) and returns its user id.
+ * Mirrors src/data/supabase/auth.ts: `<login>@localo.app`, then the phone lookup RPC. */
+export async function signIn(sb: SupabaseClient): Promise<string> {
+  const login = need('LISTING_LOGIN').trim().toLowerCase();
+  const password = need('LISTING_PASSWORD');
+  let res = await sb.auth.signInWithPassword({ email: `${login}@localo.app`, password });
+  if (res.error && /^\d+$/.test(login)) {
+    const { data: email } = await sb.rpc('resolve_login_email', { p_phone: login, p_password: password });
+    if (typeof email === 'string' && email) res = await sb.auth.signInWithPassword({ email, password });
+  }
+  if (res.error || !res.data.user) throw new Error(`Sign-in failed: ${res.error?.message ?? 'no user'}`);
+  return res.data.user.id;
 }

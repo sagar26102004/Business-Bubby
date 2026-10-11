@@ -52,6 +52,7 @@ export type IconName =
   | 'calendar'
   | 'directions'
   | 'share'
+  | 'copy'
   | 'bookmark'
   | 'edit'
   | 'tools'
@@ -332,6 +333,12 @@ export function Icon({ name, size = 24, color = '#000', filled, strokeWidth = 2 
 
       {name === 'directions' ? <Path d="M3 11.5 21 3l-8.5 18-2-7.5z" {...solid} /> : null}
 
+      {name === 'copy' ? (
+        <>
+          <Rect x={9} y={9} width={12} height={12} rx={2} {...s} />
+          <Path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" {...s} />
+        </>
+      ) : null}
       {name === 'share' ? (
         <>
           <Circle cx={18} cy={5.5} r={2.5} {...s} />

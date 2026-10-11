@@ -10,6 +10,7 @@
  *  - "Today's pulse": a 2×2 of numbers computed from what this screen already
  *    loads (today's billing, the live order queue, open tabs, uncollected money),
  *  - the two primary actions (new bill, scan an order ticket) + quick chips,
+ *  - "Your website": the listing's public web page with Share / Open,
  *  - the business's tools grouped into clusters of cards.
  *
  * Access is unchanged from before the redesign:
@@ -54,6 +55,7 @@ import {
 import { radius, spacing, useColors } from '@/theme/theme';
 import { showAlert } from '@/lib/alert';
 import { ON_HOLD } from '@/lib/onHold';
+import { ShareWebsiteCard } from './ShareWebsiteCard';
 
 export interface WorkspaceHubProps {
   businessId: string;
@@ -664,6 +666,9 @@ export function WorkspaceHub({ businessId, header }: WorkspaceHubProps) {
           ))}
         </View>
       ) : null}
+
+      {/* The listing's public web page — stalls are on hold, so they have none. */}
+      {isMember && business.type !== 'item' ? <ShareWebsiteCard business={business} /> : null}
 
       {/* Tool clusters */}
       {visibleGroups.map((group) => (
