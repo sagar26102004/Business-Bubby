@@ -25,7 +25,8 @@ export default function MyOrdersScreen() {
   const load = useCallback(() => {
     Promise.all([
       repos.orders.listForCustomer(currentUser?.id ?? 'guest'),
-      repos.businesses.list(),
+      // Names only — and this runs every LIVE_REFRESH_MS, so never the full catalogs.
+      repos.businesses.list({ summary: true }),
     ]).then(([mine, all]) => {
       setOrders(mine);
       setBusinessNames(new Map(all.map((b) => [b.id, b.name])));

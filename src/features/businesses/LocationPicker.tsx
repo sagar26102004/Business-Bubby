@@ -131,6 +131,7 @@ export function LocationPicker({ value, onChange, onPlaceFound }: LocationPicker
       near: center.point,
       maxDistanceKm: RADIUS_KM,
       sortByDistance: true,
+      summary: true, // faint dots — no catalogs
     });
     return { center: center.point, nearby };
     // No refetch on focus: the map page below is rebuilt whenever this data

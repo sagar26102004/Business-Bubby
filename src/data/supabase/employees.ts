@@ -6,7 +6,7 @@
 import type { Business, Employee } from '@/domain/types';
 import { normalizeRole } from '@/domain/roles';
 import type { EmployeeRepository, NewEmployeeInput } from '@/data/repositories';
-import { sb, uuid, uuidOrNull } from './shared';
+import { forgetCardRows, sb, uuid, uuidOrNull } from './shared';
 
 async function loadBusiness(id: string): Promise<Business | null> {
   const { data, error } = await sb().from('businesses').select('data').eq('id', id).maybeSingle();
@@ -17,6 +17,7 @@ async function loadBusiness(id: string): Promise<Business | null> {
 async function saveBusiness(b: Business): Promise<void> {
   const { error } = await sb().from('businesses').update({ data: b }).eq('id', b.id);
   if (error) throw error;
+  forgetCardRows();
 }
 
 export function createSupabaseEmployees(): EmployeeRepository {

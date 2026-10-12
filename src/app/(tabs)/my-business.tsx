@@ -60,7 +60,8 @@ export default function WorkspaceTab() {
       return;
     }
     Promise.all([
-      repos.businesses.list(),
+      // Cards only: the switcher needs id, name and owner — the hub loads the rest.
+      repos.businesses.list({ summary: true }),
       repos.employees.listBusinessesForUser(currentUser.id),
     ])
       .then(([all, memberOf]) => {

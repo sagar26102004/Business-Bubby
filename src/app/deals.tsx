@@ -108,20 +108,28 @@ export default function DealsScreen() {
   const [activeIndex, setActiveIndex] = useState(0);
   const listRef = useRef<FlatList<AdPlacement>>(null);
 
-  const { data: places } = useAsync(() => repos.places.listPlaces(), []);
+  // Same cache key as Explore, so arriving from there needs no wait for GPS.
+  const { data: places } = useAsync(() => repos.places.listPlaces(), [], { key: 'places' });
   const place: SavedPlace | undefined = useMemo(
     () => (places ?? []).find((p) => p.id === placeId) ?? places?.[0],
     [places, placeId],
   );
   const near = place?.point;
+  const nearKey = near ? `${near.latitude.toFixed(3)},${near.longitude.toFixed(3)}` : 'none';
 
-  const { data, loading, error, reload } = useAsync(
+  // Waits for a point: without one the repository returns only sponsored cards,
+  // which used to show "No deals in range" until the real list landed. Keyed
+  // like Explore's ad slot, so "View all" at "Anywhere" opens already filled.
+  const { data, loading, validating, error, reload } = useAsync(
     () =>
       repos.ads
         .listPlacements(near, { radiusKm: rangeKm })
         .then((ps) => ps.filter((p) => isListedPublicly(p.business))),
     [near?.latitude, near?.longitude, rangeKm, isDemoViewer()],
+    { key: ['placements', nearKey, rangeKm, isDemoViewer()], enabled: !!near },
   );
+  /** Nothing to show YET — as opposed to genuinely nothing on offer. */
+  const waiting = !near || loading || (validating && !data?.length);
 
   const all = useMemo(() => data ?? [], [data]);
   /** Is a reel filter worth offering? Only if there's a video in range. */
@@ -218,7 +226,7 @@ export default function DealsScreen() {
             The shared Loading/Error/Empty views are built for the app's paper
             pages and would print near-black text onto this one, so the three
             states are spelled out here in the feed's own palette. */}
-        {loading && !data ? (
+        {waiting && !data?.length ? (
           <View style={styles.state}>
             <ActivityIndicator color={REEL.mint} />
           </View>

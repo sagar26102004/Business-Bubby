@@ -16,6 +16,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const STORAGE_KEY = 'localo:querycache/v1';
 /** Keep the persisted cache bounded; oldest entries are evicted past this. */
 const MAX_ENTRIES = 300;
+/**
+ * The whole cache is ONE stored value, and Android reads a stored value through
+ * a 2 MB window — anything bigger fails to load at all. So the persisted total
+ * stays under MAX_TOTAL_BYTES; an entry too big to carry stays memory-only.
+ */
+const MAX_ENTRY_BYTES = 1_500_000;
+const MAX_TOTAL_BYTES = 1_850_000;
+
+/** UTF-8 size of a string — ₹ and › are 3 bytes, so characters undercount. */
+function utf8Bytes(s: string): number {
+  let n = s.length;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (c > 0x7f) n += c > 0x7ff ? 2 : 1;
+  }
+  return n;
+}
 
 interface Entry {
   data: unknown;
@@ -73,9 +90,22 @@ function schedulePersist() {
       const overflow = store.size - MAX_ENTRIES;
       for (let i = 0; i < overflow; i++) store.delete(oldestFirst[i][0]);
     }
-    const obj: Record<string, Entry> = {};
-    for (const [k, v] of store) obj[k] = v;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(obj)).catch(() => {});
+    // Newest first, so what's dropped for room is the stalest (see MAX_TOTAL_BYTES).
+    const parts: string[] = [];
+    let size = 0;
+    for (const [k, v] of [...store].sort((a, b) => b[1].at - a[1].at)) {
+      let part: string;
+      try {
+        part = `${JSON.stringify(k)}:${JSON.stringify(v)}`;
+      } catch {
+        continue;
+      }
+      const bytes = utf8Bytes(part);
+      if (bytes > MAX_ENTRY_BYTES || size + bytes > MAX_TOTAL_BYTES) continue;
+      parts.push(part);
+      size += bytes;
+    }
+    AsyncStorage.setItem(STORAGE_KEY, `{${parts.join(',')}}`).catch(() => {});
   }, 400);
 }
 

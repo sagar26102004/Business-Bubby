@@ -53,6 +53,7 @@ import type {
   Vehicle,
   VehicleKind,
 } from '@/domain/types';
+import type { SearchResult, SearchSuggestion } from '@/domain/search';
 
 export interface BusinessQuery {
   /** Free-text search across name / tagline / description. */
@@ -77,6 +78,14 @@ export interface BusinessQuery {
    * and simply reaches further where things are sparse.
    */
   limit?: number;
+  /**
+   * Card fields only — each business comes back WITHOUT `menu`, `products`,
+   * `services`, `plans`, `rentals` and `portfolio`. For screens that only draw
+   * cards (Explore, the ad slot), where those lists were most of the download.
+   * Don't combine with `search` or `subcategoryId`: both look inside the
+   * stripped lists. A backend may ignore it and return full objects.
+   */
+  summary?: boolean;
 }
 
 /** Input for creating an employee while registering a business. */
@@ -130,6 +139,15 @@ export interface NewBusinessInput {
 
 export interface BusinessRepository {
   list(query?: BusinessQuery): Promise<Business[]>;
+  /**
+   * Search by name, kind of business or anything it sells — the rules are in
+   * domain/search.ts. Each business comes back as a CARD (see
+   * `BusinessQuery.summary`) with what matched, already in display order
+   * (`compareSearchResults`: relevance first, then nearest to `near`).
+   */
+  search(query: string, options?: { near?: GeoPoint; limit?: number }): Promise<SearchResult[]>;
+  /** As-you-type suggestions for the search box, kinds of business first. */
+  suggest(query: string, limit?: number): Promise<SearchSuggestion[]>;
   getById(id: string): Promise<Business | null>;
   /**
    * Create a listing. Item listings are special: each user has ONE personal

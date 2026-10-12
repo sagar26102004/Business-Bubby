@@ -52,7 +52,14 @@ export default function BrowseIntentScreen() {
     // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
     async () =>
       intent
-        ? (await repos.businesses.list({ near, sortByDistance: true })).filter(isListedPublicly)
+        ? (
+            await repos.businesses.list({
+              near,
+              sortByDistance: true,
+              // Stall chips look inside `products`; every other category is cards only.
+              summary: intent.id !== 'stalls',
+            })
+          ).filter(isListedPublicly)
         : [],
     [intent?.id, near?.latitude, near?.longitude],
   );

@@ -341,6 +341,20 @@ const READERS: Record<OfferingBucket, (b: Business) => CatalogItem[]> = {
   rentals: rentalItems,
 };
 
+/**
+ * How many items a bucket really holds. A card read (`catalogCounts` set) only
+ * carries a preview of each list, so its own length would undercount.
+ */
+function fullCount(business: Business, bucket: OfferingBucket, shown: number): number {
+  const counts = business.catalogCounts;
+  if (!counts) return shown;
+  // A legacy membership listing keeps its plans in `services` (planOfferings).
+  if (bucket === 'plans' && !counts.plans && usesServicesAsPlans(business)) {
+    return counts.services ?? shown;
+  }
+  return counts[bucket] ?? shown;
+}
+
 /** One bucket of a business, normalised. An empty bucket comes back as `null`. */
 export function offeringBucket(
   business: Business,
@@ -352,7 +366,7 @@ export function offeringBucket(
   return {
     bucket,
     title: meta.title,
-    subtitle: countLabel(items.length, meta.noun),
+    subtitle: countLabel(fullCount(business, bucket, items.length), meta.noun),
     icon: meta.icon,
     seeAllLabel: meta.seeAll,
     actionLabel: meta.action,

@@ -111,6 +111,15 @@ import type {
 import { assertContactDetails, assertPassword, assertUsername } from '@/data/repositories';
 import { haversineKm } from '@/lib/geo';
 import { getDeviceLocation } from '@/lib/location';
+import {
+  compareSearchResults,
+  intentSuggestion,
+  scoreBusinesses,
+  suggestTerms,
+  withIntentMatches,
+  type SearchResult,
+  type SearchSuggestion,
+} from '@/domain/search';
 import { formatMoney, parsePrice } from '@/lib/money';
 import {
   CURRENT_POINT,
@@ -395,6 +404,24 @@ class MockBusinessRepository implements BusinessRepository {
 
     // After the sort, so `limit` with `sortByDistance` means "the N nearest".
     return typeof limit === 'number' ? results.slice(0, limit) : results;
+  }
+
+  async search(
+    query: string,
+    options: { near?: GeoPoint; limit?: number } = {},
+  ): Promise<SearchResult[]> {
+    const all = await this.list({ near: options.near });
+    const found = withIntentMatches(scoreBusinesses(all, query, 300), all, query);
+    return found.sort(compareSearchResults).slice(0, options.limit ?? 100);
+  }
+
+  async suggest(query: string, limit = 8): Promise<SearchSuggestion[]> {
+    await delay(60);
+    const intent = intentSuggestion(query, businesses);
+    const terms = suggestTerms(businesses, query, limit).filter(
+      (s) => s.term.toLowerCase() !== intent?.term.toLowerCase(),
+    );
+    return (intent ? [intent, ...terms] : terms).slice(0, limit);
   }
 
   async getById(id: string): Promise<Business | null> {

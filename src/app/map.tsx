@@ -73,6 +73,7 @@ export default function MapScreen() {
     const businesses = await repos.businesses.list({
       near: center.point,
       sortByDistance: true,
+      summary: true, // pins and cards — no catalogs
     });
     // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
     return { center: center.point, businesses: businesses.filter(isListedPublicly) };

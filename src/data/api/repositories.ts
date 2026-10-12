@@ -85,6 +85,13 @@ import {
   phoneToEmail,
   syntheticTestPhone,
 } from '@/data/supabase/shared';
+import {
+  compareSearchResults,
+  intentSuggestion,
+  scoreBusinesses,
+  suggestTerms,
+  withIntentMatches,
+} from '@/domain/search';
 import { http, seg } from './client';
 
 export function createApiBusinesses(): BusinessRepository {
@@ -98,7 +105,27 @@ export function createApiBusinesses(): BusinessRepository {
         lng: query.near?.longitude,
         maxDistanceKm: query.maxDistanceKm,
         sortByDistance: query.sortByDistance,
+        summary: query.summary,
       }),
+    // Until Path B has search endpoints (SYNC_QUEUE [SYNC-051]), rank the full
+    // directory on the device with the same rules (domain/search.ts).
+    search: async (query, options = {}) => {
+      const all = await http.get<Business[]>('/businesses', {
+        lat: options.near?.latitude,
+        lng: options.near?.longitude,
+      });
+      return withIntentMatches(scoreBusinesses(all, query, 1000), all, query)
+        .sort(compareSearchResults)
+        .slice(0, options.limit ?? 100);
+    },
+    suggest: async (query, limit = 8) => {
+      const all = await http.get<Business[]>('/businesses', {});
+      const intent = intentSuggestion(query, all);
+      const terms = suggestTerms(all, query, limit).filter(
+        (t) => t.term.toLowerCase() !== intent?.term.toLowerCase(),
+      );
+      return (intent ? [intent, ...terms] : terms).slice(0, limit);
+    },
     getById: (id) => http.get<Business | null>(`/businesses/${seg(id)}`),
     create: (input: NewBusinessInput) => http.post<Business>('/businesses', input),
     getStallForOwner: (ownerId) =>

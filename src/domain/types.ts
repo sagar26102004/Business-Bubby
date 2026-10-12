@@ -1019,6 +1019,13 @@ export interface Business {
   offers?: Offer[];
   /** Work showcase — photos & videos of past work, shown on the listing. */
   portfolio?: PortfolioItem[];
+  /**
+   * READ-ONLY, set only on a CARD read (`list({ summary: true })`): the true
+   * length of each list. A card read carries just a preview of each list (one
+   * item per section — enough for the card's "Popular:" line), so the "42
+   * dishes" count comes from here. Never written back.
+   */
+  catalogCounts?: Partial<Record<'menu' | 'products' | 'services' | 'plans' | 'rentals', number>>;
   /** Where the REST of the work lives — Drive folder, Instagram, YouTube. */
   showcaseLinks?: ShowcaseLink[];
   /**

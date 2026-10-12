@@ -4,7 +4,14 @@
  * business (a customer can't update a business under RLS) — they're computed
  * live from the `reviews` table on read, which also keeps them drift-free.
  */
-import type { Business, Employee, OfferViewStats, ProductItem } from '@/domain/types';
+import type { Business, Employee, GeoPoint, OfferViewStats, ProductItem } from '@/domain/types';
+import {
+  compareSearchResults,
+  intentSuggestion,
+  withIntentMatches,
+  type SearchResult,
+  type SearchSuggestion,
+} from '@/domain/search';
 import { normalizeRole } from '@/domain/roles';
 import type {
   BusinessQuery,
@@ -13,33 +20,49 @@ import type {
 } from '@/data/repositories';
 import { haversineKm } from '@/lib/geo';
 import { captureBusinessOfferings } from './catalog';
-import { sb, uuid, nowIso, uuidOrNull } from './shared';
+import { cardRows, forgetCardRows, peekCardRows, sb, uuid, nowIso, uuidOrNull } from './shared';
 
 /** Stamp a stable id on any product that doesn't have one yet. */
 const withProductIds = (products?: ProductItem[]): ProductItem[] | undefined =>
   products?.map((p) => (p.id ? p : { ...p, id: uuid() }));
 
-/** Aggregate ratings from the reviews table: businessId → { avg, count }. */
-async function ratingsFor(businessIds: string[]): Promise<Map<string, { avg: number; count: number }>> {
-  const out = new Map<string, { sum: number; count: number }>();
-  if (businessIds.length === 0) return new Map();
-  const { data, error } = await sb()
-    .from('reviews')
-    .select('business_id, data')
-    .in('business_id', businessIds);
+/**
+ * Ratings per business: businessId → { avg, count }. Averaged in SQL by the
+ * `business_ratings` view (migration 0026) — never by downloading every review.
+ * Without `ids` it returns every rated business (one small row each), which is
+ * cheaper than an `IN` list of the whole directory in the URL.
+ */
+async function ratingsFor(ids?: string[]): Promise<Map<string, { avg: number; count: number }>> {
+  const result = new Map<string, { avg: number; count: number }>();
+  if (ids && ids.length === 0) return result;
+  let q = sb().from('business_ratings').select('business_id, rating_avg, rating_count');
+  if (ids) q = q.in('business_id', ids);
+  const { data, error } = await q;
   if (error) throw error;
   for (const row of data ?? []) {
-    const bid = row.business_id as string;
-    const rating = (row.data as { rating: number }).rating ?? 0;
-    const cur = out.get(bid) ?? { sum: 0, count: 0 };
-    cur.sum += rating;
-    cur.count += 1;
-    out.set(bid, cur);
+    result.set(row.business_id as string, {
+      avg: Number(row.rating_avg ?? 0),
+      count: Number(row.rating_count ?? 0),
+    });
   }
-  const result = new Map<string, { avg: number; count: number }>();
-  out.forEach((v, k) => result.set(k, { avg: Math.round((v.sum / v.count) * 10) / 10, count: v.count }));
   return result;
 }
+
+/** A row of `search_businesses` / `search_suggest` (migration 0027). */
+type SearchRow = {
+  business_id: string;
+  words: number;
+  tier: number;
+  strength: number;
+  score: number;
+  hits: { name: string; price: string | null }[] | null;
+};
+type SuggestRow = {
+  term: string;
+  kind: SearchSuggestion['kind'];
+  businesses: number;
+  business_id: string | null;
+};
 
 function applyRatings(b: Business, ratings: Map<string, { avg: number; count: number }>): Business {
   const r = ratings.get(b.id);
@@ -52,10 +75,20 @@ export function createSupabaseBusinesses(): BusinessRepository {
     async list(query: BusinessQuery = {}): Promise<Business[]> {
       const term = query.search?.trim().toLowerCase();
       const { near, maxDistanceKm, sortByDistance, limit } = query;
-      const { data, error } = await sb().from('businesses').select('data');
-      if (error) throw error;
-      let results = (data ?? []).map((r) => r.data as Business);
-      const ratings = await ratingsFor(results.map((b) => b.id));
+      let results: Business[];
+      let ratings = new Map<string, { avg: number; count: number }>();
+      if (query.summary) {
+        // Cards only: the shared, catalog-free read with ratings already on it.
+        results = await cardRows();
+      } else {
+        const [rowsR, r] = await Promise.all([
+          sb().from('businesses').select('data'),
+          ratingsFor(),
+        ]);
+        if (rowsR.error) throw rowsR.error;
+        results = (rowsR.data ?? []).map((row) => row.data as Business);
+        ratings = r;
+      }
 
       results = results
         .filter((b) => (query.type ? b.type === query.type : true))
@@ -105,6 +138,68 @@ export function createSupabaseBusinesses(): BusinessRepository {
       return typeof limit === 'number' ? results.slice(0, limit) : results;
     },
 
+    // Ranked in the database (migration 0027, rules in domain/search.ts); the
+    // ids are joined to the shared card list (0026), which Explore has usually
+    // already loaded, so a search costs one small RPC.
+    async search(
+      query: string,
+      options: { near?: GeoPoint; limit?: number } = {},
+    ): Promise<SearchResult[]> {
+      const q = query.trim();
+      if (!q) return [];
+      const [rpc, cards] = await Promise.all([
+        // Every match, not a top-N: relevance ties are broken by DISTANCE here,
+        // and a cut made by score alone could drop the café round the corner.
+        sb().rpc('search_businesses', { q, max_results: 1000 }),
+        cardRows(),
+      ]);
+      if (rpc.error) throw rpc.error;
+      const { near } = options;
+      const placed = (b: Business): Business => ({
+        ...b,
+        distanceKm: near && b.location?.point ? haversineKm(near, b.location.point) : undefined,
+      });
+      const byId = new Map(cards.map((b) => [b.id, b]));
+      const found: SearchResult[] = [];
+      for (const r of (rpc.data ?? []) as SearchRow[]) {
+        const b = byId.get(r.business_id);
+        if (!b) continue;
+        found.push({
+          business: placed(b),
+          words: r.words,
+          tier: r.tier,
+          strength: r.strength,
+          score: r.score,
+          hits: (r.hits ?? []).map((h) => ({ name: h.name, price: h.price ?? undefined })),
+        });
+      }
+      return withIntentMatches(found, cards.map(placed), q)
+        .sort(compareSearchResults)
+        .slice(0, options.limit ?? 100);
+    },
+
+    async suggest(query: string, limit = 8): Promise<SearchSuggestion[]> {
+      const q = query.trim();
+      if (q.length < 2) return [];
+      const { data, error } = await sb().rpc('search_suggest', { q, max_results: limit });
+      if (error) throw error;
+      const terms = ((data ?? []) as SuggestRow[]).map(
+        (r): SearchSuggestion => ({
+          term: r.term,
+          kind: r.kind,
+          businesses: r.businesses,
+          businessId: r.business_id ?? undefined,
+        }),
+      );
+      // A browse category ("Food") stands for many tags; it leads when named.
+      // Counted from the card list only if it's already loaded — a suggestion
+      // must never wait on the whole directory.
+      const intent = intentSuggestion(q, peekCardRows() ?? []);
+      if (!intent) return terms;
+      const rest = terms.filter((t) => t.term.toLowerCase() !== intent.term.toLowerCase());
+      return [intent, ...rest].slice(0, limit);
+    },
+
     async getById(id: string): Promise<Business | null> {
       const { data, error } = await sb().from('businesses').select('data').eq('id', id).maybeSingle();
       if (error) throw error;
@@ -137,6 +232,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
           };
           const { error } = await sb().from('businesses').update({ data: next }).eq('id', stall.id);
           if (error) throw error;
+          forgetCardRows();
           await captureBusinessOfferings(next);
           return next;
         }
@@ -194,6 +290,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
         .from('businesses')
         .insert({ id: businessId, owner_id: effectiveOwnerId, type: input.type, data: business });
       if (bErr) throw bErr;
+      forgetCardRows();
 
       if (newEmployees.length > 0) {
         const { error: eErr } = await sb().from('employees').insert(
@@ -251,6 +348,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
         .update({ data: { ...business, products: nextProducts } })
         .eq('id', businessId);
       if (error) throw error;
+      forgetCardRows();
       return { ...product, sold };
     },
 
@@ -264,6 +362,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
         .update({ data: { ...business, products: nextProducts } })
         .eq('id', businessId);
       if (error) throw error;
+      forgetCardRows();
       // The item's public thread goes with it — nothing left to read.
       await sb()
         .from('product_messages')
@@ -281,8 +380,10 @@ export function createSupabaseBusinesses(): BusinessRepository {
       delete (next as { ratingAvg?: number }).ratingAvg;
       delete (next as { ratingCount?: number }).ratingCount;
       delete (next as { distanceKm?: number }).distanceKm;
+      delete (next as { catalogCounts?: unknown }).catalogCounts;
       const { error } = await sb().from('businesses').update({ data: next }).eq('id', id);
       if (error) throw error;
+      forgetCardRows();
       // Manage edits add new tags/menu/services/products — capture those too.
       if (patch.tags || patch.menu || patch.services || patch.plans || patch.products) {
         await captureBusinessOfferings(next);
@@ -326,6 +427,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
       delete (next as { ratingAvg?: number }).ratingAvg;
       delete (next as { ratingCount?: number }).ratingCount;
       delete (next as { distanceKm?: number }).distanceKm;
+      delete (next as { catalogCounts?: unknown }).catalogCounts;
       // Update BOTH the scoping column and the document — is_business_member and
       // getStallForOwner key on the column, everything else reads data.ownerId.
       // RLS allows this only for a super-admin (migration 0004).
@@ -334,6 +436,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
         .update({ owner_id: newOwnerId, data: next })
         .eq('id', id);
       if (error) throw error;
+      forgetCardRows();
       return this.getById(id) as Promise<Business>;
     },
 
@@ -348,6 +451,7 @@ export function createSupabaseBusinesses(): BusinessRepository {
       }
       const { error } = await sb().from('businesses').delete().eq('id', id);
       if (error) throw error;
+      forgetCardRows();
       // Everything scoped to the business (team, orders, bills, chats, calls,
       // campaigns) is removed by the schema's `on delete cascade`.
     },

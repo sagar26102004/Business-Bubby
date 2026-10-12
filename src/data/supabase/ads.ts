@@ -26,7 +26,7 @@ import type {
 import { buildPlacements } from '@/data/adPlacements';
 import { campaignPlanSummary, getAdPlan, isCampaignRunning } from '@/domain/ads';
 import { isOfferLive } from '@/domain/offers';
-import { sb, uuid, nowIso, notify, byNewest, mapData, serverNow } from './shared';
+import { cardRows, sb, uuid, nowIso, notify, byNewest, mapData, serverNow } from './shared';
 
 /** The campaign row shape we read back. */
 type Row = { data: AdCampaign };
@@ -102,25 +102,20 @@ export function createSupabaseAds(): AdRepository {
       // Without a location there's no way to judge reach, so only sponsored
       // cards come back — an unpaid corner shop shown to someone in another
       // city is worse than an empty slot.
-      const [active, businessesR] = await Promise.all([
+      // The directory comes from the shared card read (migration 0026) — the
+      // same one Explore's list uses, so the two share a single download, and
+      // an ad card needs offers + location, never the catalogs it strips.
+      const [active, businesses] = await Promise.all([
         safeRead(() => sb().from('ad_campaigns').select('data').eq('status', 'active')),
-        near
-          ? sb().from('businesses').select('data')
-          : Promise.resolve({ data: [] as { data: Business }[], error: null }),
+        near ? cardRows() : Promise.resolve([] as Business[]),
       ]);
-      if (businessesR.error) throw businessesR.error;
 
       const now = serverNow();
       const running = active.filter((c) => isCampaignRunning(c, now));
 
       // Sponsored placements need their business even when `near` is absent, so
       // fetch exactly the ones referenced rather than the whole directory twice.
-      const haveBusinesses = new Map<string, Business>(
-        (businessesR.data ?? []).map((r) => {
-          const b = (r as { data: Business }).data;
-          return [b.id, b];
-        }),
-      );
+      const haveBusinesses = new Map<string, Business>(businesses.map((b) => [b.id, b]));
       const missing = running.map((c) => c.businessId).filter((id) => !haveBusinesses.has(id));
       if (missing.length > 0) {
         const { data } = await sb().from('businesses').select('data').in('id', missing);

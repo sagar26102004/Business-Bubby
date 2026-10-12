@@ -7,7 +7,7 @@
  * map almost entirely through `row.data`; the scoping columns exist so Postgres
  * RLS can decide who sees what.
  */
-import type { AppNotification, User } from '@/domain/types';
+import type { AppNotification, Business, User } from '@/domain/types';
 import { getSupabase, SUPABASE_ANON_KEY, SUPABASE_URL } from '@/lib/supabase';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -405,4 +405,76 @@ export function mapData<T>(rows: Array<{ data: T }> | null | undefined): T[] {
 /** Newest-first by an ISO string field. */
 export function byNewest<T>(pick: (x: T) => string) {
   return (a: T, b: T) => pick(b).localeCompare(pick(a));
+}
+
+/**
+ * EVERY LISTING AS A CARD — the `business_cards` view (migration 0026): each
+ * business document minus its catalogs, with the rating already averaged in
+ * SQL. ~0.9 MB for the whole directory, where the full documents plus every
+ * review row were ~12 MB.
+ *
+ * Explore's list and the ad slot both need the whole directory, and both
+ * refetch once GPS answers, and search joins its hits to it, so the read is
+ * SHARED: concurrent callers ride one request and a result is reused for
+ * CARD_ROWS_TTL_MS. Someone ELSE's edit can take that long to show on a card;
+ * the business page always reads fresh. Distance is computed on
+ * the client, so a new `near` never needs a new download. Any write to a
+ * business calls `forgetCardRows()` so the owner sees their own edit at once.
+ */
+const CARD_ROWS_TTL_MS = 5 * 60_000;
+/** PostgREST caps a response at 1000 rows by default; read in pages under it. */
+const CARD_PAGE = 1000;
+let cardRowsAt = 0;
+let cardRowsCache: Business[] | null = null;
+let cardRowsInFlight: Promise<Business[]> | null = null;
+
+type CardRow = { data: Business; rating_avg: number | null; rating_count: number | null };
+
+export function cardRows(): Promise<Business[]> {
+  if (cardRowsCache && Date.now() - cardRowsAt < CARD_ROWS_TTL_MS) return Promise.resolve(cardRowsCache);
+  if (cardRowsInFlight) return cardRowsInFlight;
+  cardRowsInFlight = (async () => {
+    const out: Business[] = [];
+    for (let from = 0; ; from += CARD_PAGE) {
+      const { data, error } = await sb()
+        .from('business_cards')
+        .select('data, rating_avg, rating_count')
+        .order('id')
+        .range(from, from + CARD_PAGE - 1);
+      if (error) throw error;
+      const rows = (data ?? []) as CardRow[];
+      for (const r of rows) {
+        // ratingAvg/ratingCount are derived on read, never stored (see businesses.ts).
+        out.push(
+          r.rating_count
+            ? { ...r.data, ratingAvg: r.rating_avg ?? 0, ratingCount: r.rating_count }
+            : r.data,
+        );
+      }
+      if (rows.length < CARD_PAGE) break;
+    }
+    cardRowsCache = out;
+    cardRowsAt = Date.now();
+    return out;
+  })().finally(() => {
+    cardRowsInFlight = null;
+  });
+  return cardRowsInFlight;
+}
+
+/** Drop the shared card list so the next read is fresh. Call after any business write. */
+export function forgetCardRows(): void {
+  cardRowsCache = null;
+  cardRowsAt = 0;
+}
+
+/**
+ * The shared card list if it's already in memory, else null — and start
+ * loading it, so it's there by the next call. For extras that must never make
+ * the caller wait on the whole directory (search suggestions).
+ */
+export function peekCardRows(): Business[] | null {
+  if (cardRowsCache && Date.now() - cardRowsAt < CARD_ROWS_TTL_MS) return cardRowsCache;
+  void cardRows().catch(() => {});
+  return cardRowsCache;
 }

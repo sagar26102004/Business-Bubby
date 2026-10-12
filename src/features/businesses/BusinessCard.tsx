@@ -18,6 +18,7 @@
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Business, PlaceKind } from '@/domain/types';
+import type { SearchHitItem } from '@/domain/search';
 import { openState } from '@/domain/hours';
 import { formatDistance, rentalBasisLabel } from '@/domain/catalog';
 import { offeringBuckets, type OfferingBucket } from '@/domain/offerings';
@@ -47,7 +48,17 @@ const DOOR: Record<OfferingBucket, { label: string; icon: 'cart' | 'bag' | 'tool
   plans: { label: 'View plans', icon: 'ticket', variant: 'outline' },
 };
 
-export function BusinessCard({ business }: { business: Business }) {
+export function BusinessCard({
+  business,
+  matches,
+}: {
+  business: Business;
+  /**
+   * What made this card a SEARCH result ("Banana Shake ₹120") — shown in place
+   * of the "Popular:" line, because it's what the customer asked for.
+   */
+  matches?: SearchHitItem[];
+}) {
   const router = useRouter();
   const colors = useColors();
   const repos = useRepositories();
@@ -206,7 +217,22 @@ export function BusinessCard({ business }: { business: Business }) {
           </View>
         ) : null}
 
-        {leadItem ? (
+        {matches && matches.length > 0 ? (
+          <View style={[styles.popular, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+            <Text variant="caption" numberOfLines={2} style={styles.popularText}>
+              <Text variant="caption" tone="muted">
+                Has:{' '}
+              </Text>
+              {matches.map((m, i) => (
+                <Text key={`${m.name}-${i}`} variant="caption" weight="bold">
+                  {i > 0 ? '  ·  ' : ''}
+                  {m.name}
+                  {m.price ? ` ${m.price}` : ''}
+                </Text>
+              ))}
+            </Text>
+          </View>
+        ) : leadItem ? (
           <View style={[styles.popular, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
             <Text variant="caption" numberOfLines={1} style={styles.popularText}>
               <Text variant="caption" tone="muted">

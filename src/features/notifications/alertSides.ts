@@ -14,7 +14,7 @@ import type { Repositories } from '@/data/repositories';
 /** The ids of every business this user owns or is on the team of. */
 export async function loadMyBusinessIds(repos: Repositories, userId: string): Promise<Set<string>> {
   const [all, memberOf] = await Promise.all([
-    repos.businesses.list(),
+    repos.businesses.list({ summary: true }), // only ownerId is read
     repos.employees.listBusinessesForUser(userId),
   ]);
   return new Set([

@@ -116,14 +116,20 @@ export default function BrowseScreen() {
   // null = neither switch on: the shuffled order.
   const [sort, setSort] = useState<'popular' | 'nearest' | null>(null);
 
-  const { data: places } = useAsync(() => repos.places.listPlaces(), []);
+  // Every fetch here is CACHED by key (lib/queryCache): a reopen paints what was
+  // seen last time at once, and the fresh result swaps in behind it.
+  const { data: places } = useAsync(() => repos.places.listPlaces(), [], { key: 'places' });
   const activePlace = places?.find((p) => p.id === activePlaceId) ?? places?.[0];
   const near = activePlace?.point;
+  // ~100 m: closer than that is the same list, so it shares a cache entry.
+  const nearKey = near ? `${near.latitude.toFixed(3)},${near.longitude.toFixed(3)}` : 'none';
 
   const { data, loading, error, reload } = useAsync(
     // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
+    // `summary`: cards only — the menus and product lists are most of the
+    // directory's weight and Home never shows them.
     () =>
-      repos.businesses.list({ near, sortByDistance: true }).then((l) => {
+      repos.businesses.list({ near, sortByDistance: true, summary: true }).then((l) => {
         const listed = l.filter(isListedPublicly); // nearest first
         const inRing = listed.filter(
           (b) => typeof b.distanceKm === 'number' && b.distanceKm <= HOME_RADIUS_KM,
@@ -131,6 +137,7 @@ export default function BrowseScreen() {
         return inRing.length >= HOME_MIN_COUNT ? inRing : listed.slice(0, HOME_MIN_COUNT);
       }),
     [near?.latitude, near?.longitude, isDemoViewer()],
+    { key: ['home', nearKey, isDemoViewer()] },
   );
 
   // (Home stays mounted across tab switches and account changes, so its initial
@@ -186,6 +193,9 @@ export default function BrowseScreen() {
     // by distance (the repository's built-in reach rules no longer apply).
     () => repos.ads.listPlacements(near, { radiusKm: ANY_RANGE_KM }).then((ps) => ps.filter((p) => isListedPublicly(p.business))),
     [near?.latitude, near?.longitude, isDemoViewer()],
+    // Without a point only sponsored cards come back, so wait for one rather
+    // than flash a half-empty slot.
+    { key: ['placements', nearKey, ANY_RANGE_KM, isDemoViewer()], enabled: !!near },
   );
 
   const ads: AdCardItem[] = useMemo(() => {

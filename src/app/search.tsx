@@ -2,17 +2,24 @@
  * Dedicated search screen (Amazon-style). Browse's search bar routes here;
  * this screen owns its own top bar — back button + autofocused input.
  *
- * Typing shows debounced SUGGESTIONS (terms drawn from real listings: business
- * names, products, menu items, services, categories — "cop" → "Copy pen", …).
- * Submitting (enter or tapping a suggestion) runs the search and lists the
- * matching businesses, nearest first.
+ * People search three ways, often mixed — a business's NAME, a KIND of
+ * business ("cafe", "plumber") or something it SELLS ("banana shake") — and
+ * the ranking for all three lives in domain/search.ts (run by the database on
+ * Supabase). Nothing here downloads the directory: suggestions and results
+ * are each one small request.
+ *
+ * Typing shows debounced SUGGESTIONS, kinds of business first, each labelled
+ * with what it is; a suggestion that is ONE business's name opens that
+ * business directly. Submitting (enter, or tapping any other suggestion) runs
+ * the search: best matches first, nearest first among equals, and each card
+ * says which of its items matched.
  */
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useDismiss } from '@/lib/navigation';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getSubcategory } from '@/domain/catalog';
+import type { SearchSuggestion, SearchTermKind } from '@/domain/search';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
@@ -20,10 +27,19 @@ import { useResponsive } from '@/lib/useResponsive';
 import { EmptyView, LoadingView, SearchIcon, Text } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { radius, spacing, useColors } from '@/theme/theme';
-import { isListedPublicly } from '@/lib/onHold';
+import { isDemoViewer, isListedPublicly } from '@/lib/onHold';
 import { NO_WEB_OUTLINE, fontFor } from '@/theme/fonts';
 
 const MAX_SUGGESTIONS = 8;
+
+/** What a suggestion IS, in words a customer reads. */
+const KIND_LABEL: Record<SearchTermKind, string> = {
+  type: 'Type of business',
+  name: 'Business',
+  item: 'Sold here',
+  section: 'Category',
+  about: '',
+};
 
 export default function SearchScreen() {
   const repos = useRepositories();
@@ -38,46 +54,26 @@ export default function SearchScreen() {
   const [query, setQuery] = useState(q ?? '');
   /** The committed search term — set on enter or when a suggestion is tapped. */
   const [submitted, setSubmitted] = useState(q ?? '');
-  const debounced = useDebouncedValue(query.trim(), 300);
+  const debounced = useDebouncedValue(query.trim(), 200);
 
-  const { data: places } = useAsync(() => repos.places.listPlaces(), []);
+  // Same key as Explore, so the location is already known on arrival.
+  const { data: places } = useAsync(() => repos.places.listPlaces(), [], { key: 'places' });
   const near = places?.[0]?.point;
+  const nearKey = near ? `${near.latitude.toFixed(3)},${near.longitude.toFixed(3)}` : 'none';
 
-  // Suggestion corpus, built once from everything searchable across listings.
-  const { data: corpus } = useAsync(async () => {
-    // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
-    const all = (await repos.businesses.list()).filter(isListedPublicly);
-    const terms = new Set<string>();
-    const add = (s?: string) => {
-      const t = s?.trim();
-      if (t) terms.add(t);
-    };
-    all.forEach((b) => {
-      add(b.name);
-      add(b.providerType);
-      add(getSubcategory(b.type, b.subcategoryId)?.name);
-      (b.tags ?? []).forEach(add);
-      (b.products ?? []).forEach((p) => add(p.name));
-      (b.menu ?? []).forEach((m) => add(m.name));
-      (b.services ?? []).forEach((s) => add(s.name));
-      (b.plans ?? []).forEach((p) => add(p.name));
-    });
-    return Array.from(terms);
-  }, []);
+  // Typing mode = the input differs from what was last searched.
+  const isTyping = query.trim().length > 0 && query.trim() !== submitted;
 
-  const suggestions = useMemo(() => {
-    const t = debounced.toLowerCase();
-    if (!t) return [];
-    return (corpus ?? [])
-      .filter((s) => s.toLowerCase().includes(t))
-      .sort((a, b) => {
-        // Prefix matches first (Amazon-style), then alphabetical.
-        const ap = a.toLowerCase().startsWith(t) ? 0 : 1;
-        const bp = b.toLowerCase().startsWith(t) ? 0 : 1;
-        return ap - bp || a.localeCompare(b);
-      })
-      .slice(0, MAX_SUGGESTIONS);
-  }, [corpus, debounced]);
+  const { data: suggestions } = useAsync(
+    () => repos.businesses.suggest(debounced, MAX_SUGGESTIONS),
+    [debounced],
+    {
+      key: ['suggest', debounced.toLowerCase()],
+      enabled: isTyping && debounced.length >= 2,
+      refetchOnFocus: false,
+      refetchOnForeground: false,
+    },
+  );
 
   const runSearch = (term: string) => {
     const t = term.trim();
@@ -86,19 +82,20 @@ export default function SearchScreen() {
     setSubmitted(t);
   };
 
-  // Results load only for the committed term.
-  const { data: results, loading } = useAsync(
-    async () =>
-      submitted
-        ? repos.businesses
-            .list({ search: submitted, near, sortByDistance: true })
-            .then((l) => l.filter(isListedPublicly))
-        : null,
-    [submitted, near?.latitude, near?.longitude],
-  );
+  const pick = (s: SearchSuggestion) => {
+    // One business's own name: the customer knows where they want to go.
+    if (s.businessId) router.push(`/business/${s.businessId}`);
+    else runSearch(s.term);
+  };
 
-  // Typing mode = the input differs from what was last searched.
-  const isTyping = query.trim().length > 0 && query.trim() !== submitted;
+  // Results load only for the committed term.
+  const { data: found, loading } = useAsync(
+    () => repos.businesses.search(submitted, { near }),
+    [submitted, near?.latitude, near?.longitude],
+    { key: ['search', submitted.toLowerCase(), nearKey, isDemoViewer()], enabled: !!submitted },
+  );
+  // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
+  const results = found?.filter((r) => isListedPublicly(r.business));
 
   return (
     <View style={[styles.screen, { backgroundColor: colors.background }]}>
@@ -166,10 +163,16 @@ export default function SearchScreen() {
             bold
             onPress={() => runSearch(query)}
           />
-          {suggestions
-            .filter((s) => s.toLowerCase() !== query.trim().toLowerCase())
+          {(debounced.length >= 2 ? suggestions ?? [] : [])
+            .filter((s) => s.businessId || s.term.toLowerCase() !== query.trim().toLowerCase())
             .map((s) => (
-              <SuggestionRow key={s} label={s} onPress={() => runSearch(s)} />
+              <SuggestionRow
+                key={`${s.kind}:${s.term}:${s.businessId ?? ''}`}
+                label={s.term}
+                meta={suggestionMeta(s)}
+                opens={!!s.businessId}
+                onPress={() => pick(s)}
+              />
             ))}
         </View>
       ) : !submitted ? (
@@ -186,12 +189,12 @@ export default function SearchScreen() {
           // Keyed to remount when the responsive column count changes.
           key={`cols-${cardColumns}`}
           data={results ?? []}
-          keyExtractor={(b) => b.id}
+          keyExtractor={(r) => r.business.id}
           numColumns={cardColumns}
           columnWrapperStyle={cardColumns > 1 ? styles.column : undefined}
           renderItem={({ item }) => (
             <View style={cardColumns > 1 ? styles.gridItem : undefined}>
-              <BusinessCard business={item} />
+              <BusinessCard business={item.business} matches={item.hits} />
             </View>
           )}
           contentContainerStyle={[styles.list, centered(gridMaxWidth)]}
@@ -207,12 +210,25 @@ export default function SearchScreen() {
   );
 }
 
+/** "Type of business · 556 places", "Business", "Sold here · 69 places". */
+function suggestionMeta(s: SearchSuggestion): string {
+  const what = KIND_LABEL[s.kind];
+  if (s.businessId || s.businesses <= 1) return what;
+  return `${what} · ${s.businesses} places`;
+}
+
 function SuggestionRow({
   label,
+  meta,
+  opens,
   onPress,
   bold,
 }: {
   label: string;
+  /** What the suggestion is — shown small under it. */
+  meta?: string;
+  /** Tapping opens a business page rather than running a search. */
+  opens?: boolean;
   onPress: () => void;
   bold?: boolean;
 }) {
@@ -228,11 +244,18 @@ function SuggestionRow({
       accessibilityRole="button"
     >
       <SearchIcon size={14} />
-      <Text weight={bold ? 'semibold' : 'regular'} numberOfLines={1} style={styles.suggestionText}>
-        {label}
-      </Text>
+      <View style={styles.suggestionText}>
+        <Text weight={bold ? 'semibold' : 'regular'} numberOfLines={1}>
+          {label}
+        </Text>
+        {meta ? (
+          <Text variant="caption" tone="muted" numberOfLines={1}>
+            {meta}
+          </Text>
+        ) : null}
+      </View>
       <Text tone="muted" style={styles.suggestionArrow}>
-        ↖
+        {opens ? '›' : '↖'}
       </Text>
     </Pressable>
   );

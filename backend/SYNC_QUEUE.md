@@ -524,3 +524,67 @@ re-derivation from the Supabase diff is required:
 - **Verify:** `npm run typecheck` in `backend/`; open a business page as a customer, then the
   owner's Workspace › Offers shows 1 view on that offer; an offer with a future `startsAt`
   sits under "Scheduled" and is absent from the deals feed.
+
+## [SYNC-050] Business list `summary` mode + ratings aggregated in SQL
+
+- **Area:** BusinessRepository.list, AdRepository.listPlacements
+- **Supabase change:** migration `0026_business_cards.sql` adds two `security_invoker`
+  views: `business_ratings` (avg rounded to 1 dp + count per `business_id`, a GROUP BY
+  over `reviews`) and `business_cards` (`businesses.data` minus `menu`, `products`,
+  `services`, `plans`, `rentals`, `portfolio`, joined to the rating). In
+  `src/data/supabase/`: `list({ summary: true })` reads `business_cards` via a shared,
+  30 s-memoised `cardRows()` in `shared.ts`; `ads.listPlacements` uses the same rows; the
+  full-mode `ratingsFor` reads `business_ratings` instead of downloading every review.
+  Why: Explore was pulling ~20 MB per open (8.2 MB of full documents twice + 3.7 MB of
+  reviews); the card list is ~0.9 MB.
+- **Domain/interface:** done — `BusinessQuery.summary?: boolean` in
+  `src/data/repositories.ts` (card fields only; callers don't combine it with `search` or
+  `subcategoryId`). Callers now passing it: Explore, browse (non-stall intents), map,
+  LocationPicker, Orders tab, Workspace tab, `alertSides.loadMyBusinessIds`.
+- **Path B — backend/:** `backend/src/services/businesses.ts` list: accept `summary`
+  (query string `summary=true`); when set, strip the six catalog keys from each returned
+  document. Compute ratings with one aggregate (`SELECT business_id, round(avg((data->>'rating')::numeric),1), count(*) FROM reviews GROUP BY business_id`
+  — or `prisma.$queryRaw` against the `business_ratings` view, which exists on the shared
+  DB) instead of loading review rows. Same aggregate for getById. In
+  `backend/src/services/ads.ts` listPlacements, read businesses stripped the same way.
+  Add `summary` to the router's query parsing + Swagger docs.
+- **Path B — src/data/api/:** done — `businesses.list` already passes `summary` in the
+  `/businesses` query params (the server just ignores it until this lands).
+- **Also (0027):** a card read keeps a PREVIEW of each catalog — per category (rentals: per
+  category + subcategory + subcategoryId) the first priced item else the first, fields
+  `name, price, category, basis` (+ `subcategory, subcategoryId` for rentals) — plus
+  `catalogCounts: { menu, products, services, plans, rentals }` with the real lengths. See
+  `card_preview` / `card_doc` in `0027_search_index.sql`; on the shared DB the
+  `businesses.card` generated column already holds exactly this, so Path B can just
+  `SELECT card` for summary reads.
+- **DB/migration:** `0026_business_cards.sql` — already applied to the live DB 2026-10-12.
+- **Verify:** `npm run typecheck` in `backend/`; `GET /businesses?summary=true` returns no
+  `menu`/`products` keys and ratings match the full mode; app `npx tsc --noEmit`.
+
+## [SYNC-051] Server-side search: `search` + `suggest`
+
+- **Area:** BusinessRepository.search / BusinessRepository.suggest (new methods)
+- **Supabase change:** migration `0027_search_index.sql` — `search_terms` table (one row
+  per name/type/item/section/about term per business, kept by a trigger on `businesses`,
+  trigram-indexed), RPCs `search_businesses(q, max_results)` → `(business_id, words, tier,
+  strength, score, hits jsonb)` and `search_suggest(q, max_results)` → `(term, kind,
+  businesses, business_id)`. `src/data/supabase/businesses.ts` `search()` calls the RPC with
+  `max_results: 1000`, joins ids to `cardRows()`, adds distance, folds in the browse
+  category the query names (`withIntentMatches`) and sorts with `compareSearchResults`;
+  `suggest()` calls the RPC and prepends `intentSuggestion`.
+- **Domain/interface:** done — `src/domain/search.ts` (types, ranking rules, a TS twin of
+  the SQL used by the mock), `search`/`suggest` on `BusinessRepository`.
+- **Path B — backend/:** add `GET /businesses/search?q=&lat=&lng=&limit=` and
+  `GET /businesses/suggest?q=&limit=` (public, guests too). Simplest faithful version: call
+  the same SQL functions over the shared DB with `prisma.$queryRaw` (`select * from
+  search_businesses(${q}, 1000)` / `search_suggest(${q}, ${limit})`), join to the businesses'
+  `card` column, then apply the same post-steps as Supabase using `withIntentMatches`,
+  `compareSearchResults`, `intentSuggestion` (copy `src/domain/search.ts` + `intents.ts`
+  logic if the backend can't import from `src/`). Add both to Swagger.
+- **Path B — src/data/api/:** `src/data/api/repositories.ts` `search`/`suggest` currently
+  download the full `/businesses` list and rank on the device with `scoreBusinesses` /
+  `suggestTerms` (correct but heavy) — switch them to the two endpoints above.
+- **DB/migration:** `0027_search_index.sql` — already applied to the live DB 2026-10-12.
+- **Verify:** `npm run typecheck` in `backend/`; `/businesses/search?q=banana%20shake` puts a
+  business with a "Banana Shake" item first and returns it in `hits`; `q=cafe` returns cafés
+  nearest first; app `npx tsc --noEmit`.
