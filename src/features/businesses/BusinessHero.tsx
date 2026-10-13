@@ -19,6 +19,7 @@ import type { Business, PlaceKind, SavedPlace } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
 import { openState, summarizeHours } from '@/domain/hours';
 import { tagEmoji } from '@/domain/intents';
+import { isListingActive } from '@/domain/listingActive';
 import { copyText } from '@/lib/clipboard';
 import { haversineKm } from '@/lib/geo';
 import { Icon, Tag, Text, type IconName } from '@/components/ui';
@@ -66,6 +67,7 @@ export function BusinessHero({
   const colors = useColors();
   const cover = business.coverImageUrl;
 
+  const active = isListingActive(business);
   const status = openState(business);
   const todayLabel = status.todayLabel ?? business.hours;
   const weekly = business.openingHours ? summarizeHours(business.openingHours) : undefined;
@@ -98,6 +100,19 @@ export function BusinessHero({
         ) : (
           <Text style={styles.coverEmoji}>{emoji}</Text>
         )}
+        {/* Is the owner on the app? Tells a customer whether Call/Chat will
+            reach anyone (domain/listingActive.ts). */}
+        <View
+          style={[styles.overlayChip, styles.activeChip, { backgroundColor: colors.surface }]}
+          accessibilityLabel={active ? 'Listing active' : 'Listing inactive'}
+        >
+          <View
+            style={[styles.dot, { backgroundColor: active ? colors.success : colors.textMuted }]}
+          />
+          <Text variant="caption" weight="bold" numberOfLines={1}>
+            {active ? 'Listing active' : 'Listing inactive'}
+          </Text>
+        </View>
         <View style={styles.overlayRow}>
           {openChip ? (
             <View style={[styles.overlayChip, { backgroundColor: colors.surface }]}>
@@ -153,6 +168,11 @@ export function BusinessHero({
         {business.tagline || business.providerType ? (
           <Text tone="muted" style={styles.tagline}>
             {business.tagline ?? business.providerType}
+          </Text>
+        ) : null}
+        {!active ? (
+          <Text variant="caption" tone="muted" style={styles.tagline}>
+            The owner hasn&apos;t joined One Place yet, so calls and chats may not be answered.
           </Text>
         ) : null}
 
@@ -373,6 +393,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.pill,
     maxWidth: '60%',
   },
+  activeChip: { position: 'absolute', top: spacing.md, left: spacing.md },
   dot: { width: 7, height: 7, borderRadius: 4 },
   coverBtn: {
     position: 'absolute',

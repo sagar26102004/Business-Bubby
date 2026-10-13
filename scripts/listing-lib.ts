@@ -209,6 +209,116 @@ export function appendKey(entry: Omit<KeyEntry, 'key' | 'publishedAt'>, path = K
   renameSync(`${path}.tmp`, path);
 }
 
+/* ───────────────────────── owner accounts ───────────────────────────────── */
+
+/**
+ * Every bulk listing gets its OWN account, so the real owner can sign in
+ * straight away: username = the business name squashed to a handle, password
+ * OWNER_PASSWORD. The listing stays `listingActive: false` until someone signs
+ * in to it (migration 0028). This file is the record of who got which handle —
+ * the outreach sheet reads it (export-contacts.ts).
+ */
+export const OWNER_ACCOUNTS_FILE = 'E:/listing/owner-accounts.json';
+/** Kept in the gitignored scripts/.listing.env — never commit it. */
+export const OWNER_PASSWORD = need('OWNER_PASSWORD');
+const USERNAME_MAX = 20;
+
+export interface OwnerAccount {
+  username: string;
+  userId: string;
+  name: string;
+  createdAt: string;
+}
+
+export function readOwnerAccounts(path = OWNER_ACCOUNTS_FILE): Record<string, OwnerAccount> {
+  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
+}
+export function writeOwnerAccounts(all: Record<string, OwnerAccount>, path = OWNER_ACCOUNTS_FILE): void {
+  writeFileSync(`${path}.tmp`, JSON.stringify(all, null, 2));
+  renameSync(`${path}.tmp`, path);
+}
+
+/**
+ * The n-th handle to try for a business name (n = 1 is the plain one):
+ * "Amigos Café & Restaurant" → "amigoscafeandrestaur", then "amigoscafeandresta2"…
+ * Follows assertUsername (src/data/repositories.ts): 3–20 chars, a-z0-9,
+ * starting with a LETTER — a leading digit could collide with phone logins.
+ */
+export function ownerHandle(name: string, n = 1): string {
+  let base = normName(name) || 'business';
+  if (/^[0-9]/.test(base)) base = `the${base}`;
+  if (base.length < 3) base = `${base}shop`;
+  const suffix = n > 1 ? String(n) : '';
+  return base.slice(0, USERNAME_MAX - suffix.length) + suffix;
+}
+
+const isRateLimit = (msg: string) => /rate limit|too many|429/i.test(msg);
+const isTaken = (msg: string) => /already (been )?registered|already exists/i.test(msg);
+
+/**
+ * Creates the owner account for one business and returns it. Sign-UP only:
+ * a handle that is already registered is skipped for the next suffix — this
+ * never signs in with the shared password to an account that already exists.
+ * `taken` is the handles already used this run (updated in place).
+ */
+export async function createOwnerAccount(
+  name: string,
+  taken: Set<string>,
+): Promise<{ username: string; userId: string }> {
+  for (let n = 1, attempt = 0; n < 100; ) {
+    const username = ownerHandle(name, n);
+    if (taken.has(username)) {
+      n++;
+      continue;
+    }
+    const sb = anonClient();
+    const up = await sb.auth.signUp({
+      email: `${username}@localo.app`,
+      password: OWNER_PASSWORD,
+      options: { data: { name, username } },
+    });
+    if (up.error) {
+      if (isRateLimit(up.error.message)) {
+        const s = Math.min(60 * ++attempt, 300);
+        console.log(`  rate limited — waiting ${s}s`);
+        await sleep(s * 1000);
+        continue;
+      }
+      if (isTaken(up.error.message)) {
+        taken.add(username);
+        n++;
+        continue;
+      }
+      throw new Error(`sign-up ${username}: ${up.error.message}`);
+    }
+    // With a confirmed email already on file Supabase may answer with a user
+    // that has no identities instead of an error — that's "taken" too.
+    if (!up.data.user || (up.data.user.identities ?? []).length === 0) {
+      taken.add(username);
+      n++;
+      continue;
+    }
+    taken.add(username);
+    return { username, userId: up.data.user.id };
+  }
+  throw new Error(`No free username for "${name}".`);
+}
+
+/**
+ * Hands a listing to its new owner account, as the super-admin (RLS 0004 +
+ * the ownership lock in 0008 allow it only for them). Same two-field write as
+ * `reassignOwner` in src/data/supabase/businesses.ts, and the listing stays
+ * inactive until the owner signs in.
+ */
+export async function transferListing(admin: SupabaseClient, businessId: string, userId: string): Promise<void> {
+  const { data: row, error } = await admin.from('businesses').select('data').eq('id', businessId).maybeSingle();
+  if (error) throw error;
+  if (!row) throw new Error(`Business ${businessId} not found`);
+  const data = { ...(row.data as Record<string, unknown>), ownerId: userId, listingActive: false };
+  const { error: uErr } = await admin.from('businesses').update({ owner_id: userId, data }).eq('id', businessId);
+  if (uErr) throw uErr;
+}
+
 /** Signs in as the listing super-admin (LISTING_LOGIN / LISTING_PASSWORD) and returns its user id.
  * Mirrors src/data/supabase/auth.ts: `<login>@localo.app`, then the phone lookup RPC. */
 export async function signIn(sb: SupabaseClient): Promise<string> {

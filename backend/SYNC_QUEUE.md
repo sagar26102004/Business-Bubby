@@ -588,3 +588,22 @@ re-derivation from the Supabase diff is required:
 - **Verify:** `npm run typecheck` in `backend/`; `/businesses/search?q=banana%20shake` puts a
   business with a "Banana Shake" item first and returns it in `hits`; `q=cafe` returns cafés
   nearest first; app `npx tsc --noEmit`.
+
+## [SYNC-052] `listingActive: false` when a super-admin lists for someone else
+
+- **Area:** BusinessRepository / businesses.create
+- **Supabase change:** `src/data/supabase/businesses.ts` `create` — when the effective owner
+  (`input.ownerId`) differs from the acting user, the new document carries
+  `listingActive: false` (spread right after `ownerId`). Mock does the same.
+- **Domain/interface:** already shared — `Business.listingActive?` / `activatedAt?` in
+  `src/domain/types.ts`, read through `isListingActive` (`src/domain/listingActive.ts`;
+  missing = active).
+- **Path B — backend/:** in the businesses service's create, add the same conditional field
+  when `input.ownerId` is set and differs from the authenticated user. Nothing else: the
+  flip to active is a DB trigger on `auth.users` (migration 0028), and identity is Supabase on
+  both paths, so Path B sign-ins fire it too.
+- **Path B — src/data/api/:** nothing — the field rides in the Business document.
+- **DB/migration:** `supabase/migrations/0028_listing_active.sql` — already applied to the
+  live DB on 2026-10-13 (backfill + `on_auth_user_signed_in` trigger).
+- **Verify:** backend `npm run typecheck`; register a business for another owner via the API
+  and confirm its document has `listingActive: false`.

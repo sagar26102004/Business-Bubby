@@ -17,7 +17,8 @@ import { isSuperAdminUser } from '@/domain/superAdmin';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { useDebouncedValue } from '@/lib/useDebouncedValue';
-import { Button, Card, Input, Screen, Tag, Text } from '@/components/ui';
+import { isListingActive } from '@/domain/listingActive';
+import { Button, Card, Input, Screen, SegmentedControl, Tag, Text } from '@/components/ui';
 import { AdminGate } from '@/features/admin/AdminGate';
 import { spacing, useColors } from '@/theme/theme';
 
@@ -38,6 +39,7 @@ function ListingDesk() {
   const colors = useColors();
 
   const isAdmin = isSuperAdminUser(currentUser);
+  const [tab, setTab] = useState<'active' | 'inactive'>('active');
   const [query, setQuery] = useState('');
   const debounced = useDebouncedValue(query, 300);
   const term = debounced.trim();
@@ -54,9 +56,15 @@ function ListingDesk() {
     [isAdmin, term],
   );
 
-  const rows = results ?? [];
+  // Active = the owner has signed in at least once (domain/listingActive.ts).
+  // One search box, filtered within whichever tab is open.
+  const all = results ?? [];
+  const activeRows = all.filter(isListingActive);
+  const inactiveRows = all.filter((b) => !isListingActive(b));
+  const rows = tab === 'active' ? activeRows : inactiveRows;
   const searching = term.length > 1;
   const mine = rows.filter((b) => b.ownerId === currentUser?.id).length;
+  const tabWord = tab === 'active' ? 'active' : 'inactive';
 
   return (
     <>
@@ -70,7 +78,22 @@ function ListingDesk() {
       <Text weight="semibold" style={styles.sectionTitle}>
         Every listing
       </Text>
-      <Input placeholder="Search by name…" value={query} onChangeText={setQuery} autoCorrect={false} />
+      <SegmentedControl
+        options={[
+          { id: 'active', label: `Active${results ? ` (${activeRows.length})` : ''}` },
+          { id: 'inactive', label: `Inactive${results ? ` (${inactiveRows.length})` : ''}` },
+        ]}
+        value={tab}
+        onChange={setTab}
+        fill
+        style={styles.tabs}
+      />
+      <Input
+        placeholder={`Search ${tabWord} listings…`}
+        value={query}
+        onChangeText={setQuery}
+        autoCorrect={false}
+      />
 
       {loading ? (
         <Text variant="caption" tone="muted" style={styles.count}>
@@ -79,8 +102,8 @@ function ListingDesk() {
       ) : (
         <Text variant="caption" tone="muted" style={styles.count}>
           {searching
-            ? `${rows.length} match${rows.length === 1 ? '' : 'es'} for “${term}”`
-            : `${rows.length} listing${rows.length === 1 ? '' : 's'} on the platform`}
+            ? `${rows.length} ${tabWord} match${rows.length === 1 ? '' : 'es'} for “${term}”`
+            : `${rows.length} ${tabWord} listing${rows.length === 1 ? '' : 's'}`}
           {mine ? ` · ${mine} under your account` : ''}
         </Text>
       )}
@@ -97,6 +120,11 @@ function ListingDesk() {
               </Text>
             </View>
             {b.ownerId === currentUser?.id ? <Tag label="Yours" tone="brand" /> : null}
+            <Tag
+              label={isListingActive(b) ? 'Active' : 'Inactive'}
+              tone={isListingActive(b) ? 'status' : 'default'}
+              size="sm"
+            />
           </View>
           <View style={styles.actions}>
             <Tag label="Page" onPress={() => router.push(`/business/${b.id}`)} />
@@ -110,7 +138,7 @@ function ListingDesk() {
 
       {!loading && rows.length === 0 ? (
         <Text variant="caption" tone="muted" style={[styles.empty, { color: colors.textMuted }]}>
-          {searching ? `No business matches “${term}”.` : 'No listings on the platform yet.'}
+          {searching ? `No ${tabWord} business matches “${term}”.` : `No ${tabWord} listings.`}
         </Text>
       ) : null}
     </>
@@ -121,6 +149,7 @@ const styles = StyleSheet.create({
   card: { marginBottom: spacing.xl },
   cardTitle: { marginBottom: spacing.xs },
   sectionTitle: { marginBottom: spacing.xs },
+  tabs: { marginBottom: spacing.sm },
   count: { marginTop: spacing.sm, marginBottom: spacing.sm },
   result: { marginBottom: spacing.md },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

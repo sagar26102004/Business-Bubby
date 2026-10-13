@@ -252,6 +252,8 @@ export function createSupabaseBusinesses(): BusinessRepository {
       const business: Business = {
         id: businessId,
         ownerId: effectiveOwnerId,
+        // Listed for someone else: inactive until they sign in (migration 0028).
+        ...(effectiveOwnerId !== ownerId ? { listingActive: false } : {}),
         name: input.name,
         tagline: input.tagline,
         description: input.description,

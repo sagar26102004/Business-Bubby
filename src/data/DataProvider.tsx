@@ -7,7 +7,7 @@
  * To move off mock data later, change the single `createMockRepositories()`
  * call here to your real implementation — nothing else needs to change.
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { User } from '@/domain/types';
 import { applyCatalogEntries } from '@/domain/catalogEntries';
 import type { DeleteAccountResult, Repositories, SignUpInput } from '@/data/repositories';
@@ -105,16 +105,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Demo listings are visible only to admins and `bot…` accounts. The flag
   // lives in lib/onHold (read by every public list); flipping it drops the
   // cache so those lists refetch with or without the demo listings.
+  // The last value lives in a ref so the cache drop happens HERE, never inside
+  // a setState updater — React runs updaters during render, and invalidating
+  // there makes every subscribed useAsync update mid-render (a React error).
   const [demoViewer, setDemoViewerState] = useState(false);
+  const demoViewerRef = useRef(false);
   useEffect(() => {
     let active = true;
     const apply = (on: boolean) => {
       if (!active) return;
       setDemoViewer(on);
-      setDemoViewerState((was) => {
-        if (was !== on) invalidate(() => true);
-        return on;
-      });
+      if (demoViewerRef.current === on) return;
+      demoViewerRef.current = on;
+      setDemoViewerState(on);
+      invalidate(() => true);
     };
     if (!currentUser || currentUser.isAnonymous) {
       apply(false);

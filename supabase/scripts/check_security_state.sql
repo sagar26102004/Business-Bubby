@@ -64,6 +64,11 @@ begin
                            where tgname = 'businesses_protect_privileged' and not tgisinternal)
          then '❌ missing — run 0008' else '✅ present' end::text;
 
+  return query select 'trigger · on_auth_user_signed_in (activates listings)'::text,
+    case when not exists (select 1 from pg_trigger
+                           where tgname = 'on_auth_user_signed_in' and not tgisinternal)
+         then '❌ missing — run 0028' else '✅ present' end::text;
+
   return query select 'trigger · employees_protect_rank (no self-promotion)'::text,
     case when not exists (select 1 from pg_trigger
                            where tgname = 'employees_protect_rank' and not tgisinternal)

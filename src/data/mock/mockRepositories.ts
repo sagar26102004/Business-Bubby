@@ -465,6 +465,8 @@ class MockBusinessRepository implements BusinessRepository {
     const business: Business = {
       id: businessId,
       ownerId: effectiveOwnerId,
+      // Listed for someone else: inactive until they sign in (migration 0028).
+      ...(effectiveOwnerId !== ownerId ? { listingActive: false } : {}),
       name: input.name,
       tagline: input.tagline,
       description: input.description,
@@ -888,6 +890,16 @@ class MockAuthRepository implements AuthRepository {
       : undefined;
     const user = match ?? users.find((u) => u.id === 'u_demo')!;
     currentUserId = user.id;
+    // Twin of the sign-in trigger (migration 0028): signing in to an account
+    // makes its listings active — never demo listings, never a platform admin's.
+    if (!user.isSuperAdmin && !isSuperAdminPhone(user.phone)) {
+      for (const b of businesses) {
+        if (b.ownerId === user.id && b.listingActive === false && !b.demo) {
+          b.listingActive = true;
+          b.activatedAt = new Date().toISOString();
+        }
+      }
+    }
     return asSessionUser(user);
   }
 

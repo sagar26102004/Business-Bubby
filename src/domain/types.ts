@@ -976,6 +976,16 @@ export interface Business {
    */
   demo?: boolean;
   /**
+   * Whether the owner is really on the app. `false` = listed on their behalf
+   * (bulk publisher, super-admin, demo) and nobody has signed in to the owning
+   * account yet, so calls and chats may go unanswered. Missing = active. Flipped
+   * to true server-side by the sign-in trigger (migration 0028) — read it
+   * through `isListingActive`.
+   */
+  listingActive?: boolean;
+  /** When `listingActive` first turned true. */
+  activatedAt?: string;
+  /**
    * Chat routing: employee ids that customer chats are forwarded to. The owner
    * always receives chats, so an empty list means "owner only".
    */

@@ -14,6 +14,7 @@ import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import type { Business } from '@/domain/types';
 import { isCampaignRunning } from '@/domain/ads';
+import { isListingActive } from '@/domain/listingActive';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { DEV_TOOLS_ENABLED } from '@/lib/devTools';
@@ -84,7 +85,7 @@ export function AdminConsole() {
           icon: '🔍',
           label: 'All listings',
           sub: listings.length
-            ? `Browse or search all ${listings.length} · price, offers, promote`
+            ? `${listings.filter(isListingActive).length} active · ${listings.filter((b) => !isListingActive(b)).length} inactive · search, price, promote`
             : 'Browse every listing, then price or promote it',
           href: '/admin/listings' as Href,
         },

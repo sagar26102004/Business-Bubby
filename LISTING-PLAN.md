@@ -1,6 +1,6 @@
 # Bulk listing plan: Zomato / Google Maps → Localo
 
-How real Indore businesses get onto Localo in bulk, one business type at a time (cafés first), without the register wizard. Everything here runs as the platform **super-admin** (`sagar`), who owns each listing until the real owner claims it (Reassign owner panel).
+How real Indore businesses get onto Localo in bulk, one business type at a time (cafés first), without the register wizard. Everything here runs as the platform **super-admin** (`sagar`), but **every listing is handed to its own account** right after it's published (since 13 Oct 2026): username = the business name squashed to a handle (`Amigos Café & Restaurant` → `amigoscafeandrestaur`, a number added for a second branch), one shared password (`OWNER_PASSWORD` in `scripts/.listing.env`, gitignored, never written here). The handles are recorded in `E:\listing\owner-accounts.json` and printed on the outreach sheet, so the owner can sign in straight away. The listing shows **"Listing inactive"** until someone signs in to that account; the sign-in trigger (migration 0028) then flips it to active. `scripts/owner-accounts.ts` does the same for anything still under the super-admin (`--dry-run` first to see the handles).
 
 **Food places come from Zomato, not Google Maps (Sagar's decision, 8 Oct 2026).** By October 2026 Google served our automated browser a reduced place page (Overview and Reviews only, no menu), and the first real run lost almost 2 hours to it. Every Zomato restaurant page carries the whole listing as data: name, exact pin, address, phone, the week's hours, the featured photo and the full menu with prices, veg marks and dish photos. So the menu needs no Claude at all. **Dish photos are off for now** (Sagar, 8 Oct 2026): 40,000 of them would be ~3 GB of Cloudinary plus a resize per photo per size viewed. `MAX_DISH_PHOTOS` in `zomato-bot.ts` turns them back on; the publisher already uploads them. `maps-bot.ts` stays for business types Zomato doesn't cover (gyms, salons…).
 
@@ -13,7 +13,8 @@ How real Indore businesses get onto Localo in bulk, one business type at a time 
 | `menu-from-photos.ts` | Gets each place a `menu.json` from the best source that has one (the menu rule, below) | No |
 | `zomato.ts` | Finds the place's Zomato page in our own browser for the menu rule | No |
 | `add-menus.ts` | Gives **live** food listings that have no menu one (Zomato, then the web), as the super-admin | **Yes** |
-| `list-business.ts` | Signs in as super-admin and publishes each ready folder | **Yes** |
+| `list-business.ts` | Signs in as super-admin, publishes each ready folder, then gives it its own owner account | **Yes** |
+| `owner-accounts.ts` | Gives every listing still under the super-admin its own account (`--dry-run`, `--limit N`) | **Yes** |
 | `export-contacts.ts` | Outreach list of every published food place (super-admin's listings): `E:\listing\food-contacts.xlsx` (+ `.csv`), business name + contact number, one sheet per city, one row per number. With `--link` each row gets a WhatsApp **Send** link carrying `outreach-message.txt` (sending stays manual). Re-run after each run; Sent?/Notes and the link are kept, new places marked | No (reads only) |
 | `outreach-sender.ts` | Local page that walks the outreach sheet: opens each chat in WhatsApp with the message typed, **you** press send, it records it in `E:\listing\outreach-sent.json` (copied into Sent? on the next export). No daily limit unless `--daily N`; `--city` starts on one city. Never sends by itself: automating WhatsApp gets the number banned | No |
 | `listing-loop.ts` | The unattended schedule: collect → publish, every 30 min | Yes, through the publisher |
@@ -21,7 +22,7 @@ How real Indore businesses get onto Localo in bulk, one business type at a time 
 | `listing-lib.ts` | Shared helpers: env, duplicate key, key file | — |
 | `listing-plan.json` | The schedule and the list of searches | — |
 
-Secrets live in `scripts/.listing.env` (gitignored): `LISTING_LOGIN`, `LISTING_PASSWORD`. Menus are read by Claude Code itself (the `claude` CLI, signed in as you); there's no separate AI key. Gemini was tried and dropped on 2026-10-07: it was overloaded for hours, and when it did answer it read 123 dishes from a menu where Claude read about 200.
+Secrets live in `scripts/.listing.env` (gitignored): `LISTING_LOGIN`, `LISTING_PASSWORD`, `OWNER_PASSWORD`. Menus are read by Claude Code itself (the `claude` CLI, signed in as you); there's no separate AI key. Gemini was tried and dropped on 2026-10-07: it was overloaded for hours, and when it did answer it read 123 dishes from a menu where Claude read about 200.
 
 ## A collected place: `E:\listing\<type>\<Place name>\`
 

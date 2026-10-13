@@ -24,9 +24,15 @@
  * listing and that file, so the same café is never listed twice — a match
  * within 150 m is recorded as a duplicate and skipped.
  *
+ * OWNER ACCOUNT. Right after the insert, each listing gets its own account —
+ * username = the business name as a handle, password OWNER_PASSWORD (scripts/.listing.env) —
+ * and is moved to it, `listingActive: false` until someone signs in to it.
+ * Handles are recorded in E:\listing\owner-accounts.json (listing-lib).
+ *
  * Credentials live in scripts/.listing.env (gitignored):
  *   LISTING_LOGIN=<username or phone>
  *   LISTING_PASSWORD=<password>
+ *   OWNER_PASSWORD=<the shared password every owner account gets>
  */
 /// <reference types="node" />
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -50,7 +56,11 @@ import {
   loadKeyFile,
   loadLiveListings,
   need,
+  readOwnerAccounts,
+  createOwnerAccount,
   signIn,
+  transferListing,
+  writeOwnerAccounts,
   type KnownListing,
 } from './listing-lib';
 
@@ -161,6 +171,8 @@ interface RunOptions {
   keysFile: string;
   /** Live listings + the key file: what the duplicate key checks against. */
   known: KnownListing[];
+  /** Owner-account handles already used (listing-lib: createOwnerAccount). */
+  takenHandles: Set<string>;
 }
 
 /**
@@ -342,12 +354,28 @@ async function listFolder(sb: SupabaseClient | null, ownerId: string, dir: strin
     callHandlerIds: [],
     ownerHandlesCalls: true,
     chatRecipientIds: [],
+    // The owner isn't on the app yet — "Listing inactive" until they sign in (migration 0028).
+    listingActive: false,
     createdAt: new Date().toISOString(),
   };
   // Drop undefined keys so the jsonb document matches what supabase-js writes from the app.
   const data = JSON.parse(JSON.stringify(business));
   const { error } = await sb.from('businesses').insert({ id, owner_id: ownerId, type, data });
   if (error) throw error;
+
+  // Hand it to its own account (<handle> / OWNER_PASSWORD) so the real owner can
+  // sign in. A failure here leaves it under the super-admin, published all the
+  // same — `scripts/owner-accounts.ts` sweeps those up later.
+  try {
+    const made = await createOwnerAccount(name, opts.takenHandles);
+    const accounts = readOwnerAccounts();
+    accounts[id] = { ...made, name, createdAt: new Date().toISOString() };
+    writeOwnerAccounts(accounts);
+    await transferListing(sb, id, made.userId);
+    console.log(`   ✔ owner account: ${made.username}`);
+  } catch (e) {
+    console.log(`   ⚠ no owner account yet (${e instanceof Error ? e.message : e}) — run owner-accounts.ts`);
+  }
 
   writeFileSync(
     join(dir, 'listing.result.json'),
@@ -438,7 +466,8 @@ export async function publish(
   // Everything already live (any owner) + everything in the key file — the
   // duplicate key checks against both.
   const known = [...(await loadLiveListings(sb ?? anonClient())), ...loadKeyFile(keysFile)];
-  const opts: RunOptions = { dryRun, auto: !!flags.auto, keep: !!flags.keep, keysFile, known };
+  const takenHandles = new Set(Object.values(readOwnerAccounts()).map((a) => a.username));
+  const opts: RunOptions = { dryRun, auto: !!flags.auto, keep: !!flags.keep, keysFile, known, takenHandles };
 
   for (const dir of dirs) {
     try {

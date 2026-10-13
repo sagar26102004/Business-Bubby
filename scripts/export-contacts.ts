@@ -1,8 +1,10 @@
 /// <reference types="node" />
 /**
- * The outreach list: every food place the listing run has published (the
- * super-admin's own listings, so only places no real owner has claimed yet),
- * as business name + contact number + a one-tap WhatsApp message about the app.
+ * The outreach list: every food place the listing run has published that is
+ * still INACTIVE (nobody has signed in to its owner account yet), as business
+ * name + contact number + the owner's login (Username / Password columns, also
+ * `{username}` / `{password}` in outreach-message.txt) + a one-tap WhatsApp
+ * message about the app.
  *
  *   npx tsx scripts/export-contacts.ts --link <download link> [--out E:\listing\food-contacts.xlsx] [--all-types]
  *
@@ -29,7 +31,7 @@ import type { BusinessLocation, GeoPoint } from '@/domain/types';
 import { isFoodShop } from '@/domain/tags';
 import { citiesForState } from '@/domain/geoCatalog';
 import { haversineKm } from '@/lib/geo';
-import { anonClient, readOutreachLog, signIn } from './listing-lib';
+import { OWNER_PASSWORD, anonClient, readOutreachLog, readOwnerAccounts, signIn } from './listing-lib';
 
 const DEFAULT_OUT = 'E:/listing/food-contacts.xlsx';
 const MESSAGE_FILE = join(process.cwd(), 'scripts', 'outreach-message.txt');
@@ -43,12 +45,16 @@ interface Row {
   phone?: string;
   location?: BusinessLocation;
   tags: string[];
+  /** Its owner account's username (password OWNER_PASSWORD), once it has one. */
+  username?: string;
 }
 
 /** One person to message: every listing that shares a number. */
 interface Contact {
   ids: string[];
   names: string[];
+  /** One username per listing on the row (several branches = several logins). */
+  usernames: string[];
   /** 10 digits, or '' when the listing has no number. */
   digits: string;
   city: string;
@@ -85,21 +91,35 @@ function assignCities(rows: Row[]): Map<Row, string> {
   return out;
 }
 
+/**
+ * The run's listings: those that got their own owner account
+ * (owner-accounts.json) plus any still under the super-admin — and of those,
+ * only the ones still INACTIVE, i.e. nobody has signed in to them yet.
+ */
 async function loadListings(): Promise<Row[]> {
   const sb = anonClient();
-  const ownerId = await signIn(sb);
+  const adminId = await signIn(sb);
+  const accounts = readOwnerAccounts();
   const out: Row[] = [];
   for (let from = 0; ; from += 1000) {
     const { data, error } = await sb
       .from('businesses')
-      .select('id, data')
-      .eq('owner_id', ownerId)
+      .select('id, owner_id, data')
       .range(from, from + 999);
     if (error) throw error;
     for (const r of data ?? []) {
       const d = r.data as Record<string, any>;
-      if (d.demo) continue;
-      out.push({ id: r.id as string, name: d.name ?? '', phone: d.phone || undefined, location: d.location, tags: d.tags ?? [] });
+      const id = r.id as string;
+      if (d.demo || d.listingActive !== false) continue;
+      if (r.owner_id !== adminId && !accounts[id]) continue;
+      out.push({
+        id,
+        name: d.name ?? '',
+        phone: d.phone || undefined,
+        location: d.location,
+        tags: d.tags ?? [],
+        username: accounts[id]?.username,
+      });
     }
     if (!data || data.length < 1000) return out;
   }
@@ -118,9 +138,16 @@ function toContacts(rows: Row[], cityOf: Map<Row, string>): Contact[] {
     if (known) {
       known.ids.push(r.id);
       if (!known.names.includes(r.name)) known.names.push(r.name);
+      if (r.username) known.usernames.push(r.username);
       continue;
     }
-    const c: Contact = { ids: [r.id], names: [r.name], digits, city: cityOf.get(r)! };
+    const c: Contact = {
+      ids: [r.id],
+      names: [r.name],
+      usernames: r.username ? [r.username] : [],
+      digits,
+      city: cityOf.get(r)!,
+    };
     if (digits) byNumber.set(digits, c);
     out.push(c);
   }
@@ -167,8 +194,18 @@ async function loadPrevious(path: string): Promise<Previous | null> {
   return prev;
 }
 
-const whatsappUrl = (digits: string, template: string, name: string, link: string) =>
-  `https://wa.me/91${digits}?text=${encodeURIComponent(template.replaceAll('{name}', name).replaceAll('{link}', link).trim())}`;
+/** {name}, {link}, and — when the message wants them — {username} / {password}. */
+const whatsappUrl = (digits: string, template: string, name: string, link: string, username: string) =>
+  `https://wa.me/91${digits}?text=${encodeURIComponent(
+    template
+      .replaceAll('{name}', name)
+      .replaceAll('{link}', link)
+      .replaceAll('{username}', username)
+      .replaceAll('{password}', OWNER_PASSWORD)
+      .trim(),
+  )}`;
+
+const loginOf = (c: { usernames: string[] }) => c.usernames.join(', ');
 
 function styleHeader(ws: ExcelJS.Worksheet, columns: number, rows: number) {
   const head = ws.getRow(1);
@@ -225,6 +262,8 @@ async function main() {
     { header: 'Id', key: 'id', width: 10, hidden: true },
     { header: 'Business name', key: 'name', width: 40 },
     { header: 'Contact number', key: 'number', width: 16 },
+    { header: 'Username', key: 'username', width: 22 },
+    { header: 'Password', key: 'password', width: 10 },
     ...(link ? [{ header: 'WhatsApp', key: 'send', width: 11 }] : []),
     { header: 'New', key: 'isNew', width: 7 },
     { header: 'Sent?', key: 'sent', width: 10 },
@@ -237,12 +276,14 @@ async function main() {
     const rows = byCity.get(city)!;
     for (const c of rows) {
       const mark = markOf(c);
-      const url = link ? whatsappUrl(c.digits, template, nameOf(c), link) : '';
+      const url = link ? whatsappUrl(c.digits, template, nameOf(c), link, loginOf(c)) : '';
       longestUrl = Math.max(longestUrl, url.length);
       const row = ws.addRow({
         id: c.ids.join(','),
         name: nameOf(c),
         number: showNumber(c.digits),
+        username: loginOf(c),
+        password: c.usernames.length ? OWNER_PASSWORD : '',
         send: url ? { text: 'Send', hyperlink: url } : undefined,
         isNew: isNew(c) ? 'New' : '',
         sent: mark?.sent ?? '',
@@ -260,6 +301,8 @@ async function main() {
     { header: 'Business name', key: 'name', width: 40 },
     { header: 'Contact number', key: 'number', width: 16 },
     { header: 'City', key: 'city', width: 12 },
+    { header: 'Username', key: 'username', width: 22 },
+    { header: 'Password', key: 'password', width: 10 },
     { header: 'New', key: 'isNew', width: 7 },
     { header: 'Called?', key: 'sent', width: 10 },
     { header: 'Notes', key: 'notes', width: 40 },
@@ -273,6 +316,8 @@ async function main() {
       name: nameOf(c),
       number: c.digits ? showNumber(c.digits) : '— no number —',
       city: c.city,
+      username: loginOf(c),
+      password: c.usernames.length ? OWNER_PASSWORD : '',
       isNew: isNew(c) ? 'New' : '',
       sent: mark?.sent ?? '',
       notes: mark?.notes ?? '',
@@ -326,8 +371,14 @@ async function main() {
   const csv = out.replace(/\.xlsx$/i, '') + '.csv';
   const quote = (v: string) => `"${v.replaceAll('"', '""')}"`;
   const lines = [
-    ['Business name', 'Contact number', 'City'],
-    ...[...whatsapp, ...others].map((c) => [nameOf(c), c.digits, c.city]),
+    ['Business name', 'Contact number', 'City', 'Username', 'Password'],
+    ...[...whatsapp, ...others].map((c) => [
+      nameOf(c),
+      c.digits,
+      c.city,
+      loginOf(c),
+      c.usernames.length ? OWNER_PASSWORD : '',
+    ]),
   ];
   // The BOM makes Excel read the file as UTF-8.
   writeFileSync(csv, '\uFEFF' + lines.map((l) => l.map(quote).join(',')).join('\r\n') + '\r\n');

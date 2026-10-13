@@ -25,6 +25,7 @@ import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { formatMoney, parsePrice, sanitizePriceInput } from '@/lib/money';
 import { showAlert } from '@/lib/alert';
+import { ON_HOLD } from '@/lib/onHold';
 import {
   BottomActionBar,
   Button,
@@ -310,7 +311,8 @@ export default function OfferEditorScreen() {
               </View>
               <Switch value={active} onValueChange={setActive} />
             </View>
-            {isOfferLive(existing) ? (
+            {/* ON HOLD (2026-10-13): Promote button hidden — ON_HOLD.promoteOfferButton. */}
+            {!ON_HOLD.promoteOfferButton && isOfferLive(existing) ? (
               <Button
                 title="📣 Promote this offer"
                 variant="secondary"

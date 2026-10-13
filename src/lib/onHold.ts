@@ -10,10 +10,14 @@
  *                    stall console, product threads, "Selling my own stuff".
  *  - `businessQr`  — the printable QR that opens a business page, and scanning
  *                    one. Order handover / scan-to-pay QR is NOT affected.
+ *  - `promoteOfferButton` — the "📣 Promote this offer" button in the offer
+ *                    editor (2026-10-13). The Workspace › Promote tile and the
+ *                    /promote route are NOT affected.
  */
 export const ON_HOLD = {
   stalls: true,
   businessQr: true,
+  promoteOfferButton: true,
 } as const;
 
 /**
