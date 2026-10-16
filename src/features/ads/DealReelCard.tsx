@@ -44,6 +44,7 @@ import { formatMoney, parsePrice } from '@/lib/money';
 import { Icon, Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
 import { AD_GRADIENTS } from './adGradients';
+import { DEMO_AD_FILTER, DemoAdNotice, isDemoAd } from './demoAd';
 
 /**
  * The feed's own dark palette. The reel sits on someone's photo or video, not
@@ -118,6 +119,8 @@ export function DealReelCard({
   const saving = savingLabel(offer);
   const dealLine = [offer.tag, endsInLabel(offer.endsAt)].filter(Boolean).join(' · ');
   const tags = (business.tags ?? []).slice(0, 3);
+  // A sample listing's offer: shown in black and white with a notice across it.
+  const demo = isDemoAd(business);
 
   // A player exists only for a page that actually has a video: the feed keeps a
   // few pages mounted either side of the visible one, and idle players are the
@@ -146,240 +149,246 @@ export function DealReelCard({
     // accessible={false}: the page is a tap target for sighted viewers only; a
     // screen reader must still reach each button inside it on its own.
     <Pressable onPress={onToggleClean} accessible={false} style={[styles.page, { height }]}>
-      {/* ── The creative ── video, else photo, else the business's gradient.
-          Shown WHOLE ("contain"), never cropped to fill: a poster with its
-          price cut off, or a reel filmed square, loses exactly what the
-          business put in it. The bars that leaves are filled with a blurred
-          copy of the poster (or the feed's dark ground when there's none). */}
-      {offer.imageUrl ? (
-        <Image
-          source={{ uri: offer.imageUrl }}
-          style={StyleSheet.absoluteFill}
-          resizeMode="cover"
-          blurRadius={24}
-        />
-      ) : null}
-      {offer.videoUrl ? (
-        <VideoView
-          player={player}
-          // NOT StyleSheet.absoluteFill: on web the <video> is a replaced
-          // element, and left/right/top/bottom leave it at its intrinsic size,
-          // with `contentFit` having nothing to work on. Explicit 100%/100% is
-          // what gives it the page to fit into.
-          style={styles.video}
-          contentFit="contain"
-          nativeControls={false}
-        />
-      ) : offer.imageUrl ? (
-        <Image source={{ uri: offer.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="contain" />
-      ) : (
-        <>
-          <LinearGradient
-            colors={gradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+      <View style={[StyleSheet.absoluteFill, demo && DEMO_AD_FILTER]} pointerEvents="box-none">
+        {/* ── The creative ── video, else photo, else the business's gradient.
+            Shown WHOLE ("contain"), never cropped to fill: a poster with its
+            price cut off, or a reel filmed square, loses exactly what the
+            business put in it. The bars that leaves are filled with a blurred
+            copy of the poster (or the feed's dark ground when there's none). */}
+        {offer.imageUrl ? (
+          <Image
+            source={{ uri: offer.imageUrl }}
             style={StyleSheet.absoluteFill}
+            resizeMode="cover"
+            blurRadius={24}
           />
-          <Text style={styles.watermark}>{emoji}</Text>
-        </>
-      )}
-
-      {clean ? (
-        <>
-          <LinearGradient
-            colors={['rgba(40,51,44,0)', 'rgba(40,51,44,0.75)']}
-            locations={[0.75, 1]}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
+        ) : null}
+        {offer.videoUrl ? (
+          <VideoView
+            player={player}
+            // NOT StyleSheet.absoluteFill: on web the <video> is a replaced
+            // element, and left/right/top/bottom leave it at its intrinsic size,
+            // with `contentFit` having nothing to work on. Explicit 100%/100% is
+            // what gives it the page to fit into.
+            style={styles.video}
+            contentFit="contain"
+            nativeControls={false}
+            // A SurfaceView draws outside the view tree, so the demo filter
+            // would miss it; a TextureView takes it.
+            surfaceType={demo ? 'textureView' : undefined}
           />
-          <View style={[styles.cleanName, { paddingBottom: bottomInset + spacing.lg }]} pointerEvents="box-none">
-            <Pressable onPress={onOpen} style={styles.cleanNameBtn}>
-              <Text variant="subheading" weight="bold" style={styles.cleanNameText} numberOfLines={1}>
-                {business.name}
-              </Text>
-            </Pressable>
-            {/* Never quiet about a paid placement — not even here. */}
-            {campaign ? (
-              <Text variant="caption" weight="semibold" style={{ color: REEL.muted }}>
-                Sponsored
-              </Text>
-            ) : null}
-          </View>
-        </>
-      ) : (
-        <>
-          {/* Text sits on whatever the creative happens to be, so it needs its own
-              ground: tinted at the top under the bar, clear in the middle, the
-              feed's dark sage under the copy. */}
-          <LinearGradient
-            colors={['rgba(40,51,44,0.7)', 'rgba(40,51,44,0)', 'rgba(40,51,44,0.6)', REEL.ground]}
-            locations={[0, 0.22, 0.55, 1]}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
+        ) : offer.imageUrl ? (
+          <Image source={{ uri: offer.imageUrl }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+        ) : (
+          <>
+            <LinearGradient
+              colors={gradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <Text style={styles.watermark}>{emoji}</Text>
+          </>
+        )}
 
-          {/* Never quiet about a paid placement. */}
-          {campaign ? (
-            <View style={[styles.sponsored, { top: topInset }]} pointerEvents="none">
-              <Text variant="caption" weight="semibold" style={{ color: REEL.muted }}>
-                Sponsored
-              </Text>
-            </View>
-          ) : null}
-
-          {/* ── The side rail ── the small, repeatable actions. */}
-          <View style={[styles.rail, { bottom: bottomInset + (next ? 150 : 90) }]}>
-            <Pressable onPress={onOpen} hitSlop={6} style={styles.avatar}>
-              {business.coverImageUrl ? (
-                <Image source={{ uri: business.coverImageUrl }} style={styles.avatarImg} />
-              ) : (
-                <Text style={styles.avatarEmoji}>{getType(business.type)?.icon ?? '🏪'}</Text>
-              )}
-            </Pressable>
-            <RailButton icon="share" label="Share" onPress={onShare} />
-            {onDirections ? (
-              <RailButton
-                icon="directions"
-                label={distanceLabel ?? 'Route'}
-                onPress={onDirections}
-                tint={REEL.mint}
-              />
-            ) : null}
-            <RailButton icon="phone" label="Call" onPress={onCall} />
-          </View>
-
-          {/* ── The copy ── */}
-          <View style={[styles.bottom, { paddingBottom: bottomInset + spacing.md }]}>
-            <View style={styles.copy}>
-              {dealLine ? (
-                <View style={styles.dealPill}>
-                  <Icon name="bolt" size={14} color={REEL.onFlame} />
-                  <Text variant="caption" weight="bold" style={{ color: REEL.onFlame }}>
-                    {dealLine.toUpperCase()}
-                  </Text>
-                </View>
-              ) : null}
-
-              <Pressable onPress={onOpen}>
-                <Text variant="subheading" weight="bold" style={{ color: REEL.text }} numberOfLines={1}>
+        {clean ? (
+          <>
+            <LinearGradient
+              colors={['rgba(40,51,44,0)', 'rgba(40,51,44,0.75)']}
+              locations={[0.75, 1]}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <View style={[styles.cleanName, { paddingBottom: bottomInset + spacing.lg }]} pointerEvents="box-none">
+              <Pressable onPress={onOpen} style={styles.cleanNameBtn}>
+                <Text variant="subheading" weight="bold" style={styles.cleanNameText} numberOfLines={1}>
                   {business.name}
                 </Text>
               </Pressable>
+              {/* Never quiet about a paid placement — not even here. */}
+              {campaign ? (
+                <Text variant="caption" weight="semibold" style={{ color: REEL.muted }}>
+                  Sponsored
+                </Text>
+              ) : null}
+            </View>
+          </>
+        ) : (
+          <>
+            {/* Text sits on whatever the creative happens to be, so it needs its own
+                ground: tinted at the top under the bar, clear in the middle, the
+                feed's dark sage under the copy. */}
+            <LinearGradient
+              colors={['rgba(40,51,44,0.7)', 'rgba(40,51,44,0)', 'rgba(40,51,44,0.6)', REEL.ground]}
+              locations={[0, 0.22, 0.55, 1]}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
 
-              <View style={styles.meta}>
-                {open !== undefined ? (
-                  <View style={styles.metaItem}>
-                    <View style={[styles.dot, { backgroundColor: open ? REEL.mint : REEL.flame }]} />
-                    <Text variant="caption" style={{ color: open ? REEL.mint : REEL.flame }}>
-                      {open ? 'Open now' : 'Closed'}
+            {/* Never quiet about a paid placement. */}
+            {campaign ? (
+              <View style={[styles.sponsored, { top: topInset }]} pointerEvents="none">
+                <Text variant="caption" weight="semibold" style={{ color: REEL.muted }}>
+                  Sponsored
+                </Text>
+              </View>
+            ) : null}
+
+            {/* ── The side rail ── the small, repeatable actions. */}
+            <View style={[styles.rail, { bottom: bottomInset + (next ? 150 : 90) }]}>
+              <Pressable onPress={onOpen} hitSlop={6} style={styles.avatar}>
+                {business.coverImageUrl ? (
+                  <Image source={{ uri: business.coverImageUrl }} style={styles.avatarImg} />
+                ) : (
+                  <Text style={styles.avatarEmoji}>{getType(business.type)?.icon ?? '🏪'}</Text>
+                )}
+              </Pressable>
+              <RailButton icon="share" label="Share" onPress={onShare} />
+              {onDirections ? (
+                <RailButton
+                  icon="directions"
+                  label={distanceLabel ?? 'Route'}
+                  onPress={onDirections}
+                  tint={REEL.mint}
+                />
+              ) : null}
+              <RailButton icon="phone" label="Call" onPress={onCall} />
+            </View>
+
+            {/* ── The copy ── */}
+            <View style={[styles.bottom, { paddingBottom: bottomInset + spacing.md }]}>
+              <View style={styles.copy}>
+                {dealLine ? (
+                  <View style={styles.dealPill}>
+                    <Icon name="bolt" size={14} color={REEL.onFlame} />
+                    <Text variant="caption" weight="bold" style={{ color: REEL.onFlame }}>
+                      {dealLine.toUpperCase()}
                     </Text>
                   </View>
                 ) : null}
-                {distanceLabel || where ? (
-                  <Text variant="caption" style={{ color: REEL.muted }} numberOfLines={1}>
-                    {[distanceLabel && `${distanceLabel} away`, where].filter(Boolean).join(' · ')}
+
+                <Pressable onPress={onOpen}>
+                  <Text variant="subheading" weight="bold" style={{ color: REEL.text }} numberOfLines={1}>
+                    {business.name}
+                  </Text>
+                </Pressable>
+
+                <View style={styles.meta}>
+                  {open !== undefined ? (
+                    <View style={styles.metaItem}>
+                      <View style={[styles.dot, { backgroundColor: open ? REEL.mint : REEL.flame }]} />
+                      <Text variant="caption" style={{ color: open ? REEL.mint : REEL.flame }}>
+                        {open ? 'Open now' : 'Closed'}
+                      </Text>
+                    </View>
+                  ) : null}
+                  {distanceLabel || where ? (
+                    <Text variant="caption" style={{ color: REEL.muted }} numberOfLines={1}>
+                      {[distanceLabel && `${distanceLabel} away`, where].filter(Boolean).join(' · ')}
+                    </Text>
+                  ) : null}
+                  {business.ratingCount ? (
+                    <Text variant="caption" weight="bold" style={{ color: REEL.star }}>
+                      ★ {(business.ratingAvg ?? 0).toFixed(1)} ({business.ratingCount})
+                    </Text>
+                  ) : null}
+                </View>
+
+                <Text variant="heading" weight="bold" style={{ color: REEL.text }} numberOfLines={2}>
+                  {offer.title}
+                </Text>
+
+                {offer.description ? (
+                  <Text variant="label" style={{ color: REEL.muted }} numberOfLines={2}>
+                    {offer.description}
                   </Text>
                 ) : null}
-                {business.ratingCount ? (
-                  <Text variant="caption" weight="bold" style={{ color: REEL.star }}>
-                    ★ {(business.ratingAvg ?? 0).toFixed(1)} ({business.ratingCount})
-                  </Text>
+
+                {offer.price ? (
+                  <View style={styles.priceRow}>
+                    <Text weight="bold" style={styles.price}>
+                      {offer.price}
+                    </Text>
+                    {offer.wasPrice ? (
+                      <Text variant="body" style={styles.wasPrice}>
+                        {offer.wasPrice}
+                      </Text>
+                    ) : null}
+                    {saving ? (
+                      <View style={styles.save}>
+                        <Text variant="caption" weight="bold" style={{ color: REEL.mint }}>
+                          Save {saving}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {tags.length > 0 ? (
+                  <View style={styles.tags}>
+                    {tags.map((t) => (
+                      <View key={t} style={styles.tagChip}>
+                        <Text variant="caption" style={{ color: REEL.muted }}>
+                          #{t.replace(/\s+/g, '')}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
                 ) : null}
               </View>
 
-              <Text variant="heading" weight="bold" style={{ color: REEL.text }} numberOfLines={2}>
-                {offer.title}
-              </Text>
-
-              {offer.description ? (
-                <Text variant="label" style={{ color: REEL.muted }} numberOfLines={2}>
-                  {offer.description}
-                </Text>
-              ) : null}
-
-              {offer.price ? (
-                <View style={styles.priceRow}>
-                  <Text weight="bold" style={styles.price}>
-                    {offer.price}
+              {/* ── Doors ── one secondary, one terracotta "go buy it". */}
+              <View style={styles.actions}>
+                <Pressable onPress={onOpen} style={[styles.cta, styles.ctaGhost, onOrder && styles.ctaNarrow]}>
+                  <Icon name="store" size={18} color={REEL.text} />
+                  <Text variant="label" weight="bold" style={{ color: REEL.text }}>
+                    View business
                   </Text>
-                  {offer.wasPrice ? (
-                    <Text variant="body" style={styles.wasPrice}>
-                      {offer.wasPrice}
+                </Pressable>
+                {onOrder ? (
+                  <Pressable onPress={onOrder} style={[styles.cta, styles.ctaWide, { backgroundColor: colors.cta }]}>
+                    <Text variant="label" weight="bold" style={{ color: '#fff' }}>
+                      Claim offer
                     </Text>
-                  ) : null}
-                  {saving ? (
-                    <View style={styles.save}>
-                      <Text variant="caption" weight="bold" style={{ color: REEL.mint }}>
-                        Save {saving}
+                    <Icon name="arrowRight" size={18} color="#fff" />
+                  </Pressable>
+                ) : null}
+              </View>
+
+              {/* ── Next deal ── the swipe-up affordance, and a tap does the swipe. */}
+              {next ? (
+                <Pressable onPress={onNext} style={styles.peek}>
+                  <View style={styles.peekThumb}>
+                    {next.offer.imageUrl ? (
+                      <Image source={{ uri: next.offer.imageUrl }} style={styles.avatarImg} />
+                    ) : (
+                      <Text style={styles.peekEmoji}>
+                        {next.offer.emoji ?? getType(next.business.type)?.icon ?? '🏷️'}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={styles.peekText}>
+                    <View style={styles.peekTop}>
+                      <View style={styles.nextBadge}>
+                        <Text weight="bold" style={styles.nextBadgeText}>NEXT DEAL</Text>
+                      </View>
+                      <Text variant="caption" style={{ color: REEL.muted, flexShrink: 1 }} numberOfLines={1}>
+                        {next.business.name}
                       </Text>
                     </View>
-                  ) : null}
-                </View>
-              ) : null}
-
-              {tags.length > 0 ? (
-                <View style={styles.tags}>
-                  {tags.map((t) => (
-                    <View key={t} style={styles.tagChip}>
-                      <Text variant="caption" style={{ color: REEL.muted }}>
-                        #{t.replace(/\s+/g, '')}
-                      </Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-
-            {/* ── Doors ── one secondary, one terracotta "go buy it". */}
-            <View style={styles.actions}>
-              <Pressable onPress={onOpen} style={[styles.cta, styles.ctaGhost, onOrder && styles.ctaNarrow]}>
-                <Icon name="store" size={18} color={REEL.text} />
-                <Text variant="label" weight="bold" style={{ color: REEL.text }}>
-                  View business
-                </Text>
-              </Pressable>
-              {onOrder ? (
-                <Pressable onPress={onOrder} style={[styles.cta, styles.ctaWide, { backgroundColor: colors.cta }]}>
-                  <Text variant="label" weight="bold" style={{ color: '#fff' }}>
-                    Claim offer
-                  </Text>
-                  <Icon name="arrowRight" size={18} color="#fff" />
+                    <Text variant="caption" weight="bold" style={{ color: REEL.text }} numberOfLines={1}>
+                      {next.offer.title}
+                      {formatDistance(next.distanceKm) ? ` · ${formatDistance(next.distanceKm)}` : ''}
+                    </Text>
+                  </View>
+                  <Icon name="chevronDown" size={18} color={REEL.mint} />
                 </Pressable>
               ) : null}
             </View>
-
-            {/* ── Next deal ── the swipe-up affordance, and a tap does the swipe. */}
-            {next ? (
-              <Pressable onPress={onNext} style={styles.peek}>
-                <View style={styles.peekThumb}>
-                  {next.offer.imageUrl ? (
-                    <Image source={{ uri: next.offer.imageUrl }} style={styles.avatarImg} />
-                  ) : (
-                    <Text style={styles.peekEmoji}>
-                      {next.offer.emoji ?? getType(next.business.type)?.icon ?? '🏷️'}
-                    </Text>
-                  )}
-                </View>
-                <View style={styles.peekText}>
-                  <View style={styles.peekTop}>
-                    <View style={styles.nextBadge}>
-                      <Text weight="bold" style={styles.nextBadgeText}>NEXT DEAL</Text>
-                    </View>
-                    <Text variant="caption" style={{ color: REEL.muted, flexShrink: 1 }} numberOfLines={1}>
-                      {next.business.name}
-                    </Text>
-                  </View>
-                  <Text variant="caption" weight="bold" style={{ color: REEL.text }} numberOfLines={1}>
-                    {next.offer.title}
-                    {formatDistance(next.distanceKm) ? ` · ${formatDistance(next.distanceKm)}` : ''}
-                  </Text>
-                </View>
-                <Icon name="chevronDown" size={18} color={REEL.mint} />
-              </Pressable>
-            ) : null}
-          </View>
-        </>
-      )}
+          </>
+        )}
+      </View>
+      {demo ? <DemoAdNotice /> : null}
     </Pressable>
   );
 }

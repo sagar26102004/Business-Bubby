@@ -34,6 +34,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Text } from '@/components/ui';
 import { radius, spacing, useColors } from '@/theme/theme';
+import { DEMO_AD_FILTER, DemoAdNotice } from './demoAd';
 
 export interface AdCardItem {
   key: string;
@@ -53,6 +54,8 @@ export interface AdCardItem {
   colors: [string, string];
   /** A business paid for this placement — say so on the card. */
   sponsored?: boolean;
+  /** A sample listing's offer — black and white, with a "demo ad" notice. */
+  demo?: boolean;
   onPress: () => void;
 }
 
@@ -180,7 +183,9 @@ export function AdCarousel({ items, onImpression }: AdCarouselProps) {
             accessibilityLabel={`${it.title}, ${it.businessName}`}
             style={({ pressed }) => [{ width: cardW }, pressed && styles.pressed]}
           >
-            <View style={[styles.card, { height: cardH, backgroundColor: colors.surfaceAlt }]}>
+            <View
+              style={[styles.card, { height: cardH, backgroundColor: colors.surfaceAlt }, it.demo && DEMO_AD_FILTER]}
+            >
               {/* A poster: the offer's photo fills the card (or the business's
                   gradient + emoji when there's no photo), and the only words on
                   it are the store's name at the bottom. */}
@@ -214,6 +219,7 @@ export function AdCarousel({ items, onImpression }: AdCarouselProps) {
                 {it.businessName}
               </Text>
             </View>
+            {it.demo ? <DemoAdNotice compact /> : null}
           </Pressable>
         ))}
       </ScrollView>
