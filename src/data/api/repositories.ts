@@ -87,13 +87,12 @@ import {
 } from '@/data/supabase/shared';
 import {
   compareSearchResults,
-  intentSuggestion,
-  scoreBusinesses,
-  suggestTerms,
+  intentForQuery,
   withIntentMatches,
+  type SearchResult,
+  type SearchSuggestion,
 } from '@/domain/search';
-import { isListingActive } from '@/domain/listingActive';
-import { nearbyPage, nearbySummary as summarizeNearby } from '@/domain/nearby';
+import type { NearbySummary } from '@/domain/nearby';
 import { http, seg } from './client';
 
 export function createApiBusinesses(): BusinessRepository {
@@ -108,42 +107,70 @@ export function createApiBusinesses(): BusinessRepository {
           lng: query.near?.longitude,
           maxDistanceKm: query.maxDistanceKm,
           sortByDistance: query.sortByDistance,
+          limit: query.limit,
           summary: query.summary,
+          // Filtered in the database (`ids` as a comma list).
+          ids: query.ids ? query.ids.join(',') : undefined,
           ownerId: query.ownerId,
+          activeOnly: query.activeOnly,
         })
-        // Until Path B filters these server-side (SYNC_QUEUE [SYNC-053]), apply them here.
-        .then((all) =>
-          all.filter(
-            (b) =>
-              (!query.ids || query.ids.includes(b.id)) &&
-              (!query.ownerId || b.ownerId === query.ownerId) &&
-              (!query.activeOnly || isListingActive(b)),
-          ),
-        ),
-    // Until Path B has nearby endpoints (SYNC_QUEUE [SYNC-053]), page the full
-    // card list on the device with the same rules (domain/nearby.ts).
-    nearby: async (query) =>
-      nearbyPage(await http.get<Business[]>('/businesses', { summary: true }), query),
-    nearbySummary: async (scope, intents) =>
-      summarizeNearby(await http.get<Business[]>('/businesses', { summary: true }), scope, intents),
-    // Until Path B has search endpoints (SYNC_QUEUE [SYNC-051]), rank the full
-    // directory on the device with the same rules (domain/search.ts).
+        // An empty id list means "none": the server would read it as no filter.
+        .then((all) => (query.ids && query.ids.length === 0 ? [] : all)),
+    // Ranked and paged in the database (migration 0029), like Path A.
+    nearby: (query) =>
+      http.get<Business[]>('/businesses/nearby', {
+        lat: query.near?.latitude,
+        lng: query.near?.longitude,
+        radiusKm: query.radiusKm,
+        minCount: query.minCount,
+        excludeTypes: (query.excludeTypes ?? []).join(','),
+        // Either key present (even empty) = a browse category; both absent = everything.
+        types: query.intent ? (query.intent.types ?? []).join(',') : undefined,
+        tags: query.intent ? query.intent.tags.join(',') : undefined,
+        sort: query.sort,
+        seed: query.seed,
+        offset: query.offset,
+        limit: query.limit,
+      }),
+    nearbySummary: (scope, intents) =>
+      http.post<NearbySummary>('/businesses/nearby/summary', {
+        scope,
+        intents: intents.map((i) => ({ id: i.id, types: i.types ?? [], tags: i.tags })),
+      }),
+    // Ranked in the database (migration 0027); the browse category the query
+    // names is folded in here, where the intent catalog lives.
     search: async (query, options = {}) => {
-      const all = await http.get<Business[]>('/businesses', {
+      const found = await http.get<SearchResult[]>('/businesses/search', {
+        q: query,
         lat: options.near?.latitude,
         lng: options.near?.longitude,
+        limit: options.limit,
       });
-      return withIntentMatches(scoreBusinesses(all, query, 1000), all, query)
+      return withIntentMatches(found, found.map((r) => r.business), query)
         .sort(compareSearchResults)
         .slice(0, options.limit ?? 100);
     },
+    // Terms from the database (0027). A browse category the text starts
+    // ("foo" → Food) leads, counted over every listing by the feed summary —
+    // asked in parallel, so it never delays the terms.
     suggest: async (query, limit = 8) => {
-      const all = await http.get<Business[]>('/businesses', {});
-      const intent = intentSuggestion(query, all);
-      const terms = suggestTerms(all, query, limit).filter(
-        (t) => t.term.toLowerCase() !== intent?.term.toLowerCase(),
-      );
-      return (intent ? [intent, ...terms] : terms).slice(0, limit);
+      const intent = intentForQuery(query);
+      const [terms, summary] = await Promise.all([
+        http.get<SearchSuggestion[]>('/businesses/suggest', { q: query, limit }),
+        intent
+          ? http
+              .post<NearbySummary>('/businesses/nearby/summary', {
+                scope: { minCount: 0 },
+                intents: [{ id: intent.id, types: intent.types ?? [], tags: intent.tags }],
+              })
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
+      const count = intent ? (summary?.counts[intent.id] ?? 0) : 0;
+      if (!intent || count === 0) return terms;
+      const lead: SearchSuggestion = { term: intent.label, kind: 'type', businesses: count };
+      const rest = terms.filter((t) => t.term.toLowerCase() !== lead.term.toLowerCase());
+      return [lead, ...rest].slice(0, limit);
     },
     getById: (id) => http.get<Business | null>(`/businesses/${seg(id)}`),
     create: (input: NewBusinessInput) => http.post<Business>('/businesses', input),
@@ -161,9 +188,8 @@ export function createApiBusinesses(): BusinessRepository {
     update: (id, patch) => http.patch<Business>(`/businesses/${seg(id)}`, patch),
     reassignOwner: (id, newOwnerId) =>
       http.post<Business>(`/businesses/${seg(id)}/reassign-owner`, { newOwnerId }),
-    // [SYNC-049]: the server endpoints don't exist yet. Until they land, the
-    // counter swallows the 404 (it never throws, by contract) and the list
-    // reads as "no views yet".
+    // Engagement, not billing: the counter never throws, by contract, and a
+    // failed read shows as "no views yet".
     recordOfferView: async (businessId, offerId) => {
       try {
         await http.post<void>(`/businesses/${seg(businessId)}/offers/${seg(offerId)}/views`);

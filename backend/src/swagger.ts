@@ -13,7 +13,23 @@ type RouteDef = [M, string, string]; // [method, path, summary]
 
 const ROUTES: Record<string, RouteDef[]> = {
   Businesses: [
-    ['get', '/businesses', 'List/search businesses (public; supports near/distance)'],
+    [
+      'get',
+      '/businesses',
+      'List businesses (public). ?search=&type=&subcategoryId=&lat=&lng=&maxDistanceKm=&sortByDistance=' +
+        '&limit= (after sorting) &summary=true (cards: no catalogs) &ids=a,b &ownerId= &activeOnly=true',
+    ],
+    ['get', '/businesses/search', 'Ranked search (public). ?q=&lat=&lng=&limit= → SearchResult[]'],
+    ['get', '/businesses/suggest', 'Autocomplete terms (public). ?q=&limit= → SearchSuggestion[]'],
+    [
+      'get',
+      '/businesses/nearby',
+      'One page of the Explore feed (public). ?lat=&lng=&radiusKm= (omit = no ring) &minCount=' +
+        '&excludeTypes=&types=&tags= (either = a browse category) &sort=shuffle|nearest|popular&seed=&offset=&limit=',
+    ],
+    ['post', '/businesses/nearby/summary', 'Feed header numbers (public). Body { scope, intents } → { total, reachKm, counts }'],
+    ['post', '/businesses/{id}/offers/{offerId}/views', 'Count one view of an offer (public; always 204)'],
+    ['get', '/businesses/{id}/offer-views', 'Views per offer, total + today (team or super-admin)'],
     ['get', '/businesses/stall/owner/{ownerId}', "Get an owner's personal stall"],
     ['get', '/businesses/{id}', 'Get one business'],
     ['get', '/businesses/{id}/products/{productId}', 'Get one stall product'],
@@ -47,7 +63,7 @@ const ROUTES: Record<string, RouteDef[]> = {
   Users: [
     ['get', '/users', 'List users (public directory)'],
     ['get', '/users/me/is-super-admin', 'Derived super-admin flag for the caller'],
-    ['get', '/users/search', 'Search users by name (?q=)'],
+    ['get', '/users/search', 'Search users by name/username (?q=); phone/email only for yourself or a super-admin'],
     ['get', '/users/{id}', 'Get one user profile'],
     ['patch', '/users/{id}', 'Update your own profile'],
   ],
@@ -114,6 +130,7 @@ const ROUTES: Record<string, RouteDef[]> = {
         "so the device's registered Expo push token is the credential (it is the address the " +
         'call was rung on); it must resolve to a still-ringing business participant on that call',
     ],
+    ['post', '/calls/{id}/heartbeat', 'Renew a joined participant liveness lease (null once dropped)'],
     ['post', '/calls/{id}/leave', 'Hang up'],
     ['post', '/calls/{id}/token', 'Mint a LiveKit token for the call audio room'],
   ],

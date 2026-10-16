@@ -2,7 +2,7 @@
  * Users (profiles) — ports MockUserRepository over the `profiles` table.
  *
  * ⚠️ TWO HALVES, ONE `User`. `profiles` is the PUBLIC directory card (name,
- * avatar, isProfilePublic) — anyone may read it, including guests, because the
+ * avatar, username) — anyone may read it, including guests, because the
  * directory is how a business links a teammate or picks who to bill.
  * `profiles_private` (migration 0007) holds `phone`, `email` and
  * `mutedNotifications`.
@@ -13,7 +13,7 @@
  * `/api/users/search` are `optionalAuth`, so the threat model includes both
  * guests and any signed-in stranger. Never widen these reads without a check.
  */
-import type { User } from '@/domain/types';
+import { matchesUserSearch, type User } from '@/domain/types';
 import { prisma } from '@/db';
 import { asData, rowsData, toJson } from '@/lib/data';
 import { isSuperAdmin } from '@/lib/superAdmin';
@@ -78,15 +78,27 @@ export const userService = {
     return users.map(publicCard);
   },
 
+  /**
+   * People search — name, USERNAME, and phone/email (`matchesUserSearch`).
+   *
+   * ⚠️ Phone/email are matched only where the caller may see them: every
+   * account for a super-admin (`list` already merges the private half for
+   * them), and the caller's OWN account otherwise. Path A gets this from RLS
+   * on `profiles_private`; here the privileged connection sees everything, so
+   * without this a stranger could look anyone up by phone number.
+   * Anonymous guests have an empty name and no username, so they never match.
+   */
   async search(term: string, viewerId?: string | null): Promise<User[]> {
-    const q = term.trim().toLowerCase();
-    if (!q) return [];
-    // Small directory — filter by name in JS. Every NAMED account is reachable:
-    // search is how a business links a teammate or picks who to bill, and
-    // `isProfilePublic` only governs whether an employee profile page is
-    // tappable. Anonymous guests have an empty name, so they never match.
-    return (await this.list(viewerId)).filter(
-      (u) => !!u.name && u.name.toLowerCase().includes(q),
+    if (!term.trim()) return [];
+    let users = await this.list(viewerId);
+    if (viewerId && !(await isSuperAdmin(viewerId))) {
+      const own = await privateHalf(viewerId);
+      users = users.map((u) =>
+        u.id === viewerId ? { ...u, phone: own.phone, email: own.email } : u,
+      );
+    }
+    return users.filter(
+      (u) => (!!u.name || !!u.username) && matchesUserSearch(u, term),
     );
   },
 
@@ -108,7 +120,6 @@ export const userService = {
     // --- public half ---
     const publicPatch: Partial<User> = {};
     if (patch.name !== undefined) publicPatch.name = patch.name;
-    if (patch.isProfilePublic !== undefined) publicPatch.isProfilePublic = patch.isProfilePublic;
     if (patch.avatarUrl !== undefined) publicPatch.avatarUrl = patch.avatarUrl;
     if (patch.bio !== undefined) publicPatch.bio = patch.bio;
 

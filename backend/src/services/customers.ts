@@ -68,7 +68,7 @@ export const customerService = {
     for (const row of chatRows) {
       const m = asData<ChatMessage>(row);
       const pid = row.participantId;
-      const name = pid === 'guest' ? 'Guest' : profiles.get(pid)?.name ?? pid;
+      const name = pid === 'guest' ? 'Guest' : profiles.get(pid)?.name || 'Guest';
       touch(pid, name, m.createdAt).chatCount += 1;
     }
 

@@ -11,10 +11,16 @@ export interface GeoPoint {
 }
 
 /** Structured opening hours (mirror of src/domain/hours.ts). */
+export interface Shift {
+  open: string;
+  close: string;
+}
+/** One day. `open`/`close` mirror `shifts[0]` for older readers (SYNC-042). */
 export interface DayHours {
   closed?: boolean;
   open?: string;
   close?: string;
+  shifts?: Shift[];
 }
 export interface OpeningHours {
   days: DayHours[];
@@ -57,7 +63,6 @@ export interface User {
   phone?: string;
   avatarUrl?: string;
   bio?: string;
-  isProfilePublic: boolean;
   /**
    * Silenced notification families, as `"<businessId>:<category>"` keys
    * (`*` = everywhere). Private — lives in `profiles_private`, not the
@@ -81,6 +86,21 @@ export interface User {
   isSuperAdmin?: boolean;
 }
 
+/**
+ * People search (mirror of the app's `matchesUserSearch`): name, username and
+ * email as a substring; phone on 4+ typed digits. A leading `@` is stripped.
+ * The CALLER decides whether phone/email may be matched — pass a user with
+ * them stripped when the searcher may not see them.
+ */
+export function matchesUserSearch(user: User, term: string): boolean {
+  const q = term.trim().toLowerCase().replace(/^@/, '');
+  if (!q) return false;
+  if ([user.name, user.username, user.email].some((f) => f?.toLowerCase().includes(q))) return true;
+  const typedDigits = q.replace(/\D/g, '');
+  const phone = (user.phone ?? '').replace(/\D/g, '');
+  return typedDigits.length >= 4 && phone.includes(typedDigits);
+}
+
 export type EmployeeLevel = 'manager' | 'staff';
 
 export interface Employee {
@@ -99,6 +119,7 @@ export interface AppNotification {
   recipientId: string;
   kind:
     | 'chat_reply'
+    | 'chat_message'
     | 'booking_requested'
     | 'booking_update'
     | 'missed_call'
@@ -120,6 +141,8 @@ export interface AppNotification {
   billId?: string;
   productId?: string;
   membershipId?: string;
+  /** The customer whose chat thread it is (`chat_message`), for the deep link. */
+  participantId?: string;
   read: boolean;
   createdAt: string;
 }
@@ -141,6 +164,22 @@ export interface PortfolioItem {
   thumbnailUrl?: string;
   title?: string;
   description?: string;
+  createdAt: string;
+}
+
+export type ShowcaseLinkKind =
+  | 'drive'
+  | 'photos'
+  | 'instagram'
+  | 'youtube'
+  | 'facebook'
+  | 'pinterest'
+  | 'website';
+
+export interface ShowcaseLink {
+  id: string;
+  kind: ShowcaseLinkKind;
+  url: string;
   createdAt: string;
 }
 
@@ -203,9 +242,18 @@ export interface Offer {
   wasPrice?: string;
   /** Off = kept in the workspace but hidden from customers. */
   active: boolean;
+  /** ISO date the offer starts showing; before it the offer is "scheduled". */
+  startsAt?: string;
   /** ISO date the offer stops showing. Undefined = runs until switched off. */
   endsAt?: string;
   createdAt: string;
+}
+
+/** Views of one offer, counted per India-time day in `offer_views`. */
+export interface OfferViewStats {
+  offerId: string;
+  total: number;
+  today: number;
 }
 
 export interface MenuItem {
@@ -224,6 +272,15 @@ export interface ServiceItem {
   description?: string;
   category?: string;
   subcategory?: string;
+  imageUrl?: string;
+}
+
+export type PlanBasis = 'monthly' | 'quarterly' | 'half_yearly' | 'yearly';
+
+/** A RENEWING service (gym, tuition, tiffin) — enrolled in, not requested. */
+export interface PlanItem extends ServiceItem {
+  /** Renewal period. Unset = monthly. */
+  basis?: PlanBasis;
 }
 
 export interface PartyPackage {
@@ -246,6 +303,11 @@ export interface ProductItem {
   images?: string[];
   sold?: boolean;
   subcategoryId?: string;
+  /** Goods library: shelf › kind › brand, plus spec chips (src/domain/goods.ts). */
+  category?: string;
+  subcategory?: string;
+  brand?: string;
+  variants?: string[];
 }
 
 export interface ProductMessage {
@@ -270,6 +332,9 @@ export interface RentalItem {
   /** Prebuilt library grouping, e.g. "Cars" › "SUV" (see domain/offeringSections). */
   category?: string;
   subcategory?: string;
+  /** Per-item period; `Business.rentalBasis` is only the default. */
+  basis?: RentalBasis;
+  imageUrl?: string;
 }
 
 export type OfferingKind = 'product' | 'service';
@@ -401,7 +466,11 @@ export interface Business {
   deals?: Deal[];
   offers?: Offer[];
   portfolio?: PortfolioItem[];
+  showcaseLinks?: ShowcaseLink[];
   services?: ServiceItem[];
+  plans?: PlanItem[];
+  /** Joining form; answers ride on the `Membership` as `formAnswers`. */
+  enrollForm?: EnrollForm;
   products?: ProductItem[];
   ratingAvg?: number;
   ratingCount?: number;
@@ -416,6 +485,11 @@ export interface Business {
   rentals?: RentalItem[];
   rentalStatus?: RentalStatus;
   distanceKm?: number;
+  /** Missing = active. False on a listing made for someone else (SYNC-052). */
+  listingActive?: boolean;
+  activatedAt?: string;
+  /** Card reads only: real catalog lengths, since the lists are trimmed. */
+  catalogCounts?: Partial<Record<'menu' | 'products' | 'services' | 'plans' | 'rentals', number>>;
   createdAt: string;
 }
 
@@ -439,6 +513,8 @@ export interface CallParticipant {
   state: CallParticipantState;
   joinedAt?: string;
   leftAt?: string;
+  /** Server-stamped liveness lease (heartbeat). Expiry is judged on this only. */
+  aliveAt?: string;
 }
 
 export interface Call {
@@ -546,6 +622,40 @@ export interface Membership {
   status: 'pending' | 'active' | 'cancelled' | 'rejected';
   endedAt?: string;
   payment?: MembershipPaymentSummary;
+  formAnswers?: EnrollAnswer[];
+}
+
+export type EnrollFieldType =
+  | 'text'
+  | 'longtext'
+  | 'number'
+  | 'phone'
+  | 'email'
+  | 'date'
+  | 'address'
+  | 'photo'
+  | 'choice'
+  | 'yesno';
+
+export interface EnrollField {
+  id: string;
+  type: EnrollFieldType;
+  label: string;
+  required?: boolean;
+  hint?: string;
+  options?: string[];
+}
+
+export interface EnrollForm {
+  intro?: string;
+  fields: EnrollField[];
+}
+
+export interface EnrollAnswer {
+  fieldId: string;
+  label: string;
+  type: EnrollFieldType;
+  value: string;
 }
 
 export interface MembershipPaymentSummary {

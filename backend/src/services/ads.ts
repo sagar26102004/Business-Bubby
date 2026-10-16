@@ -19,6 +19,7 @@
  * of that rule is a second answer to "is this ad showing?".
  */
 import type { AdCampaign, Business, GeoPoint } from '@/domain/types';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
 import { asData, rowsData, toJson } from '@/lib/data';
@@ -91,17 +92,23 @@ export const adService = {
     const running = active.filter((c) => isCampaignRunning(c, now));
 
     // Without a location there is no way to judge reach, so only the businesses
-    // behind sponsored cards are needed; with one, the whole directory is in
-    // play because any live offer nearby can fill the slot.
-    const businesses = near
-      ? rowsData<Business>(await prisma.business.findMany())
-      : rowsData<Business>(
-          await prisma.business.findMany({
-            where: { id: { in: [...new Set(running.map((c) => c.businessId))] } },
-          }),
-        );
+    // behind sponsored cards are needed. With one, any live offer nearby can
+    // fill the slot — but only businesses that HAVE an offer can, so only their
+    // cards are read (`offer_cards()`, 0029), never the whole directory.
+    const have = new Map<string, Business>();
+    if (near) {
+      const cards = await prisma.$queryRaw<{ data: Prisma.JsonValue }[]>`select data from public.offer_cards()`;
+      for (const b of rowsData<Business>(cards)) have.set(b.id, b);
+    }
+    // Sponsored placements need their business even when it isn't in that set.
+    const missing = [...new Set(running.map((c) => c.businessId))].filter((id) => !have.has(id));
+    if (missing.length > 0) {
+      for (const b of rowsData<Business>(await prisma.business.findMany({ where: { id: { in: missing } } }))) {
+        have.set(b.id, b);
+      }
+    }
 
-    return buildPlacements(running, businesses, near, now, radiusKm);
+    return buildPlacements(running, [...have.values()], near, now, radiusKm);
   },
 
   /** One campaign, or 404. Used by the routers that authorize on its business. */

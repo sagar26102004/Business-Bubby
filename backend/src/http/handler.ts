@@ -10,7 +10,10 @@ export const route =
   (req: Request, res: Response, next: NextFunction): void => {
     fn(req, res)
       .then((body) => {
-        if (!res.headersSent) res.json(body ?? {});
+        // A service's `null` ("not found") must reach the client AS null — the
+        // repository contracts return `T | null`, and `{}` would read as a
+        // real (empty) object. Only a void result becomes `{}`.
+        if (!res.headersSent) res.json(body === undefined ? {} : body);
       })
       .catch(next);
   };

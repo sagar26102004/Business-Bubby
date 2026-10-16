@@ -31,6 +31,7 @@ export type NotificationCategory =
 export function categoryOfKind(kind: AppNotification['kind']): NotificationCategory {
   switch (kind) {
     case 'chat_reply':
+    case 'chat_message':
       return 'chats';
     case 'missed_call':
       return 'calls';

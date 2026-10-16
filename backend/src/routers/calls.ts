@@ -68,6 +68,14 @@ callsRouter.post('/:id/decline', requireAuth, route(async (req) => {
   return callService.decline(req.params.id, req.body.participantId);
 }));
 
+// Liveness lease. The caller must BE the participant — a spoofed beat would
+// keep a dead device's seat alive for ever.
+callsRouter.post('/:id/heartbeat', requireAuth, route(async (req) => {
+  requireSelf(userId(req), req.body.participantId);
+  // `null` = your seat is gone; the client must stop treating the call as live.
+  return callService.heartbeat(req.params.id, req.body.participantId);
+}));
+
 callsRouter.post('/:id/leave', requireAuth, route(async (req) => {
   requireSelf(userId(req), req.body.participantId);
   return callService.leave(req.params.id, req.body.participantId);

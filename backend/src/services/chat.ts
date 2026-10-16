@@ -1,5 +1,5 @@
 /** B2C chat — ports MockChatRepository. */
-import type { Business, ChatMessage, User } from '@/domain/types';
+import type { Business, ChatMessage, Employee, User } from '@/domain/types';
 import type { ChatAuthor, ChatThreadSummary, CustomerThreadSummary } from '@/domain/contracts';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
@@ -32,6 +32,25 @@ async function businessName(businessId: string): Promise<string> {
   return row ? asData<Business>(row).name : 'A business';
 }
 
+/**
+ * Who on the business side is PINGED when a customer writes: the owner, plus
+ * every employee in `chatRecipientIds` with an app account (deduped). Mirrors
+ * the call ring targets. Path A falls back to the owner alone when RLS hides
+ * the team from the customer; Path B is privileged, so routed handlers are
+ * always reached — the intended behaviour.
+ */
+async function chatHandlerIds(business: Business): Promise<string[]> {
+  const ids = [business.ownerId];
+  const routed = new Set(business.chatRecipientIds ?? []);
+  if (routed.size > 0) {
+    const rows = await prisma.employee.findMany({ where: { businessId: business.id } });
+    rowsData<Employee>(rows)
+      .filter((e) => routed.has(e.id) && e.userId)
+      .forEach((e) => ids.push(e.userId!));
+  }
+  return Array.from(new Set(ids));
+}
+
 export const chatService = {
   async listThread(businessId: string, participantId: string): Promise<ChatMessage[]> {
     const rows = await prisma.chatMessage.findMany({
@@ -61,14 +80,28 @@ export const chatService = {
       data: { id: message.id, businessId, participantId, data: toJson(message) },
     });
 
+    const bizRow = await prisma.business.findUnique({ where: { id: businessId } });
+    const business = bizRow ? asData<Business>(bizRow) : null;
     if (author.type === 'business') {
       await notify({
         recipientId: participantId,
         kind: 'chat_reply',
-        title: `${author.name} from ${await businessName(businessId)}`,
+        title: `${author.name} from ${business?.name ?? 'A business'}`,
         body: body.trim(),
         businessId,
       });
+    } else if (business) {
+      // The other direction: tell the team a customer wrote in.
+      for (const recipientId of await chatHandlerIds(business)) {
+        await notify({
+          recipientId,
+          kind: 'chat_message',
+          title: `${author.name} · ${business.name}`,
+          body: body.trim(),
+          businessId,
+          participantId,
+        });
+      }
     }
     return this.listThread(businessId, participantId);
   },

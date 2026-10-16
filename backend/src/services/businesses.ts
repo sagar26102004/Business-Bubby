@@ -1,9 +1,19 @@
 /** Businesses + stall products — ports MockBusinessRepository. */
-import type { Business, Employee, ProductItem } from '@/domain/types';
-import type { BusinessQuery, NewBusinessInput } from '@/domain/contracts';
+import { Prisma } from '@prisma/client';
+import type { Business, Employee, GeoPoint, OfferViewStats, ProductItem } from '@/domain/types';
+import type {
+  BusinessQuery,
+  NearbyIntent,
+  NearbyQuery,
+  NearbyScope,
+  NearbySummary,
+  NewBusinessInput,
+  SearchResult,
+  SearchSuggestion,
+} from '@/domain/contracts';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
-import { asData, rowsData, toJson, uuidOrNull } from '@/lib/data';
+import { asData, isUuid, toJson, uuidOrNull } from '@/lib/data';
 import { normalizeRole } from '@/lib/roles';
 import { haversineKm } from '@/lib/geo';
 import { forbidden, notFound } from '@/http/errors';
@@ -13,14 +23,78 @@ import { captureBusinessOfferings } from './catalog';
 const withProductIds = (products?: ProductItem[]): ProductItem[] | undefined =>
   products?.map((p) => (p.id ? p : { ...p, id: newUuid() }));
 
-async function allBusinesses(): Promise<Business[]> {
-  return rowsData<Business>(await prisma.business.findMany());
+/**
+ * A business document with its rating joined on. Ratings are averaged in SQL
+ * by the `business_ratings` view (migration 0026), the same source Path A
+ * reads, never by loading review rows.
+ */
+type RatedRow = { data: Prisma.JsonValue; rating_avg: number | null; rating_count: number | null };
+
+const withRating = (r: RatedRow): Business => {
+  const b = r.data as unknown as Business;
+  return r.rating_count
+    ? { ...b, ratingAvg: Number(r.rating_avg ?? 0), ratingCount: Number(r.rating_count) }
+    : b;
+};
+
+/**
+ * The documents `list` works over, filtered in Postgres by ids / owner /
+ * active (SYNC-053). Summary mode reads the `business_cards` view (the
+ * document minus menu/products/services/plans/rentals/portfolio, 0026/0029),
+ * so the catalogs never leave the database; full mode reads whole documents.
+ */
+async function readRows(query: BusinessQuery): Promise<Business[]> {
+  const where: Prisma.Sql[] = [];
+  if (query.ids) {
+    // A non-uuid id can't name a business, and would fail the ::uuid cast.
+    const ids = query.ids.filter(isUuid);
+    if (ids.length === 0) return [];
+    where.push(Prisma.sql`b.id = any(${ids}::uuid[])`);
+  }
+  if (query.ownerId && !isUuid(query.ownerId)) return [];
+  if (query.ownerId) where.push(Prisma.sql`b.owner_id = ${query.ownerId}::uuid`);
+  // The generated `listing_active` column (0029): a missing flag reads as active.
+  if (query.activeOnly) where.push(Prisma.sql`b.listing_active`);
+  const clause = where.length ? Prisma.sql`where ${Prisma.join(where, ' and ')}` : Prisma.empty;
+  const rows = query.summary
+    ? await prisma.$queryRaw<RatedRow[]>`
+        select b.data, b.rating_avg, b.rating_count from public.business_cards b ${clause}`
+    : await prisma.$queryRaw<RatedRow[]>`
+        select b.data, r.rating_avg, r.rating_count
+        from public.businesses b
+        left join public.business_ratings r on r.business_id = b.id ${clause}`;
+  return rows.map(withRating);
 }
 
 async function findBusiness(id: string): Promise<Business | null> {
   const row = await prisma.business.findUnique({ where: { id } });
   return row ? asData<Business>(row) : null;
 }
+
+/** The India-time date: what "today" means to every business on the platform. */
+const indiaToday = () => new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
+
+/** Order two search results: words, tier, strength, nearest, score (src/domain/search.ts). */
+function compareSearchResults(a: SearchResult, b: SearchResult): number {
+  return (
+    b.words - a.words ||
+    b.tier - a.tier ||
+    b.strength - a.strength ||
+    (a.business.distanceKm ?? Infinity) - (b.business.distanceKm ?? Infinity) ||
+    b.score - a.score
+  );
+}
+
+type SearchRow = {
+  business_id: string;
+  words: number;
+  tier: number;
+  strength: number;
+  score: number;
+  hits: { name: string; price: string | null }[] | null;
+};
+type SuggestRow = { term: string; kind: SearchSuggestion['kind']; businesses: number; business_id: string | null };
+type SummaryRow = { s: { total?: number; reachKm?: number | null; counts?: Record<string, number> } | null };
 
 /** Persist a business's `data` (and keep the `type` scoping column in step). */
 async function saveBusiness(business: Business): Promise<Business> {
@@ -34,9 +108,9 @@ async function saveBusiness(business: Business): Promise<Business> {
 export const businessService = {
   async list(query: BusinessQuery = {}): Promise<Business[]> {
     const term = query.search?.trim().toLowerCase();
-    const { near, maxDistanceKm, sortByDistance } = query;
+    const { near, maxDistanceKm, sortByDistance, limit } = query;
 
-    const results = (await allBusinesses())
+    const results = (await readRows(query))
       .filter((b) => (query.type ? b.type === query.type : true))
       .filter((b) =>
         query.subcategoryId
@@ -55,13 +129,14 @@ export const businessService = {
           ...(b.products ?? []).map((p) => p.name),
           ...(b.menu ?? []).map((m) => m.name),
           ...(b.services ?? []).map((s) => s.name),
+          ...(b.plans ?? []).map((p) => p.name),
           ...(b.rentals ?? []).map((r) => r.name),
         ]
           .filter(Boolean)
           .some((field) => field!.toLowerCase().includes(term));
       })
       .map((b): Business => {
-        const point = b.location.point;
+        const point = b.location?.point;
         const distanceKm = near && point ? haversineKm(near, point) : undefined;
         return { ...b, distanceKm };
       })
@@ -75,10 +150,119 @@ export const businessService = {
         ? (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity)
         : b.createdAt.localeCompare(a.createdAt),
     );
-    return results;
+    // After the sort, so `limit` + `sortByDistance` means "the N nearest".
+    return typeof limit === 'number' ? results.slice(0, limit) : results;
   },
 
-  getById: (id: string) => findBusiness(id),
+  async getById(id: string): Promise<Business | null> {
+    if (!isUuid(id)) return null;
+    const rows = await prisma.$queryRaw<RatedRow[]>`
+      select b.data, r.rating_avg, r.rating_count
+      from public.businesses b
+      left join public.business_ratings r on r.business_id = b.id
+      where b.id = ${id}::uuid`;
+    return rows[0] ? withRating(rows[0]) : null;
+  },
+
+  /** Explore's feed, ranked and paged in the database (`nearby_cards`, 0029). */
+  async nearby(q: NearbyQuery): Promise<Business[]> {
+    const rows = await prisma.$queryRaw<(RatedRow & { distance_km: number | null })[]>`
+      select * from public.nearby_cards(
+        ${q.near?.latitude ?? null}::float8, ${q.near?.longitude ?? null}::float8,
+        ${q.radiusKm ?? null}::float8, ${q.minCount}::int,
+        ${q.excludeTypes ?? []}::text[],
+        ${q.intent ? (q.intent.types ?? []) : null}::text[],
+        ${q.intent ? q.intent.tags.map((t) => t.toLowerCase()) : null}::text[],
+        ${q.sort}::text, ${q.seed}::int, ${q.offset}::int, ${q.limit}::int)`;
+    return rows.map((r) => ({ ...withRating(r), distanceKm: r.distance_km ?? undefined }));
+  },
+
+  /** The feed header's numbers over the WHOLE pool (`nearby_summary`, 0029). */
+  async nearbySummary(scope: NearbyScope, intents: NearbyIntent[]): Promise<NearbySummary> {
+    const payload = JSON.stringify(
+      intents.map((i) => ({ id: i.id, types: i.types ?? [], tags: i.tags.map((t) => t.toLowerCase()) })),
+    );
+    const rows = await prisma.$queryRaw<SummaryRow[]>`
+      select public.nearby_summary(
+        ${scope.near?.latitude ?? null}::float8, ${scope.near?.longitude ?? null}::float8,
+        ${scope.radiusKm ?? null}::float8, ${scope.minCount}::int,
+        ${scope.excludeTypes ?? []}::text[], ${payload}::jsonb) as s`;
+    const s = rows[0]?.s ?? {};
+    return { total: s.total ?? 0, reachKm: s.reachKm ?? undefined, counts: s.counts ?? {} };
+  },
+
+  /**
+   * Ranked in the database (`search_businesses`, 0027); only the matching
+   * businesses' cards are then read. Every match is fetched, not a top-N:
+   * relevance ties break on DISTANCE, so a cut by score alone could drop the
+   * café round the corner. The browse-category fold-in (`withIntentMatches`)
+   * runs in the api client, where the intent catalog lives.
+   */
+  async search(query: string, options: { near?: GeoPoint; limit?: number } = {}): Promise<SearchResult[]> {
+    const q = query.trim();
+    if (!q) return [];
+    const rows = await prisma.$queryRaw<SearchRow[]>`select * from public.search_businesses(${q}, 1000)`;
+    const cards = await readRows({ ids: rows.map((r) => r.business_id), summary: true });
+    const byId = new Map(cards.map((b) => [b.id, b]));
+    const { near } = options;
+    const found: SearchResult[] = [];
+    for (const r of rows) {
+      const b = byId.get(r.business_id);
+      if (!b) continue;
+      found.push({
+        business: { ...b, distanceKm: near && b.location?.point ? haversineKm(near, b.location.point) : undefined },
+        words: Number(r.words),
+        tier: Number(r.tier),
+        strength: Number(r.strength),
+        score: Number(r.score),
+        hits: (r.hits ?? []).map((h) => ({ name: h.name, price: h.price ?? undefined })),
+      });
+    }
+    return found.sort(compareSearchResults).slice(0, options.limit ?? 100);
+  },
+
+  /** Autocomplete terms (`search_suggest`, 0027). */
+  async suggest(query: string, limit = 8): Promise<SearchSuggestion[]> {
+    const q = query.trim();
+    if (q.length < 2) return [];
+    const rows = await prisma.$queryRaw<SuggestRow[]>`select * from public.search_suggest(${q}, ${limit}::int)`;
+    return rows.map((r) => ({
+      term: r.term,
+      kind: r.kind,
+      businesses: Number(r.businesses),
+      businessId: r.business_id ?? undefined,
+    }));
+  },
+
+  /**
+   * Count one view of an offer (`offer_record_view`, 0025 — it ignores offers
+   * the business doesn't have). Engagement, not billing: never throws.
+   */
+  async recordOfferView(businessId: string, offerId: string): Promise<void> {
+    if (!isUuid(businessId)) return;
+    try {
+      await prisma.$executeRaw`select public.offer_record_view(${businessId}::uuid, ${offerId})`;
+    } catch {
+      /* best-effort */
+    }
+  },
+
+  /** Views per offer, all-time and today (India time). */
+  async listOfferViews(businessId: string): Promise<OfferViewStats[]> {
+    if (!isUuid(businessId)) return [];
+    const rows = await prisma.$queryRaw<{ offer_id: string; day: Date; views: bigint }[]>`
+      select offer_id, day, views from public.offer_views where business_id = ${businessId}::uuid`;
+    const today = indiaToday();
+    const byOffer = new Map<string, OfferViewStats>();
+    for (const r of rows) {
+      const s = byOffer.get(r.offer_id) ?? { offerId: r.offer_id, total: 0, today: 0 };
+      const views = Number(r.views);
+      s.total += views;
+      if (r.day.toISOString().slice(0, 10) === today) s.today += views;
+      byOffer.set(r.offer_id, s);
+    }
+    return [...byOffer.values()];
+  },
 
   async getStallForOwner(ownerId: string): Promise<Business | null> {
     const rows = await prisma.business.findMany({ where: { ownerId, type: 'item' } });
@@ -115,6 +299,8 @@ export const businessService = {
     const business: Business = {
       id: businessId,
       ownerId: effectiveOwnerId,
+      // Listed for someone else: inactive until they sign in (trigger, 0028).
+      ...(effectiveOwnerId !== ownerId ? { listingActive: false } : {}),
       name: input.name,
       tagline: input.tagline,
       description: input.description,
@@ -128,6 +314,7 @@ export const businessService = {
       priceLabel: input.priceLabel,
       menu: input.menu,
       services: input.services,
+      plans: input.plans,
       products: withProductIds(input.products),
       hours: input.hours,
       openingHours: input.openingHours,
@@ -217,10 +404,17 @@ export const businessService = {
     // The column is the single source of truth for who owns this listing.
     business.ownerId = row.ownerId;
     business.id = id;
+    // Derived on read, never stored (same as Path A): ratings come from
+    // `business_ratings`, distance from the viewer, counts from the card. A
+    // client saving back what it read must not freeze them into the document.
+    delete business.ratingAvg;
+    delete business.ratingCount;
+    delete business.distanceKm;
+    delete business.catalogCounts;
     if (patch.products) business.products = withProductIds(patch.products);
     const saved = await saveBusiness(business);
     // Capture new offerings when the listing's tags/menu/services/products change.
-    if (patch.tags || patch.menu || patch.services || patch.products) {
+    if (patch.tags || patch.menu || patch.services || patch.plans || patch.products) {
       await captureBusinessOfferings(saved);
     }
     return saved;

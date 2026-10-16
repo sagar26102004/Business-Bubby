@@ -11,6 +11,12 @@ import { pushService } from './push';
 
 const RING_TIMEOUT_MS = 30_000;
 
+/**
+ * How long a joined participant's liveness lease lasts. Clients heartbeat every
+ * 10s, so three misses are tolerated before the seat is dropped.
+ */
+const PRESENCE_TIMEOUT_MS = 45_000;
+
 /** Default window of the workspace call log: the last 7 days. */
 const CALL_LOG_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -56,8 +62,44 @@ async function sweepCall(call: Call): Promise<Call> {
     call.endedAt = new Date().toISOString();
     await saveCall(call);
     await notifyMissedCall(call);
+    return call;
   }
+  if (dropExpiredParticipants(call)) await saveCall(call);
   return call;
+}
+
+/**
+ * Mark every joined participant whose liveness lease expired as `left`, and end
+ * the call if that leaves no customer or no business member on it — the same
+ * end-of-call rules as `leave()`, so a dead device and a hang-up look alike.
+ * Returns whether anything changed (a healthy call costs no write).
+ *
+ * ⚠️ Expiry is judged on `aliveAt` ONLY — stamped by this server in `join()` /
+ * `heartbeat()` — never on a device-written timestamp. A participant with no
+ * lease yet is judged on the call's age (`startedAt`, server-stamped by
+ * `start()`), so everyone gets a full timeout's grace.
+ */
+function dropExpiredParticipants(call: Call): boolean {
+  if (call.status !== 'active') return false;
+  const now = Date.now();
+  const callAged = now - new Date(call.startedAt).getTime() > PRESENCE_TIMEOUT_MS;
+  let changed = false;
+  for (const p of call.participants) {
+    if (p.state !== 'joined') continue;
+    const expired = p.aliveAt ? now - new Date(p.aliveAt).getTime() > PRESENCE_TIMEOUT_MS : callAged;
+    if (!expired) continue;
+    p.state = 'left';
+    p.leftAt = new Date().toISOString();
+    changed = true;
+  }
+  if (!changed) return false;
+  const customerOn = call.participants.some((p) => p.side === 'customer' && p.state === 'joined');
+  const businessOn = call.participants.some((p) => p.side === 'business' && p.state === 'joined');
+  if (!customerOn || !businessOn) {
+    call.status = 'ended';
+    call.endedAt = new Date().toISOString();
+  }
+  return true;
 }
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
@@ -213,12 +255,12 @@ async function ringDevices(call: Call): Promise<RingPushOutcome> {
   }
 }
 
-/** Expire every ringing call past the timeout (used on reads that scan calls). */
+/** Expire rung-out calls and dead participants (used on reads that scan calls). */
 async function sweepRinging(): Promise<void> {
   const rows = await prisma.call.findMany();
   for (const row of rows) {
     const call = asData<Call>(row);
-    if (call.status === 'ringing') await sweepCall(call);
+    if (call.status === 'ringing' || call.status === 'active') await sweepCall(call);
   }
 }
 
@@ -321,6 +363,9 @@ export const callService = {
     if (!p) throw new Error('You are not part of this call.');
     p.state = 'joined';
     p.joinedAt = new Date().toISOString();
+    // Opens the lease. Safe here (unlike Path A's client-side join): this is
+    // the server's clock, the same one `dropExpiredParticipants` reads.
+    p.aliveAt = p.joinedAt;
     p.leftAt = undefined;
     if (call.status === 'ringing') {
       call.status = 'active';
@@ -393,6 +438,23 @@ export const callService = {
     }
     await saveCall(call);
     return { ok: true, status: call.status };
+  },
+
+  /**
+   * Renew a joined participant's liveness lease. `null` unless the call is
+   * still up AND the participant is `joined` — a dropped, left or declined
+   * participant must not be able to un-leave themselves by beating.
+   */
+  async heartbeat(callId: string, participantId: string): Promise<Call | null> {
+    const row = await prisma.call.findUnique({ where: { id: callId } });
+    if (!row) return null;
+    const call = await sweepCall(asData<Call>(row));
+    if (call.status !== 'ringing' && call.status !== 'active') return null;
+    const p = call.participants.find((x) => x.id === participantId);
+    if (!p || p.state !== 'joined') return null;
+    p.aliveAt = new Date().toISOString();
+    await saveCall(call);
+    return call;
   },
 
   async leave(callId: string, participantId: string): Promise<Call> {

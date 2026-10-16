@@ -6,6 +6,9 @@
  */
 import type {
   BillLine,
+  Business,
+  PlanItem,
+  EnrollAnswer,
   BusinessLocation,
   CatalogEntryKind,
   EmployeeLevel,
@@ -30,6 +33,64 @@ export interface BusinessQuery {
   near?: GeoPoint;
   maxDistanceKm?: number;
   sortByDistance?: boolean;
+  /** Return at most this many — applied AFTER sorting (SYNC-044). */
+  limit?: number;
+  /** Card fields only: the six catalog lists stripped (SYNC-050). */
+  summary?: boolean;
+  /** Only these businesses / this owner's / active listings (SYNC-053). */
+  ids?: string[];
+  ownerId?: string;
+  activeOnly?: boolean;
+}
+
+/** Mirror of src/domain/search.ts. */
+export type SearchTermKind = 'name' | 'type' | 'item' | 'section' | 'about';
+export interface SearchHitItem {
+  name: string;
+  price?: string;
+}
+export interface SearchResult {
+  business: Business;
+  words: number;
+  tier: number;
+  strength: number;
+  score: number;
+  hits: SearchHitItem[];
+}
+export interface SearchSuggestion {
+  term: string;
+  kind: SearchTermKind;
+  businesses: number;
+  businessId?: string;
+}
+
+/** Mirror of src/domain/nearby.ts. */
+export type NearbySort = 'shuffle' | 'nearest' | 'popular';
+export interface NearbyScope {
+  near?: GeoPoint;
+  /** Undefined = no ring: every listing. */
+  radiusKm?: number;
+  minCount: number;
+  excludeTypes?: ListingType[];
+}
+export interface NearbyQuery extends NearbyScope {
+  /** A browse category, already resolved to its types + tags. */
+  intent?: { tags: string[]; types?: ListingType[] };
+  sort: NearbySort;
+  seed: number;
+  offset: number;
+  limit: number;
+}
+/** One browse category for the summary counts. */
+export interface NearbyIntent {
+  id: string;
+  tags: string[];
+  types?: ListingType[];
+}
+export interface NearbySummary {
+  total: number;
+  reachKm?: number;
+  counts: Record<string, number>;
 }
 
 export interface NewEmployeeInput {
@@ -55,6 +116,7 @@ export interface NewBusinessInput {
   priceLabel?: string;
   menu?: MenuItem[];
   services?: ServiceItem[];
+  plans?: PlanItem[];
   products?: ProductItem[];
   hours?: string;
   openingHours?: OpeningHours;
@@ -91,7 +153,6 @@ export interface CustomerThreadSummary {
 export interface NewUserInput {
   name: string;
   email?: string;
-  isProfilePublic?: boolean;
 }
 
 export interface SignUpInput {
@@ -247,6 +308,8 @@ export interface NewMembershipInput {
   enrolleeName?: string;
   planName: string;
   pricePerMonth: number;
+  /** Answers to the business's joining form (`Business.enrollForm`). */
+  formAnswers?: EnrollAnswer[];
 }
 
 export interface EnrollRequestInput {
@@ -256,6 +319,8 @@ export interface EnrollRequestInput {
   requestedPlan?: string;
   requestedPrice?: number;
   enrolleeName?: string;
+  /** Answers to the business's joining form (`Business.enrollForm`). */
+  formAnswers?: EnrollAnswer[];
 }
 
 export interface AcceptEnrollInput {

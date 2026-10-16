@@ -1,9 +1,13 @@
-/** Reviews — ports MockReviewRepository (verified-customer gate + aggregate). */
-import type { Bill, Booking, Business, Order, Review } from '@/domain/types';
+/**
+ * Reviews — ports MockReviewRepository. Anyone signed in may rate a listing
+ * they don't own (no verified-customer gate since SYNC-046 — an enrolled
+ * member has no order/booking/bill and still deserves a say).
+ */
+import type { Business, Review } from '@/domain/types';
 import type { NewReviewInput, ReviewEligibility } from '@/domain/contracts';
 import { prisma } from '@/db';
 import { newUuid } from '@/lib/ids';
-import { asData, isUuid, jsonEquals, rowsData, toJson, uuidOrNull } from '@/lib/data';
+import { asData, isUuid, rowsData, toJson, uuidOrNull } from '@/lib/data';
 import { notFound } from '@/http/errors';
 import { notify } from './notify';
 
@@ -22,22 +26,7 @@ async function eligibility(businessId: string, customerId: string): Promise<Revi
   if (business?.ownerId === customerId) {
     return { eligible: false, reason: 'You can’t rate your own business.' };
   }
-  const [orderRows, bookingRows, billRows] = await Promise.all([
-    prisma.order.findMany({ where: { businessId, data: jsonEquals('customerId', customerId) } }),
-    prisma.booking.findMany({ where: { businessId, data: jsonEquals('customerId', customerId) } }),
-    prisma.bill.findMany({ where: { businessId, data: jsonEquals('customerId', customerId) } }),
-  ]);
-  const hasOrder = rowsData<Order>(orderRows).some((o) => o.status === 'accepted');
-  const hasBooking = rowsData<Booking>(bookingRows).some(
-    (b) => b.status === 'accepted' || b.status === 'completed',
-  );
-  const hasBill = rowsData<Bill>(billRows).length > 0;
-  if (hasOrder || hasBooking || hasBill) return { eligible: true };
-  return {
-    eligible: false,
-    reason:
-      'Ratings come only from verified customers. Place an order, book a service, or get billed by this business first — then you can rate your experience.',
-  };
+  return { eligible: true };
 }
 
 export const reviewService = {
@@ -73,7 +62,7 @@ export const reviewService = {
     const existing = await this.getMine(input.businessId, input.customerId);
     if (!existing) {
       const gate = await eligibility(input.businessId, input.customerId);
-      if (!gate.eligible) throw new Error(gate.reason ?? 'Only customers can rate this business.');
+      if (!gate.eligible) throw new Error(gate.reason ?? 'You can’t rate this business.');
     }
 
     const count = business.ratingCount ?? 0;

@@ -9,6 +9,8 @@ import type { Offer } from '@/domain/types';
 /** Switched on and not past its end date. */
 export function isOfferLive(offer: Offer, now: number = Date.now()): boolean {
   if (!offer.active) return false;
+  // Scheduled: not live until its start date.
+  if (offer.startsAt && new Date(offer.startsAt).getTime() > now) return false;
   if (offer.endsAt && new Date(offer.endsAt).getTime() < now) return false;
   return true;
 }
