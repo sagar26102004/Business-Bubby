@@ -54,6 +54,8 @@ import type {
   VehicleKind,
 } from '@/domain/types';
 import type { SearchResult, SearchSuggestion } from '@/domain/search';
+import type { NearbyQuery, NearbyScope, NearbySummary } from '@/domain/nearby';
+import type { IntentCategory } from '@/domain/intents';
 
 export interface BusinessQuery {
   /** Free-text search across name / tagline / description. */
@@ -86,6 +88,19 @@ export interface BusinessQuery {
    * stripped lists. A backend may ignore it and return full objects.
    */
   summary?: boolean;
+  /**
+   * Only these businesses — filtered in the database, so a screen that needs a
+   * handful of names never downloads the whole directory.
+   */
+  ids?: string[];
+  /** Only listings this user owns — filtered in the database. */
+  ownerId?: string;
+  /**
+   * Leave out inactive listings (`isListingActive` false — made for someone who
+   * hasn't signed in yet). With `ownerId` this is "the businesses I actually
+   * run": the super-admin's 36,000 bulk listings are not his to answer for.
+   */
+  activeOnly?: boolean;
 }
 
 /** Input for creating an employee while registering a business. */
@@ -139,6 +154,14 @@ export interface NewBusinessInput {
 
 export interface BusinessRepository {
   list(query?: BusinessQuery): Promise<Business[]>;
+  /**
+   * Explore's feed, ONE PAGE at a time, as cards (see `BusinessQuery.summary`)
+   * with `distanceKm` set — ring, category and order rules in domain/nearby.ts.
+   * Never downloads the whole directory.
+   */
+  nearby(query: NearbyQuery): Promise<Business[]>;
+  /** The numbers Explore's header needs from that whole feed: total, per-category counts, reach. */
+  nearbySummary(scope: NearbyScope, intents: IntentCategory[]): Promise<NearbySummary>;
   /**
    * Search by name, kind of business or anything it sells — the rules are in
    * domain/search.ts. Each business comes back as a CARD (see

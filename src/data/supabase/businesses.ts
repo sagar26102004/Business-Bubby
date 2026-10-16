@@ -19,6 +19,8 @@ import type {
   NewBusinessInput,
 } from '@/data/repositories';
 import { haversineKm } from '@/lib/geo';
+import type { NearbyQuery, NearbyScope, NearbySummary } from '@/domain/nearby';
+import type { IntentCategory } from '@/domain/intents';
 import { captureBusinessOfferings } from './catalog';
 import { cardRows, forgetCardRows, peekCardRows, sb, uuid, nowIso, uuidOrNull } from './shared';
 
@@ -46,6 +48,58 @@ async function ratingsFor(ids?: string[]): Promise<Map<string, { avg: number; co
     });
   }
   return result;
+}
+
+/** A row of `nearby_cards` (migration 0029). */
+type NearbyRow = { data: Business; rating_avg: number | null; rating_count: number | null; distance_km: number | null };
+
+/** Ids per request: a uuid list in the URL has to stay well under its length limit. */
+const IDS_PER_READ = 150;
+
+/** The cards (0026, rating joined on) of just these businesses, in parallel batches. */
+async function cardsByIds(ids: string[]): Promise<Business[]> {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += IDS_PER_READ) chunks.push(ids.slice(i, i + IDS_PER_READ));
+  const pages = await Promise.all(
+    chunks.map(async (chunk) => {
+      const { data, error } = await sb().from('business_cards').select('data, rating_avg, rating_count').in('id', chunk);
+      if (error) throw error;
+      return ((data ?? []) as Omit<NearbyRow, 'distance_km'>[]).map((r) =>
+        r.rating_count ? { ...r.data, ratingAvg: r.rating_avg ?? 0, ratingCount: r.rating_count } : r.data,
+      );
+    }),
+  );
+  return pages.flat();
+}
+
+/**
+ * `list` with `ids` / `ownerId` / `activeOnly`: filtered by Postgres, not on
+ * the phone. Cards come from `business_cards` (0026, its `owner_id` added in
+ * 0029), full documents from `businesses`; either way paged under PostgREST's
+ * 1000-row cap.
+ */
+async function scopedRows(query: BusinessQuery): Promise<Business[]> {
+  const table = query.summary ? 'business_cards' : 'businesses';
+  const read = async (ids?: string[]): Promise<Business[]> => {
+    const out: Business[] = [];
+    for (let from = 0; ; from += 1000) {
+      let q = sb().from(table).select(query.summary ? 'data, rating_avg, rating_count' : 'data');
+      if (ids) q = q.in('id', ids);
+      if (query.ownerId) q = q.eq('owner_id', query.ownerId);
+      // The `listing_active` column (0029): the flag, missing = active (domain/listingActive.ts).
+      if (query.activeOnly) q = q.eq('listing_active', true);
+      const { data, error } = await q.order('id').range(from, from + 999);
+      if (error) throw error;
+      const rows = (data ?? []) as unknown as Omit<NearbyRow, 'distance_km'>[];
+      for (const r of rows) out.push(r.rating_count ? { ...r.data, ratingAvg: r.rating_avg ?? 0, ratingCount: r.rating_count } : r.data);
+      if (rows.length < 1000) break;
+    }
+    return out;
+  };
+  if (!query.ids) return read();
+  const chunks: string[][] = [];
+  for (let i = 0; i < query.ids.length; i += IDS_PER_READ) chunks.push(query.ids.slice(i, i + IDS_PER_READ));
+  return (await Promise.all(chunks.map((c) => read(c)))).flat();
 }
 
 /** A row of `search_businesses` / `search_suggest` (migration 0027). */
@@ -77,7 +131,10 @@ export function createSupabaseBusinesses(): BusinessRepository {
       const { near, maxDistanceKm, sortByDistance, limit } = query;
       let results: Business[];
       let ratings = new Map<string, { avg: number; count: number }>();
-      if (query.summary) {
+      if (query.ids || query.ownerId || query.activeOnly) {
+        // Scoped in the database (ratings joined on, like the cards).
+        results = await scopedRows(query);
+      } else if (query.summary) {
         // Cards only: the shared, catalog-free read with ratings already on it.
         results = await cardRows();
       } else {
@@ -138,22 +195,58 @@ export function createSupabaseBusinesses(): BusinessRepository {
       return typeof limit === 'number' ? results.slice(0, limit) : results;
     },
 
-    // Ranked in the database (migration 0027, rules in domain/search.ts); the
-    // ids are joined to the shared card list (0026), which Explore has usually
-    // already loaded, so a search costs one small RPC.
+    // Explore's feed, ranked and paged in the database (migration 0029, rules
+    // in domain/nearby.ts) — the phone gets 20 cards, not the directory.
+    async nearby(query: NearbyQuery): Promise<Business[]> {
+      const { data, error } = await sb().rpc('nearby_cards', {
+        p_lat: query.near?.latitude ?? null,
+        p_lng: query.near?.longitude ?? null,
+        p_radius_km: query.radiusKm ?? null,
+        p_min_count: query.minCount,
+        p_exclude_types: query.excludeTypes ?? [],
+        p_types: query.intent ? (query.intent.types ?? []) : null,
+        p_tags: query.intent ? query.intent.tags.map((t) => t.toLowerCase()) : null,
+        p_sort: query.sort,
+        p_seed: query.seed,
+        p_offset: query.offset,
+        p_limit: query.limit,
+      });
+      if (error) throw error;
+      return ((data ?? []) as NearbyRow[]).map((r) => ({
+        ...r.data,
+        ...(r.rating_count ? { ratingAvg: r.rating_avg ?? 0, ratingCount: r.rating_count } : {}),
+        distanceKm: r.distance_km ?? undefined,
+      }));
+    },
+
+    async nearbySummary(scope: NearbyScope, intents: IntentCategory[]): Promise<NearbySummary> {
+      const { data, error } = await sb().rpc('nearby_summary', {
+        p_lat: scope.near?.latitude ?? null,
+        p_lng: scope.near?.longitude ?? null,
+        p_radius_km: scope.radiusKm ?? null,
+        p_min_count: scope.minCount,
+        p_exclude_types: scope.excludeTypes ?? [],
+        p_intents: intents.map((i) => ({ id: i.id, types: i.types ?? [], tags: i.tags.map((t) => t.toLowerCase()) })),
+      });
+      if (error) throw error;
+      const s = (data ?? {}) as { total?: number; reachKm?: number | null; counts?: Record<string, number> };
+      return { total: s.total ?? 0, reachKm: s.reachKm ?? undefined, counts: s.counts ?? {} };
+    },
+
+    // Ranked in the database (migration 0027, rules in domain/search.ts); only
+    // the matching businesses' cards are then read (0026), never the whole
+    // directory — at 40,000 listings that was ~60 MB per search.
     async search(
       query: string,
       options: { near?: GeoPoint; limit?: number } = {},
     ): Promise<SearchResult[]> {
       const q = query.trim();
       if (!q) return [];
-      const [rpc, cards] = await Promise.all([
-        // Every match, not a top-N: relevance ties are broken by DISTANCE here,
-        // and a cut made by score alone could drop the café round the corner.
-        sb().rpc('search_businesses', { q, max_results: 1000 }),
-        cardRows(),
-      ]);
+      // Every match, not a top-N: relevance ties are broken by DISTANCE here,
+      // and a cut made by score alone could drop the café round the corner.
+      const rpc = await sb().rpc('search_businesses', { q, max_results: 1000 });
       if (rpc.error) throw rpc.error;
+      const cards = await cardsByIds(((rpc.data ?? []) as SearchRow[]).map((r) => r.business_id));
       const { near } = options;
       const placed = (b: Business): Business => ({
         ...b,

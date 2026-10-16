@@ -26,7 +26,7 @@ import type {
 import { buildPlacements } from '@/data/adPlacements';
 import { campaignPlanSummary, getAdPlan, isCampaignRunning } from '@/domain/ads';
 import { isOfferLive } from '@/domain/offers';
-import { cardRows, sb, uuid, nowIso, notify, byNewest, mapData, serverNow } from './shared';
+import { sb, uuid, nowIso, notify, byNewest, mapData, serverNow } from './shared';
 
 /** The campaign row shape we read back. */
 type Row = { data: AdCampaign };
@@ -96,18 +96,25 @@ async function notifyOwner(campaign: AdCampaign, title: string, body: string): P
   });
 }
 
+/** Every business with at least one offer, as cards (migration 0029, a partial index). */
+async function offerCards(): Promise<Business[]> {
+  const { data, error } = await sb().rpc('offer_cards');
+  if (error) throw error;
+  return ((data ?? []) as { data: Business }[]).map((r) => r.data);
+}
+
 export function createSupabaseAds(): AdRepository {
   return {
     async listPlacements(near?: GeoPoint, options?: PlacementOptions): Promise<AdPlacement[]> {
       // Without a location there's no way to judge reach, so only sponsored
       // cards come back — an unpaid corner shop shown to someone in another
       // city is worse than an empty slot.
-      // The directory comes from the shared card read (migration 0026) — the
-      // same one Explore's list uses, so the two share a single download, and
-      // an ad card needs offers + location, never the catalogs it strips.
+      // Only businesses that HAVE an offer can fill the slot, so only their
+      // cards (0026) are read — never the whole directory (40,000 cards since
+      // the bulk import; a card carries offers + location, not the catalogs).
       const [active, businesses] = await Promise.all([
         safeRead(() => sb().from('ad_campaigns').select('data').eq('status', 'active')),
-        near ? cardRows() : Promise.resolve([] as Business[]),
+        near ? offerCards() : Promise.resolve([] as Business[]),
       ]);
 
       const now = serverNow();

@@ -92,21 +92,40 @@ import {
   suggestTerms,
   withIntentMatches,
 } from '@/domain/search';
+import { isListingActive } from '@/domain/listingActive';
+import { nearbyPage, nearbySummary as summarizeNearby } from '@/domain/nearby';
 import { http, seg } from './client';
 
 export function createApiBusinesses(): BusinessRepository {
   return {
     list: (query: BusinessQuery = {}) =>
-      http.get<Business[]>('/businesses', {
-        search: query.search,
-        type: query.type,
-        subcategoryId: query.subcategoryId,
-        lat: query.near?.latitude,
-        lng: query.near?.longitude,
-        maxDistanceKm: query.maxDistanceKm,
-        sortByDistance: query.sortByDistance,
-        summary: query.summary,
-      }),
+      http
+        .get<Business[]>('/businesses', {
+          search: query.search,
+          type: query.type,
+          subcategoryId: query.subcategoryId,
+          lat: query.near?.latitude,
+          lng: query.near?.longitude,
+          maxDistanceKm: query.maxDistanceKm,
+          sortByDistance: query.sortByDistance,
+          summary: query.summary,
+          ownerId: query.ownerId,
+        })
+        // Until Path B filters these server-side (SYNC_QUEUE [SYNC-053]), apply them here.
+        .then((all) =>
+          all.filter(
+            (b) =>
+              (!query.ids || query.ids.includes(b.id)) &&
+              (!query.ownerId || b.ownerId === query.ownerId) &&
+              (!query.activeOnly || isListingActive(b)),
+          ),
+        ),
+    // Until Path B has nearby endpoints (SYNC_QUEUE [SYNC-053]), page the full
+    // card list on the device with the same rules (domain/nearby.ts).
+    nearby: async (query) =>
+      nearbyPage(await http.get<Business[]>('/businesses', { summary: true }), query),
+    nearbySummary: async (scope, intents) =>
+      summarizeNearby(await http.get<Business[]>('/businesses', { summary: true }), scope, intents),
     // Until Path B has search endpoints (SYNC_QUEUE [SYNC-051]), rank the full
     // directory on the device with the same rules (domain/search.ts).
     search: async (query, options = {}) => {

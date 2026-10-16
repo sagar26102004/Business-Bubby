@@ -6,7 +6,10 @@
  *
  * Full-bleed, no navigator header. Floating over the map:
  *  - Top row: back · a "● You | rings 1·3·5 km | N on map" pill · list view.
- *    Every listed business is plotted, not just those within the rings.
+ *    The pins are the MAX_PINS listings nearest the middle of what's on
+ *    screen, re-read after every pan or zoom (RealMap's onViewChange) — the
+ *    directory is 40,000 listings, far too many to plot or download at once.
+ *    The chip counts are everything inside the view.
  *  - Category chips (All + every intent category with listings) that
  *    filter the pins, with live counts — the same categories as Explore.
  *  - Zoom +/− on the left; locate-me and street ⇄ satellite on the right.
@@ -17,7 +20,7 @@
  * and shows a "Name · 800 m" bubble. The map is LIVE-mounted, so picking a pin
  * or a chip updates the markers in place instead of reloading the tiles.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Stack, useRouter } from 'expo-router';
@@ -28,15 +31,26 @@ import { openState } from '@/domain/hours';
 import { useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { ErrorView, Icon, LoadingView, Tag, Text, type IconName } from '@/components/ui';
-import RealMap, { type RealMapCommand, type RealMapMarker } from '@/components/RealMap';
+import RealMap, { type MapView, type RealMapCommand, type RealMapMarker } from '@/components/RealMap';
+import { MAX_NEARBY_PAGE } from '@/domain/nearby';
+import { haversineKm } from '@/lib/geo';
 import { hasShowableCoordinates } from '@/features/businesses/location';
 import { radius, spacing, useColors } from '@/theme/theme';
-import { isListedPublicly } from '@/lib/onHold';
+import { ON_HOLD, isListedPublicly } from '@/lib/onHold';
 import { useServiceGate } from '@/features/businesses/serviceGate';
 
 // Every listed business is plotted, however far away — the rings are only a
 // sense of scale around the user, not a cut-off.
 const RING_KMS = [1, 3, 5];
+
+/** Most pins on the map at once: the nearest to the middle of the view. */
+const MAX_PINS = 200;
+/** Until the map reports its visible area: this far around you. */
+const START_VIEW_KM = 3;
+/** Wait this long after a pan/zoom settles before fetching its pins. */
+const VIEW_SETTLE_MS = 350;
+/** ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists. */
+const EXCLUDE_TYPES: Business['type'][] = ON_HOLD.stalls ? ['item'] : [];
 
 /** The first Explore category a business falls under — its pin's tint and icon. */
 const categoryOf = (b: Business): IntentCategory | undefined =>
@@ -68,29 +82,66 @@ export default function MapScreen() {
 
   const send = (kind: RealMapCommand['kind']) => setCommand((c) => ({ id: (c?.id ?? 0) + 1, kind }));
 
+  // Where you are — the map opens here, and distances are measured from it.
   const { data, loading, error, reload } = useAsync(async () => {
     const center = await repos.places.getCurrentPlace();
-    const businesses = await repos.businesses.list({
-      near: center.point,
-      sortByDistance: true,
-      summary: true, // pins and cards — no catalogs
-    });
-    // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
-    return { center: center.point, businesses: businesses.filter(isListedPublicly) };
+    return { center: center.point };
   }, []);
 
-  const withLocation = useMemo(
-    () => (data?.businesses ?? []).filter((b) => b.location.point),
-    [data],
-  );
+  // What the map is showing. Until it first reports in, a START_VIEW_KM
+  // circle around you. Settled pans/zooms only (RealMap's moveend), and a
+  // short pause on top, so a drag across town is one fetch, not twenty.
+  const [view, setView] = useState<MapView | undefined>();
+  const viewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const onViewChange = (v: MapView) => {
+    clearTimeout(viewTimer.current);
+    viewTimer.current = setTimeout(() => setView(v), VIEW_SETTLE_MS);
+  };
+  useEffect(() => () => clearTimeout(viewTimer.current), []);
+  const area = view ?? (data ? { center: data.center, radiusKm: START_VIEW_KM } : undefined);
+  // Rounded so a 2 m nudge of the map doesn't refetch.
+  const areaKey = area
+    ? `${area.center.latitude.toFixed(3)},${area.center.longitude.toFixed(3)},${area.radiusKm.toFixed(1)}`
+    : 'none';
+
   const intent = INTENT_CATEGORIES.find((c) => c.id === intentId);
-  const visible = useMemo(
-    () => (intent ? withLocation.filter((b) => intentMatches(b, intent)) : withLocation),
-    [withLocation, intent],
+
+  // The pins: the MAX_PINS listings nearest the middle of the view, inside it —
+  // never the whole directory (40,000 since Oct 2026). Distances on the cards
+  // stay measured from YOU, not from wherever the map was dragged.
+  const { data: pins } = useAsync(
+    async () => {
+      if (!area || !data) return [] as Business[];
+      const scope = { near: area.center, radiusKm: area.radiusKm, minCount: 0, excludeTypes: EXCLUDE_TYPES };
+      const pages = await Promise.all(
+        Array.from({ length: MAX_PINS / MAX_NEARBY_PAGE }, (_, i) =>
+          repos.businesses.nearby({ ...scope, intent, sort: 'nearest', seed: 0, offset: i * MAX_NEARBY_PAGE, limit: MAX_NEARBY_PAGE }),
+        ),
+      );
+      const here = data.center;
+      return pages
+        .flat()
+        .filter((b) => isListedPublicly(b) && b.location.point)
+        .map((b) => ({ ...b, distanceKm: haversineKm(here, b.location.point!) }));
+    },
+    [areaKey, intentId, !!data],
   );
+  // The chip counts: everything inside the view, per category.
+  const { data: inView } = useAsync(
+    () =>
+      area
+        ? repos.businesses.nearbySummary(
+            { near: area.center, radiusKm: area.radiusKm, minCount: 0, excludeTypes: EXCLUDE_TYPES },
+            INTENT_CATEGORIES,
+          )
+        : Promise.resolve(undefined),
+    [areaKey],
+  );
+
+  const visible = pins ?? [];
   const counts = useMemo(
-    () => new Map(INTENT_CATEGORIES.map((c) => [c.id, withLocation.filter((b) => intentMatches(b, c)).length])),
-    [withLocation],
+    () => new Map(INTENT_CATEGORIES.map((c) => [c.id, inView?.counts[c.id] ?? 0])),
+    [inView],
   );
 
   // The picked pin, else the nearest one in view — the card is never empty
@@ -136,6 +187,7 @@ export default function MapScreen() {
         selectedId={selected?.id}
         onMarkerPress={setPickedId}
         command={command}
+        onViewChange={onViewChange}
         style={StyleSheet.absoluteFill}
       />
 
@@ -176,7 +228,7 @@ export default function MapScreen() {
         >
           <Tag
             label="All"
-            count={withLocation.length}
+            count={inView?.total ?? 0}
             selected={intentId === null}
             onPress={() => setIntentId(null)}
           />

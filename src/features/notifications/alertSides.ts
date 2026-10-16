@@ -13,14 +13,13 @@ import type { Repositories } from '@/data/repositories';
 
 /** The ids of every business this user owns or is on the team of. */
 export async function loadMyBusinessIds(repos: Repositories, userId: string): Promise<Set<string>> {
-  const [all, memberOf] = await Promise.all([
-    repos.businesses.list({ summary: true }), // only ownerId is read
+  const [owned, memberOf] = await Promise.all([
+    // Filtered in the database. Active only: a listing made FOR someone (the
+    // super-admin's bulk listings) isn't one this person answers for.
+    repos.businesses.list({ summary: true, ownerId: userId, activeOnly: true }),
     repos.employees.listBusinessesForUser(userId),
   ]);
-  return new Set([
-    ...all.filter((b) => b.ownerId === userId).map((b) => b.id),
-    ...memberOf.map((b) => b.id),
-  ]);
+  return new Set([...owned.map((b) => b.id), ...memberOf.map((b) => b.id)]);
 }
 
 /**

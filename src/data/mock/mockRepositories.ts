@@ -120,6 +120,9 @@ import {
   type SearchResult,
   type SearchSuggestion,
 } from '@/domain/search';
+import { isListingActive } from '@/domain/listingActive';
+import { nearbyPage, nearbySummary as summarizeNearby, type NearbyQuery, type NearbyScope, type NearbySummary } from '@/domain/nearby';
+import type { IntentCategory } from '@/domain/intents';
 import { formatMoney, parsePrice } from '@/lib/money';
 import {
   CURRENT_POINT,
@@ -356,6 +359,9 @@ class MockBusinessRepository implements BusinessRepository {
 
     const results = businesses
       .filter((b) => (query.type ? b.type === query.type : true))
+      .filter((b) => (query.ids ? query.ids.includes(b.id) : true))
+      .filter((b) => (query.ownerId ? b.ownerId === query.ownerId : true))
+      .filter((b) => (query.activeOnly ? isListingActive(b) : true))
       // A personal stall matches a subcategory when any of its items does —
       // one stall can hold a phone (electronics) AND a car (vehicles).
       .filter((b) =>
@@ -404,6 +410,16 @@ class MockBusinessRepository implements BusinessRepository {
 
     // After the sort, so `limit` with `sortByDistance` means "the N nearest".
     return typeof limit === 'number' ? results.slice(0, limit) : results;
+  }
+
+  async nearby(query: NearbyQuery): Promise<Business[]> {
+    // Cards only, like the real backends (BusinessQuery.summary).
+    const cards = (await this.list()).map(({ menu: _m, products: _p, services: _s, plans: _pl, rentals: _r, portfolio: _pf, ...b }) => b as Business);
+    return nearbyPage(cards, query);
+  }
+
+  async nearbySummary(scope: NearbyScope, intents: IntentCategory[]): Promise<NearbySummary> {
+    return summarizeNearby(await this.list(), scope, intents);
   }
 
   async search(

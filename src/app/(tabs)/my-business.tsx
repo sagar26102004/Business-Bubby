@@ -61,11 +61,10 @@ export default function WorkspaceTab() {
     }
     Promise.all([
       // Cards only: the switcher needs id, name and owner — the hub loads the rest.
-      repos.businesses.list({ summary: true }),
+      repos.businesses.list({ summary: true, ownerId: currentUser.id }),
       repos.employees.listBusinessesForUser(currentUser.id),
     ])
-      .then(([all, memberOf]) => {
-        const mine = all.filter((b) => b.ownerId === currentUser.id);
+      .then(([mine, memberOf]) => {
         const byId = new Map(mine.map((b) => [b.id, b]));
         memberOf.forEach((b) => byId.set(b.id, b));
         // ON HOLD (redesign 2026-10): stall — a personal stall has no workspace here.

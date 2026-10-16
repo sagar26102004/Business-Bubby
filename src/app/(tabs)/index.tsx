@@ -17,6 +17,12 @@
  *
  * Which listings: everything within HOME_RADIUS_KM, or — where that's thin —
  * the HOME_MIN_COUNT nearest. Search and the category pages stay unbounded.
+ *
+ * PAGED (since the 40,000-listing bulk import): the feed is ranked in the
+ * database (BusinessRepository.nearby — rules in domain/nearby.ts) and arrives
+ * FIRST_PAGE cards first, then NEXT_PAGE more each time the list nears its end.
+ * The chip counts and "Within N km" come from one small `nearbySummary` call
+ * over the whole feed, not from what has been loaded so far.
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -32,10 +38,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { setStatusBarStyle } from 'expo-status-bar';
-import type { PlaceKind, SavedPlace } from '@/domain/types';
+import type { Business, PlaceKind, SavedPlace } from '@/domain/types';
 import { formatDistance, getType } from '@/domain/catalog';
 import { ANY_RANGE_KM } from '@/domain/ads';
 import { INTENT_CATEGORIES, intentMatches, type IntentCategory } from '@/domain/intents';
+import type { NearbySort } from '@/domain/nearby';
+import { useNearbyFeed } from '@/features/businesses/useNearbyFeed';
 import { useAuth, useRepositories } from '@/data/DataProvider';
 import { useAsync } from '@/lib/useAsync';
 import { useResponsive } from '@/lib/useResponsive';
@@ -56,8 +64,9 @@ import { useTabBadges } from '@/features/notifications/alertSides';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { AdCarousel, type AdCardItem } from '@/features/ads/AdCarousel';
 import { AD_GRADIENTS } from '@/features/ads/adGradients';
+import { isDemoAd } from '@/features/ads/demoAd';
 import { radius, spacing, useColors } from '@/theme/theme';
-import { isDemoViewer, isListedPublicly } from '@/lib/onHold';
+import { ON_HOLD, isDemoViewer, isListedPublicly } from '@/lib/onHold';
 
 /**
  * How much Home shows: every listing within HOME_RADIUS_KM — unless that's
@@ -75,6 +84,13 @@ import { isDemoViewer, isListedPublicly } from '@/lib/onHold';
 const HOME_RADIUS_KM = 20;
 const HOME_MIN_COUNT = 100;
 
+/** Cards in the first page — enough to fill a screen or two. */
+const FIRST_PAGE = 20;
+/** Cards fetched each time the list nears its end. */
+const NEXT_PAGE = 10;
+/** ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists. */
+const EXCLUDE_TYPES: Business['type'][] = ON_HOLD.stalls ? ['item'] : [];
+
 /**
  * Seed for Home's random order — fixed for the life of the app, so the list
  * doesn't reshuffle under you on every refetch (useAsync refetches on focus),
@@ -82,15 +98,6 @@ const HOME_MIN_COUNT = 100;
  */
 const SHUFFLE_SEED = Math.floor(Math.random() * 2 ** 31);
 
-/** A stable pseudo-random rank for an id under SHUFFLE_SEED (FNV-1a + seed). */
-const shuffleRank = (id: string) => {
-  let h = 2166136261 ^ SHUFFLE_SEED;
-  for (let i = 0; i < id.length; i++) {
-    h ^= id.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-};
 
 const placeIcon = (kind: PlaceKind) =>
   kind === 'current' ? '📍' : kind === 'home' ? '🏠' : kind === 'work' ? '💼' : '⭐';
@@ -124,21 +131,23 @@ export default function BrowseScreen() {
   // ~100 m: closer than that is the same list, so it shares a cache entry.
   const nearKey = near ? `${near.latitude.toFixed(3)},${near.longitude.toFixed(3)}` : 'none';
 
-  const { data, loading, error, reload } = useAsync(
-    // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
-    // `summary`: cards only — the menus and product lists are most of the
-    // directory's weight and Home never shows them.
-    () =>
-      repos.businesses.list({ near, sortByDistance: true, summary: true }).then((l) => {
-        const listed = l.filter(isListedPublicly); // nearest first
-        const inRing = listed.filter(
-          (b) => typeof b.distanceKm === 'number' && b.distanceKm <= HOME_RADIUS_KM,
-        );
-        return inRing.length >= HOME_MIN_COUNT ? inRing : listed.slice(0, HOME_MIN_COUNT);
-      }),
-    [near?.latitude, near?.longitude, isDemoViewer()],
-    { key: ['home', nearKey, isDemoViewer()] },
+  // The feed, paged (useNearbyFeed). A change of place, category or order
+  // starts it again from page one.
+  const feed = useNearbyFeed(
+    {
+      near,
+      radiusKm: HOME_RADIUS_KM,
+      minCount: HOME_MIN_COUNT,
+      excludeTypes: EXCLUDE_TYPES,
+      intent: selected,
+      sort: (sort ?? 'shuffle') as NearbySort,
+      seed: SHUFFLE_SEED,
+    },
+    ['home', nearKey, selectedId, sort, isDemoViewer()],
+    { firstPage: FIRST_PAGE, nextPage: NEXT_PAGE },
   );
+  const { loading, error, reload, loadMore, loadingMore } = feed;
+  const businesses = feed.items;
 
   // (Home stays mounted across tab switches and account changes, so its initial
   // fetch would go stale — `useAsync` now refetches on focus for every screen,
@@ -153,37 +162,25 @@ export default function BrowseScreen() {
     setActivePlaceId(place.id);
   };
 
-  // The nearby list, narrowed to the selected category.
-  const businesses = useMemo(() => {
-    const all = data ?? [];
-    const inCategory = selected ? all.filter((b) => intentMatches(b, selected)) : all;
-    type B = (typeof all)[number];
-    // Ties (same distance, same popularity) fall back to the shuffle, so equals
-    // swap places from one app open to the next instead of always one winning.
-    const byShuffle = (a: B, b: B) => shuffleRank(a.id) - shuffleRank(b.id);
-    if (sort === null) return [...inCategory].sort(byShuffle);
-    if (sort === 'nearest') {
-      // To the 10 m — finer than that, "the same distance" never happens.
-      const dist = (b: B) => Math.round((b.distanceKm ?? Infinity) * 100);
-      return [...inCategory].sort((a, b) => dist(a) - dist(b) || byShuffle(a, b));
-    }
-    // Popular = a rating weighted by how many people gave it, so one 5★ review
-    // doesn't outrank a hundred 4.7s.
-    const score = (b: B) => (b.ratingAvg ?? 0) * Math.log10(1 + (b.ratingCount ?? 0));
-    return [...inCategory].sort((a, b) => score(b) - score(a) || byShuffle(a, b));
-  }, [data, selected, sort]);
+  // The header numbers come from the WHOLE feed: the chip counts, "All", reach.
+  const { data: summary } = useAsync(
+    () =>
+      repos.businesses.nearbySummary(
+        { near, radiusKm: HOME_RADIUS_KM, minCount: HOME_MIN_COUNT, excludeTypes: EXCLUDE_TYPES },
+        INTENT_CATEGORIES,
+      ),
+    [near?.latitude, near?.longitude, isDemoViewer()],
+    { key: ['home-summary', nearKey, isDemoViewer()] },
+  );
 
   // How many nearby listings each category holds — the counts on the chips.
-  const intentCounts = useMemo(() => {
-    const all = data ?? [];
-    return new Map(INTENT_CATEGORIES.map((c) => [c.id, all.filter((b) => intentMatches(b, c)).length]));
-  }, [data]);
+  const intentCounts = useMemo(
+    () => new Map(INTENT_CATEGORIES.map((c) => [c.id, summary?.counts[c.id] ?? 0])),
+    [summary],
+  );
 
   // "Within N km": how far the list actually reaches, from the furthest result.
-  const reachKm = useMemo(() => {
-    const far = Math.max(0, ...(data ?? []).map((b) => b.distanceKm ?? 0));
-    return far > 0 ? Math.max(1, Math.ceil(far)) : undefined;
-  }, [data]);
+  const reachKm = summary?.reachKm ? Math.max(1, Math.ceil(summary.reachKm)) : undefined;
 
   // What's in the ad slot: sponsored campaigns first, then live offers from
   // shops close by. The reach rules live in the repository (data/adPlacements),
@@ -218,6 +215,7 @@ export default function BrowseScreen() {
       distanceLabel: formatDistance(p.distanceKm),
       colors: AD_GRADIENTS[p.business.type],
       sponsored: !!p.campaign,
+      demo: isDemoAd(p.business),
       onPress: () => {
         // Fire-and-forget: a failed counter must never delay the navigation the
         // customer actually asked for.
@@ -399,7 +397,7 @@ export default function BrowseScreen() {
         >
           <Tag
             label="All"
-            count={data?.length ?? 0}
+            count={summary?.total ?? 0}
             selected={selectedId === null}
             onPress={() => setSelectedId(null)}
           />
@@ -476,7 +474,7 @@ export default function BrowseScreen() {
       reachKm,
       currentUser,
       unreadAlerts,
-      data,
+      summary,
       sort,
     ],
   );
@@ -501,6 +499,10 @@ export default function BrowseScreen() {
         style={styles.screen}
         contentContainerStyle={[styles.list, centered(gridMaxWidth)]}
         keyboardShouldPersistTaps="handled"
+        onEndReached={loadMore}
+        // Ask for the next page while about two screens are still left to read.
+        onEndReachedThreshold={2}
+        ListFooterComponent={loadingMore ? <LoadingView label="Loading more…" /> : null}
         onScroll={onScroll}
         scrollEventThrottle={16}
         ListEmptyComponent={

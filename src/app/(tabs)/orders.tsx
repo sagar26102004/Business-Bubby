@@ -23,14 +23,14 @@ export default function MyOrdersScreen() {
   const [businessNames, setBusinessNames] = useState<Map<string, string>>(new Map());
 
   const load = useCallback(() => {
-    Promise.all([
-      repos.orders.listForCustomer(currentUser?.id ?? 'guest'),
-      // Names only — and this runs every LIVE_REFRESH_MS, so never the full catalogs.
-      repos.businesses.list({ summary: true }),
-    ]).then(([mine, all]) => {
+    // Names only, of just the businesses these orders are with — this runs
+    // every LIVE_REFRESH_MS, so never the directory (40,000 cards).
+    repos.orders.listForCustomer(currentUser?.id ?? 'guest').then(async (mine) => {
       setOrders(mine);
-      setBusinessNames(new Map(all.map((b) => [b.id, b.name])));
-    });
+      const ids = [...new Set(mine.map((o) => o.businessId))];
+      const named = ids.length ? await repos.businesses.list({ summary: true, ids }) : [];
+      setBusinessNames(new Map(named.map((b) => [b.id, b.name])));
+    }).catch(() => {});
   }, [repos, currentUser?.id]);
 
   // Refresh whenever the tab regains focus (e.g. right after placing an order),

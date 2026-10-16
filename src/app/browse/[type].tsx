@@ -5,6 +5,9 @@
  * and the origin place as ?place=, so any filtered view is deep-linkable and
  * the back button exits cleanly.
  *
+ * Paged (useNearbyFeed): 20 cards, then 10 more per scroll, ranked in the
+ * database — never the whole directory.
+ *
  * Chips are the category's own tags found on nearby listings — Food shows
  * Restaurant / Cafe / Bakery…, Rentals shows Car Rental / Flats & Rooms…
  * A business matches a chip by tag (or product category for stalls), so one
@@ -24,13 +27,19 @@ import { EmptyView, ErrorView, LoadingView, Tag } from '@/components/ui';
 import { BusinessCard } from '@/features/businesses/BusinessCard';
 import { SearchScanBar } from '@/features/search/SearchScanBar';
 import { spacing, useColors } from '@/theme/theme';
-import { isListedPublicly } from '@/lib/onHold';
+import { ON_HOLD, isListedPublicly } from '@/lib/onHold';
+import type { ListingType } from '@/domain/types';
+import { useNearbyFeed } from '@/features/businesses/useNearbyFeed';
 
 interface Chip {
   id: string;
   label: string;
   icon?: string;
+  count?: number;
 }
+
+/** ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists. */
+const EXCLUDE_TYPES: ListingType[] = ON_HOLD.stalls ? ['item'] : [];
 
 export default function BrowseIntentScreen() {
   const params = useLocalSearchParams<{ type: string; sub?: string; place?: string }>();
@@ -46,59 +55,79 @@ export default function BrowseIntentScreen() {
   const activePlace = places?.find((p) => p.id === params.place) ?? places?.[0];
   const near = activePlace?.point;
 
-  // One nearby fetch; intent membership and chip filtering happen here so a
-  // business can sit in several categories and match several chips.
-  const { data, loading, error, reload } = useAsync(
-    // ON HOLD (redesign 2026-10): stall — stall listings are hidden from public lists.
+  // ON HOLD (redesign 2026-10): stall — Stalls' chips look inside `products`,
+  // so that one category still reads full listings and filters here. (Its
+  // listings are hidden from public lists while on hold, so this is small.)
+  const isStalls = intent?.id === 'stalls';
+  const stallRead = useAsync(
     async () =>
-      intent
-        ? (
-            await repos.businesses.list({
-              near,
-              sortByDistance: true,
-              // Stall chips look inside `products`; every other category is cards only.
-              summary: intent.id !== 'stalls',
-            })
-          ).filter(isListedPublicly)
+      isStalls
+        ? (await repos.businesses.list({ near, sortByDistance: true, type: 'item' })).filter(isListedPublicly)
         : [],
-    [intent?.id, near?.latitude, near?.longitude],
+    [isStalls, near?.latitude, near?.longitude],
+    { enabled: isStalls },
   );
-  const all = useMemo(
-    () => (intent ? (data ?? []).filter((b) => intentMatches(b, intent)) : []),
-    [data, intent],
+
+  // Every other category: paged in the database (useNearbyFeed), nearest first,
+  // no distance cut-off — someone who opened Rentals will travel for one. A
+  // chip narrows the feed to its one tag; the chips themselves (and their
+  // counts) come from one summary call over the category's tags.
+  const feed = useNearbyFeed(
+    {
+      near,
+      minCount: 0,
+      excludeTypes: EXCLUDE_TYPES,
+      intent: intent ? (sub ? { tags: [sub] } : intent) : undefined,
+      sort: 'nearest',
+      seed: 0,
+    },
+    ['browse', intent?.id, sub, near ? `${near.latitude.toFixed(3)},${near.longitude.toFixed(3)}` : 'none'],
+    { enabled: !!intent && !isStalls },
+  );
+  const { data: chipCounts } = useAsync(
+    () =>
+      intent && !isStalls
+        ? repos.businesses.nearbySummary(
+            { near, minCount: 0, excludeTypes: EXCLUDE_TYPES },
+            intent.tags.map((t) => ({ id: t, label: t, icon: '', color: '', tags: [t] })),
+          )
+        : Promise.resolve(undefined),
+    [intent?.id, isStalls],
+    { key: ['browse-chips', intent?.id], enabled: !!intent && !isStalls },
+  );
+
+  const stallsAll = useMemo(
+    () => (intent && isStalls ? (stallRead.data ?? []).filter((b) => intentMatches(b, intent)) : []),
+    [stallRead.data, intent, isStalls],
   );
 
   const chips = useMemo<Chip[]>(() => {
     if (!intent) return [];
-    // Stalls have no tags of their own — their chips are the item categories
-    // of the products inside them.
-    const base: Chip[] =
-      intent.id === 'stalls'
-        ? (getType('item')?.subcategories ?? []).map((s) => ({
-            id: s.id,
-            label: s.name,
-            icon: s.icon,
-          }))
-        : [];
-    const present = new Set(
-      all.flatMap((b) => b.tags ?? []).map((t) => t.trim().toLowerCase()),
-    );
-    // The category's tags carried by nearby listings, in curated order.
-    const extra = intent.tags
-      .filter((t) => present.has(t.toLowerCase()))
-      .map((t) => ({ id: t, label: t }));
-    return [...base, ...extra];
-  }, [intent, all]);
+    if (isStalls) {
+      // Stalls have no tags of their own — their chips are the item categories
+      // of the products inside them.
+      return (getType('item')?.subcategories ?? []).map((s) => ({ id: s.id, label: s.name, icon: s.icon }));
+    }
+    // The category's tags carried by any listing, in curated order.
+    return intent.tags
+      .filter((t) => (chipCounts?.counts[t] ?? 0) > 0)
+      .map((t) => ({ id: t, label: t, count: chipCounts?.counts[t] }));
+  }, [intent, isStalls, chipCounts]);
 
   const active = chips.find((c) => c.id === sub);
-  const businesses = active
-    ? all.filter(
-        (b) =>
-          hasTag(b.tags, active.label) ||
-          b.subcategoryId === active.id ||
-          b.products?.some((p) => p.subcategoryId === active.id),
-      )
-    : all;
+  const businesses = isStalls
+    ? active
+      ? stallsAll.filter(
+          (b) =>
+            hasTag(b.tags, active.label) ||
+            b.subcategoryId === active.id ||
+            b.products?.some((p) => p.subcategoryId === active.id),
+        )
+      : stallsAll
+    : feed.items;
+  const loading = isStalls ? stallRead.loading : feed.loading;
+  const error = isStalls ? stallRead.error : feed.error;
+  const reload = isStalls ? stallRead.reload : feed.reload;
 
   if (!intent) {
     return <EmptyView title="Unknown category" subtitle="This category doesn’t exist." />;
@@ -124,6 +153,10 @@ export default function BrowseIntentScreen() {
       style={[styles.screen, { backgroundColor: colors.background }]}
       contentContainerStyle={[styles.list, centered(gridMaxWidth)]}
       keyboardShouldPersistTaps="handled"
+      onEndReached={isStalls ? undefined : feed.loadMore}
+      // Ask for the next page while about two screens are still left to read.
+      onEndReachedThreshold={2}
+      ListFooterComponent={!isStalls && feed.loadingMore ? <LoadingView label="Loading more…" /> : null}
       ListHeaderComponent={
         <View>
           <Stack.Screen options={{ title: `${intent.icon} ${intent.label}` }} />
@@ -140,6 +173,7 @@ export default function BrowseIntentScreen() {
                 key={c.id}
                 label={c.label}
                 icon={c.icon}
+                count={c.count}
                 selected={sub === c.id}
                 onPress={() => chooseSub(sub === c.id ? undefined : c.id)}
               />

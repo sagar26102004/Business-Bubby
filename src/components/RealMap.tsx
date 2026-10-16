@@ -77,7 +77,16 @@ type Props = {
   look?: 'classic' | 'onePlace';
   /** Live mode only: zoom / recenter / switch layer. */
   command?: RealMapCommand;
+  /**
+   * After every pan or zoom settles: the middle of the visible area and how
+   * far its corners are from it, in km. Lets a screen load only what's in view
+   * (map.tsx) instead of putting the whole directory on the map.
+   */
+  onViewChange?: (view: MapView) => void;
 };
+
+/** The visible area of the map: its middle, and middle-to-corner distance. */
+export type MapView = { center: GeoPoint; radiusKm: number };
 
 // Build a stand-alone Leaflet page. Injected data is JSON so there's no escaping risk.
 function buildHtml(
@@ -319,6 +328,14 @@ function buildHtml(
       });
     }
 
+    // The visible area, after each pan/zoom settles (and once at the start).
+    function sendView() {
+      var c = map.getCenter(), ne = map.getBounds().getNorthEast();
+      send({ type: 'view', latitude: c.lat, longitude: c.lng, radiusKm: c.distanceTo(ne) / 1000 });
+    }
+    map.on('moveend', sendView);
+    setTimeout(sendView, 0);
+
     // One-shot commands from the screen (zoom, recenter, layer), deduped by id.
     var lastCommand = null;
     function runCommand(C) {
@@ -356,9 +373,11 @@ export default function RealMap(props: Props) {
   return Platform.OS === 'web' ? <WebMap {...props} /> : <NativeMap {...props} />;
 }
 
-function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route, look, command }: Props) {
+function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route, look, command, onViewChange }: Props) {
   const onPress = useRef(onMarkerPress);
   onPress.current = onMarkerPress;
+  const onView = useRef(onViewChange);
+  onView.current = onViewChange;
   // Same ref trick as the marker handler: the listener is registered once, so
   // it must read the CURRENT callback rather than the one from first render.
   const onTap = useRef(onMapPress);
@@ -382,6 +401,9 @@ function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPres
         if (d?.type === 'marker') onPress.current?.(d.id);
         if (d?.type === 'tap') {
           onTap.current?.({ latitude: d.latitude, longitude: d.longitude });
+        }
+        if (d?.type === 'view') {
+          onView.current?.({ center: { latitude: d.latitude, longitude: d.longitude }, radiusKm: d.radiusKm });
         }
         if (d?.type === 'ready') {
           readyRef.current = true;
@@ -429,7 +451,7 @@ function WebMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPres
   );
 }
 
-function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route, look, command }: Props) {
+function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapPress, style, live, follow, route, look, command, onViewChange }: Props) {
   // Required lazily so the web bundle never touches the native module.
   const { WebView } = require('react-native-webview');
   const webRef = useRef<any>(null);
@@ -479,6 +501,9 @@ function NativeMap({ center, markers, ringsKm, selectedId, onMarkerPress, onMapP
           const d = JSON.parse(e.nativeEvent.data);
           if (d?.type === 'marker') onMarkerPress?.(d.id);
           if (d?.type === 'tap') onMapPress?.({ latitude: d.latitude, longitude: d.longitude });
+          if (d?.type === 'view') {
+            onViewChange?.({ center: { latitude: d.latitude, longitude: d.longitude }, radiusKm: d.radiusKm });
+          }
         } catch {}
       }}
     />
