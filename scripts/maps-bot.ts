@@ -38,6 +38,7 @@ import {
   loadLocalListings,
   sectionFor,
   sleep,
+  FOOD_ROOT,
   type KnownListing,
 } from './listing-lib';
 import { ensureMenu } from './menu-from-photos';
@@ -108,13 +109,13 @@ export function googleHours(text: string): string | null {
 
 /* ───────────────────────────── page helpers ─────────────────────────────── */
 
-async function blocked(page: Page): Promise<boolean> {
+export async function blocked(page: Page): Promise<boolean> {
   const url = page.url();
   return /consent\.google|\/sorry\//.test(url) || (await page.$('form[action*="consent"]')) !== null;
 }
 
 /** lh3 photo URL at a chosen size. */
-const sized = (src: string, w: number) => src.replace(/=[whs]\d+[^/?#]*$/, `=w${w}`);
+export const sized = (src: string, w: number) => src.replace(/=[whs]\d+[^/?#]*$/, `=w${w}`);
 
 export async function download(url: string, base: string): Promise<string | null> {
   const res = await fetch(url);
@@ -481,7 +482,7 @@ export async function collect(opts: CollectOptions): Promise<CollectResult> {
 
 async function main() {
   const type = arg('type', 'cafe')!;
-  const root = arg('root', 'E:/listing')!;
+  const root = arg('root', FOOD_ROOT)!;
   const result = await collect({
     query: arg('query', 'cafes in Indore')!,
     type,

@@ -1,0 +1,68 @@
+{
+  "_about": "What the collector bots search for (scripts/collect/*.ts). See LISTING-PLAN.md → 'Many bots → merge → publish'. google-maps: every category is first searched city-wide; one that hits Google's ~100-result cap is 'dense' and is searched again tile by tile over the bbox. Food is left to Zomato (food data\\) unless a run passes --group food.",
+  "city": "Indore",
+  "bbox": { "south": 22.62, "north": 22.82, "west": 75.76, "east": 75.98 },
+  "tileStep": 0.03,
+  "tileZoom": 15,
+  "googleCategories": {
+    "health": [
+      "hospital", "clinic", "doctor", "dentist", "eye hospital", "skin clinic", "child specialist",
+      "gynecologist", "orthopedic doctor", "physiotherapist", "pathology lab", "diagnostic center",
+      "medical store", "pharmacy", "ayurvedic clinic", "homeopathy clinic", "veterinary clinic",
+      "optician", "hearing aid center", "nursing home", "blood bank", "ambulance service",
+      "psychologist", "dietitian", "medical equipment supplier"
+    ],
+    "shops": [
+      "grocery store", "kirana store", "supermarket", "general store", "dairy", "vegetable shop",
+      "fruit shop", "meat shop", "chicken shop", "dry fruits shop", "flour mill", "organic store",
+      "hardware store", "paint store", "electrical shop", "sanitary ware shop", "tiles shop",
+      "building materials supplier", "plywood shop", "glass shop", "electronics store",
+      "mobile phone shop", "computer shop", "home appliance store", "furniture store",
+      "home decor shop", "kitchenware shop", "clothing store", "saree shop", "mens clothing store",
+      "kids clothing store", "boutique", "shoe store", "bag shop", "watch shop", "jewellery store",
+      "artificial jewellery shop", "gift shop", "toy store", "stationery store", "book store",
+      "florist", "plant nursery", "pet shop", "sports shop", "bicycle shop", "musical instrument store",
+      "puja store", "cosmetics store", "auto parts store", "tyre shop", "battery shop",
+      "car accessories store", "bike accessories shop", "wholesale market", "distributor",
+      "second hand shop", "scrap dealer", "seeds and fertilizer shop"
+    ],
+    "beauty-fitness": [
+      "salon", "beauty parlour", "mens salon", "unisex salon", "spa", "massage center",
+      "makeup artist", "bridal makeup", "nail salon", "tattoo shop", "gym", "fitness center",
+      "yoga center", "zumba classes", "mehndi artist"
+    ],
+    "services": [
+      "electrician", "plumber", "carpenter", "painter", "ac repair", "refrigerator repair",
+      "washing machine repair", "ro water purifier service", "pest control", "house cleaning service",
+      "laundry", "dry cleaner", "tailor", "ladies tailor", "mobile repair", "laptop repair",
+      "computer repair", "tv repair", "cctv installation", "solar panel installer", "interior designer",
+      "architect", "modular kitchen", "locksmith", "packers and movers", "courier service",
+      "car repair", "bike repair", "car wash", "car service center", "towing service",
+      "driving school", "taxi service", "tour and travels", "travel agency", "photographer",
+      "photo studio", "videographer", "printing press", "flex printing", "xerox shop", "cyber cafe",
+      "event planner", "wedding planner", "tent house", "dj service", "caterer", "banquet hall",
+      "marriage garden", "astrologer", "pandit", "chartered accountant", "lawyer", "notary",
+      "insurance agent", "real estate agent", "property dealer", "builder", "loan agent",
+      "visa consultant", "placement agency", "digital marketing agency", "web designer",
+      "it company", "security service", "maid service", "water supplier", "borewell service",
+      "fabrication", "welding shop", "lathe works", "machine repair", "generator rental",
+      "car rental", "bike rental", "furniture rental", "costume rental"
+    ],
+    "education": [
+      "school", "preschool", "play school", "daycare", "coaching center", "tuition center",
+      "competitive exam coaching", "computer training institute", "coding classes",
+      "spoken english classes", "abacus classes", "music classes", "dance classes", "art classes",
+      "swimming classes", "karate classes", "sports academy", "cricket academy", "library",
+      "college"
+    ],
+    "stay": [
+      "hotel", "guest house", "lodge", "hostel", "pg accommodation", "boys hostel", "girls hostel",
+      "resort", "farmhouse", "coworking space", "homestay"
+    ],
+    "food": [
+      "restaurant", "cafe", "bakery", "sweet shop", "fast food", "dhaba", "tea stall", "juice shop",
+      "ice cream shop", "tiffin service", "cloud kitchen", "paan shop"
+    ]
+  },
+  "defaultGroups": ["health", "shops", "beauty-fitness", "services", "education", "stay"]
+}

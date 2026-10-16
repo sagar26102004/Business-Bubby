@@ -33,7 +33,7 @@ const RATERS = 500;
 const MIN_RATINGS = 250;
 const MAX_RATINGS = 300;
 const WRITTEN = 10;
-const PROGRESS = 'E:\\listing\\demo\\raters.json';
+const PROGRESS = 'E:\\listing\\food data\\demo\\raters.json';
 const USERNAME_MAX = 20;
 const DRY = process.argv.includes('--dry-run');
 const LIMIT = (() => {

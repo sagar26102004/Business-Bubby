@@ -39,7 +39,8 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
-import type { Business, BusinessLocation, ListingType, MenuItem, PortfolioItem } from '@/domain/types';
+import type { Business, BusinessLocation, ListingType, MenuItem, PortfolioItem, ShowcaseLink } from '@/domain/types';
+import { showcaseLinkKind } from '@/domain/showcase';
 import { DAY_LABELS, dayFromShifts, summarizeHours, type OpeningHours, type Shift } from '@/domain/hours';
 import { getType } from '@/domain/catalog';
 import { hasTag, isFoodShop } from '@/domain/tags';
@@ -74,13 +75,17 @@ const IMAGE_EXT = /\.(jpe?g|png|webp)$/i;
  * scripts/maps-bot.ts. Hours are "HH:MM-HH:MM", comma-separated shifts, or
  * "closed". `point` wins over a "<lat>, <lng>.png" screenshot name.
  */
-interface ListingFacts {
+export interface ListingFacts {
   name?: string;
   type?: ListingType;
   tags: string[];
   tagline?: string;
   description?: string;
   phone?: string;
+  email?: string;
+  website?: string;
+  /** Instagram / Facebook / YouTube… page links → the business's showcase links. */
+  socials?: Record<string, string>;
   location: {
     addressLine?: string;
     city?: string;
@@ -120,7 +125,7 @@ function pointFromFolder(dir: string): { latitude: number; longitude: number } |
 /* ───────────────────────────── uploads ──────────────────────────────────── */
 
 /** Node twin of src/lib/cloudinary.ts — sign at the edge function, POST straight to Cloudinary. */
-async function uploadImage(sb: SupabaseClient, file: string): Promise<string> {
+export async function uploadImage(sb: SupabaseClient, file: string): Promise<string> {
   const bytes = statSync(file).size;
   if (bytes > MAX_IMAGE_BYTES) {
     throw new Error(`${basename(file)} is ${Math.round(bytes / 1048576)} MB — keep photos under 10 MB.`);
@@ -153,6 +158,77 @@ async function uploadImage(sb: SupabaseClient, file: string): Promise<string> {
     throw new Error(`Cloudinary refused ${basename(file)}: ${body?.error?.message ?? res.status}`);
   }
   return storedUrl(body.secure_url, 'image');
+}
+
+/** A collector's social links → the showcase-link chips under the gallery. */
+function showcaseLinks(socials: ListingFacts['socials']): ShowcaseLink[] | undefined {
+  const urls = Object.values(socials ?? {}).filter((u) => /^https?:\/\//i.test(u));
+  if (!urls.length) return undefined;
+  const createdAt = new Date().toISOString();
+  return urls.map((url) => ({ id: randomUUID(), kind: showcaseLinkKind(url), url, createdAt }));
+}
+
+/**
+ * The `businesses` document, shaped exactly like businesses.create. Shared by
+ * this publisher and the SQL export (scripts/sql-export.ts), so a listing made
+ * either way is the same. Undefined keys are dropped, as supabase-js does.
+ */
+export function businessDocument(
+  facts: ListingFacts,
+  p: {
+    id: string;
+    ownerId: string;
+    coverImageUrl?: string;
+    menu?: MenuItem[];
+    portfolio?: PortfolioItem[];
+    name?: string;
+    location?: BusinessLocation;
+    createdAt?: string;
+  },
+): Business {
+  const type: ListingType = facts.type ?? 'shop';
+  const tags = facts.tags ?? [];
+  const point = facts.location.point;
+  const location: BusinessLocation = p.location ?? {
+    kind: 'office',
+    isHome: false,
+    hidePreciseLocation: false,
+    addressLine: facts.location.addressLine,
+    city: facts.location.city,
+    region: facts.location.region,
+    country: facts.location.country ?? 'India',
+    point: point!,
+  };
+  const openingHours = parseHours(facts.hours);
+  const business: Business = {
+    id: p.id,
+    ownerId: p.ownerId,
+    name: p.name ?? facts.name!.trim(),
+    tagline: facts.tagline,
+    description: facts.description,
+    type,
+    subcategoryId: getType(type)?.subcategories.find((s) => hasTag(tags, s.name))?.id,
+    tags: tags.length ? tags : undefined,
+    coverImageUrl: p.coverImageUrl,
+    location,
+    phone: facts.phone,
+    email: facts.email,
+    website: facts.website,
+    showcaseLinks: showcaseLinks(facts.socials),
+    menu: p.menu,
+    openingHours,
+    hours: summarizeHours(openingHours),
+    modules: suggestModules({ type, tags, hasMenu: !!p.menu?.length }),
+    portfolio: p.portfolio?.length ? p.portfolio : undefined,
+    employeeIds: [],
+    callHandlerIds: [],
+    ownerHandlesCalls: true,
+    chatRecipientIds: [],
+    // The owner isn't on the app yet — "Listing inactive" until they sign in (migration 0028).
+    listingActive: false,
+    createdAt: p.createdAt ?? new Date().toISOString(),
+  };
+  return JSON.parse(JSON.stringify(business)) as Business;
 }
 
 /* ───────────────────────────── one folder ───────────────────────────────── */
@@ -253,6 +329,8 @@ async function listFolder(sb: SupabaseClient | null, ownerId: string, dir: strin
   console.log(`   name      ${name}  (${type})`);
   console.log(`   tags      ${tags.join(', ')}`);
   console.log(`   address   ${[location.addressLine, location.city, location.region].filter(Boolean).join(', ')}`);
+  if (facts.email || facts.website) console.log(`   contact   ${[facts.email, facts.website].filter(Boolean).join(' · ')}`);
+  if (facts.socials && Object.keys(facts.socials).length) console.log(`   links     ${Object.values(facts.socials).join(' · ')}`);
   console.log(`   pin       ${point.latitude}, ${point.longitude}`);
   console.log(`   hours     ${openingHours ? summarizeHours(openingHours) : '—'}`);
   if (openingHours) {
@@ -331,34 +409,8 @@ async function listFolder(sb: SupabaseClient | null, ownerId: string, dir: strin
     console.log(`   ↑ ${f}`);
   }
 
-  // ── the row, shaped exactly like businesses.create ──
   const id = randomUUID();
-  const business: Business = {
-    id,
-    ownerId,
-    name,
-    tagline: facts.tagline,
-    description: facts.description,
-    type,
-    subcategoryId: getType(type)?.subcategories.find((s) => hasTag(tags, s.name))?.id,
-    tags: tags.length ? tags : undefined,
-    coverImageUrl,
-    location,
-    phone: facts.phone,
-    menu,
-    openingHours,
-    hours: summarizeHours(openingHours),
-    modules: suggestModules({ type, tags, hasMenu: !!menu?.length }),
-    portfolio: portfolio.length ? portfolio : undefined,
-    employeeIds: [],
-    callHandlerIds: [],
-    ownerHandlesCalls: true,
-    chatRecipientIds: [],
-    // The owner isn't on the app yet — "Listing inactive" until they sign in (migration 0028).
-    listingActive: false,
-    createdAt: new Date().toISOString(),
-  };
-  // Drop undefined keys so the jsonb document matches what supabase-js writes from the app.
+  const business = businessDocument(facts, { id, ownerId, coverImageUrl, menu, portfolio, name, location });
   const data = JSON.parse(JSON.stringify(business));
   const { error } = await sb.from('businesses').insert({ id, owner_id: ownerId, type, data });
   if (error) throw error;

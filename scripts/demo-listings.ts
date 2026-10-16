@@ -53,7 +53,7 @@ interface Result {
 }
 
 const MANIFEST = join(process.cwd(), 'scripts', 'demo-listings.json');
-const RESULTS = 'E:\\listing\\demo\\results.json';
+const RESULTS = 'E:\\listing\\food data\\demo\\results.json';
 const USERNAME_MAX = 20;
 
 const usernameFor = (name: string) => `bot${name.toLowerCase().replace(/[^a-z0-9]/g, '')}`.slice(0, USERNAME_MAX);

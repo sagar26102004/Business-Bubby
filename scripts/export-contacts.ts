@@ -31,9 +31,9 @@ import type { BusinessLocation, GeoPoint } from '@/domain/types';
 import { isFoodShop } from '@/domain/tags';
 import { citiesForState } from '@/domain/geoCatalog';
 import { haversineKm } from '@/lib/geo';
-import { OWNER_PASSWORD, anonClient, readOutreachLog, readOwnerAccounts, signIn } from './listing-lib';
+import { FOOD_ROOT, OWNER_PASSWORD, anonClient, readOutreachLog, readOwnerAccounts, signIn } from './listing-lib';
 
-const DEFAULT_OUT = 'E:/listing/food-contacts.xlsx';
+const DEFAULT_OUT = join(FOOD_ROOT, 'food-contacts.xlsx');
 const MESSAGE_FILE = join(process.cwd(), 'scripts', 'outreach-message.txt');
 const NO_WHATSAPP = 'No WhatsApp';
 const LINK_LABEL = 'Download link';

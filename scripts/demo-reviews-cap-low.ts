@@ -14,7 +14,7 @@ import type { Business, Review } from '@/domain/types';
 import { need } from './listing-lib';
 
 const MAX_LOW = 2;
-const OUT = 'E:\\listing\\demo\\reviews-cap-low.sql';
+const OUT = 'E:\\listing\\food data\\demo\\reviews-cap-low.sql';
 const sql = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 async function main() {

@@ -19,10 +19,10 @@ import { join } from 'node:path';
 import type { Business } from '@/domain/types';
 import { isFoodShop } from '@/domain/tags';
 import { parseOfferings, toMenuItem } from '@/features/offerings/importOfferings';
-import { folderName, need } from './listing-lib';
+import { FOOD_ROOT, folderName, need } from './listing-lib';
 import { ensureMenu } from './menu-from-photos';
 
-const WORK = 'E:/listing/_menus';
+const WORK = join(FOOD_ROOT, '_menus');
 
 async function main() {
   const args = process.argv.slice(2);

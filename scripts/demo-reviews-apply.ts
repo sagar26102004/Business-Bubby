@@ -19,7 +19,7 @@ import type { Business, Review } from '@/domain/types';
 import { need } from './listing-lib';
 
 type Lines = { good: string[]; meh: string[]; low: string[] };
-const OUT = 'E:\\listing\\demo\\reviews-apply.sql';
+const OUT = 'E:\\listing\\food data\\demo\\reviews-apply.sql';
 const sql = (s: string) => `'${s.replace(/'/g, "''")}'`;
 
 async function main() {

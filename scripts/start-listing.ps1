@@ -8,7 +8,7 @@
 #
 # Runs scripts/listing-loop.ts in THIS window and keeps Windows awake until it
 # ends (the keep-awake request dies with the window, so closing it is a stop).
-# Stop gracefully any time by creating E:\listing\STOP — the loop finishes the
+# Stop gracefully any time by creating "E:\listing\food data\STOP" —the loop finishes the
 # cycle it is in and exits.
 param(
   [ValidateSet('maps', 'zomato')][string]$Source = 'maps',
@@ -29,7 +29,7 @@ $where = if ($Cities) { " - $Cities" } else { '' }
 $Host.UI.RawUI.WindowTitle = "Localo listing run - $Source$where ($Hours h) - do not close"
 
 # A STOP file left over from last time would end this run immediately.
-$stopFile = if ($Root) { Join-Path $Root 'STOP' } else { 'E:\listing\STOP' }
+$stopFile = if ($Root) { Join-Path $Root 'STOP' } else { 'E:\listing\food data\STOP' }
 if (Test-Path $stopFile) { Remove-Item $stopFile -Force }
 
 # Keep the PC awake (system, not display) while this window runs.
@@ -41,7 +41,7 @@ $ES_SYSTEM_REQUIRED = [uint32]'0x00000001'
 [void][Localo.Power]::SetThreadExecutionState($ES_CONTINUOUS -bor $ES_SYSTEM_REQUIRED)
 
 Write-Host "Localo listing run started $(Get-Date -Format 'HH:mm') for $Hours h. Keep the laptop plugged in with the lid OPEN."
-Write-Host "Stop gracefully: create the file E:\listing\STOP   (or close this window to stop at once)."
+Write-Host "Stop gracefully: create the file "E:\listing\food data\STOP"  (or close this window to stop at once)."
 Write-Host ""
 
 $loopArgs = @('tsx', 'scripts/listing-loop.ts', '--source', $Source, '--hours', "$Hours")
@@ -56,5 +56,5 @@ try {
 } finally {
   [void][Localo.Power]::SetThreadExecutionState($ES_CONTINUOUS)
   Write-Host ""
-  Write-Host "Run finished $(Get-Date -Format 'HH:mm'). Logs: E:\listing\logs"
+  Write-Host "Run finished $(Get-Date -Format 'HH:mm'). Logs: E:\listing\food data\logs"
 }

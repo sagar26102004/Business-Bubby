@@ -1,7 +1,7 @@
 {
   "_about": "Config for /start-listing (Google Maps: `queries`) and /start-listing-zomato (Zomato: `zomatoQueries`, list pages walked in every city of `cities` — override per run with --cities), both run by scripts/listing-loop.ts --source maps|zomato. See LISTING-PLAN.md at the repo root. Lists run in order; when one has no new places left the loop moves to the next, and each source's position is remembered in E:/listing/loop-state.json across runs.",
   "type": "cafe",
-  "root": "E:/listing",
+  "root": "E:/listing/food data",
   "perCycle": 20,
   "intervalMinutes": 30,
   "hours": 10,

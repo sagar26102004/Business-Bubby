@@ -33,6 +33,17 @@ export function need(key: string): string {
 
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Where the bulk-listing work lives (LISTING-PLAN.md, "Folder layout"). Each
+ * collector bot has its own folder under LISTING_ROOT; the food pipeline
+ * (Zomato / Google cafés) lives in `food data`. The registries every bot and
+ * the publisher share — published keys, owner accounts, outreach log — sit in
+ * `shared`, because they are about the whole platform, not one bot.
+ */
+export const LISTING_ROOT = 'E:/listing';
+export const SHARED_DIR = join(LISTING_ROOT, 'shared');
+export const FOOD_ROOT = join(LISTING_ROOT, 'food data');
+
 /** A business name as a Windows folder name. */
 export const folderName = (name: string) =>
   name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
@@ -75,8 +86,19 @@ export const DUP_RADIUS_KM = 0.15;
 const NEAR_RADIUS_KM = 0.05;
 
 /** "Amigos Café & Restaurant" → "amigoscafeandrestaurant". */
-export const normName = (name: string) =>
-  name
+const normCache = new Map<string, string>();
+/** Cached: the merge asks for the same names millions of times. */
+export const normName = (name: string): string => {
+  let k = normCache.get(name);
+  if (k === undefined) normCache.set(name, (k = computeNormName(name)));
+  return k;
+};
+const computeNormName = (name: string) =>
+  // Hindi names are romanised first — otherwise every Devanagari name keys to ""
+  // and any two of them within 150 m would count as one business.
+  romanize(name)
+    // NFKC: "𝐃𝐫. 𝐌𝐞𝐡𝐭𝐚" (styled Unicode letters people paste into Google) → "Dr. Mehta".
+    .normalize('NFKC')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
@@ -161,13 +183,13 @@ export const describeDuplicate = (d: NonNullable<DuplicateCheck>) =>
  * still never comes back. The live database is checked too; this file is the
  * offline record and Sagar's own list of what went up.
  */
-export const KEYS_FILE = 'E:/listing/published-keys.json';
+export const KEYS_FILE = join(SHARED_DIR, 'published-keys.json');
 
 /**
  * Who the outreach sender has messaged, keyed by listing id — written by
  * outreach-sender.ts, read back into the sheet's Sent? column by export-contacts.ts.
  */
-export const OUTREACH_LOG = 'E:/listing/outreach-sent.json';
+export const OUTREACH_LOG = join(SHARED_DIR, 'outreach-sent.json');
 export interface OutreachMark {
   status: 'sent' | 'skipped';
   at: string;
@@ -218,7 +240,7 @@ export function appendKey(entry: Omit<KeyEntry, 'key' | 'publishedAt'>, path = K
  * in to it (migration 0028). This file is the record of who got which handle —
  * the outreach sheet reads it (export-contacts.ts).
  */
-export const OWNER_ACCOUNTS_FILE = 'E:/listing/owner-accounts.json';
+export const OWNER_ACCOUNTS_FILE = join(SHARED_DIR, 'owner-accounts.json');
 /** Kept in the gitignored scripts/.listing.env — never commit it. */
 export const OWNER_PASSWORD = need('OWNER_PASSWORD');
 const USERNAME_MAX = 20;
@@ -244,8 +266,56 @@ export function writeOwnerAccounts(all: Record<string, OwnerAccount>, path = OWN
  * Follows assertUsername (src/data/repositories.ts): 3–20 chars, a-z0-9,
  * starting with a LETTER — a leading digit could collide with phone logins.
  */
+/**
+ * A business name as it should appear in the app: styled Unicode letters made
+ * plain (NFKC), wrapping quotes and decorations (।। ® ™ * ~) stripped from
+ * the ends, spaces collapsed. `“Kids Therapy Center”` → `Kids Therapy Center`.
+ */
+export function cleanName(name: string): string {
+  return name
+    .normalize('NFKC')
+    // Double quotes go wherever they are ("ManahMaitrii" Psychiatry Clinic); apostrophes stay (Kapoor’s).
+    .replace(/[®™©"“”„]/g, '')
+    // Emoji people decorate Google names with ("✅Sun Path Lab", "AGRAWAL MEDICAL STORE 🏪").
+    .replace(/\p{Extended_Pictographic}|[\u{1F1E6}-\u{1F1FF}️‍⃣]/gu, ' ')
+    .replace(/^[\s"'“”‘’`.,;:|*~_\-–—।॥!]+|[\s"'“”‘’`,;:|*~_\-–—।॥!]+$/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Does it read as a name at all? At least two letters (any script) — "." and "-" don't. */
+export const isRealName = (name: string) => (cleanName(name).match(/\p{L}/gu) ?? []).length >= 2;
+
+/* Devanagari → Latin, enough for a readable username ("वस्त्रम्" → "vastram"). */
+const DEV_CONSONANTS: Record<string, string> = {
+  क: 'k', ख: 'kh', ग: 'g', घ: 'gh', ङ: 'n', च: 'ch', छ: 'chh', ज: 'j', झ: 'jh', ञ: 'n', ट: 't', ठ: 'th', ड: 'd', ढ: 'dh', ण: 'n',
+  त: 't', थ: 'th', द: 'd', ध: 'dh', न: 'n', प: 'p', फ: 'ph', ब: 'b', भ: 'bh', म: 'm', य: 'y', र: 'r', ल: 'l', व: 'v', श: 'sh',
+  ष: 'sh', स: 's', ह: 'h', ळ: 'l', क़: 'q', ख़: 'kh', ग़: 'g', ज़: 'z', ड़: 'd', ढ़: 'rh', फ़: 'f',
+};
+const DEV_VOWELS: Record<string, string> = { अ: 'a', आ: 'aa', इ: 'i', ई: 'ee', उ: 'u', ऊ: 'oo', ऋ: 'ri', ए: 'e', ऐ: 'ai', ओ: 'o', औ: 'au' };
+const DEV_SIGNS: Record<string, string> = { 'ा': 'a', 'ि': 'i', 'ी': 'ee', 'ु': 'u', 'ू': 'oo', 'ृ': 'ri', 'े': 'e', 'ै': 'ai', 'ो': 'o', 'ौ': 'au', 'ं': 'n', 'ँ': 'n', 'ः': 'h' };
+export function romanize(text: string): string {
+  const chars = [...text.normalize('NFC')];
+  let out = '';
+  for (let i = 0; i < chars.length; i++) {
+    const c = chars[i];
+    const next = chars[i + 1];
+    if (DEV_CONSONANTS[c]) {
+      out += DEV_CONSONANTS[c];
+      // A consonant carries an "a" unless a vowel sign or virama follows — or it ends the word.
+      const ends = !next || !/[ऀ-ॿ]/.test(next);
+      // (ं ँ ः follow the "a": कंचन → kanchan.)
+      const sign = DEV_SIGNS[next] && !'ंँः'.includes(next);
+      if (next !== '्' && !sign && !ends) out += 'a';
+    } else if (DEV_VOWELS[c]) out += DEV_VOWELS[c];
+    else if (DEV_SIGNS[c]) out += DEV_SIGNS[c];
+    else if (c !== '्' && c !== '़') out += c;
+  }
+  return out;
+}
+
 export function ownerHandle(name: string, n = 1): string {
-  let base = normName(name) || 'business';
+  let base = normName(romanize(name)) || 'business';
   if (/^[0-9]/.test(base)) base = `the${base}`;
   if (base.length < 3) base = `${base}shop`;
   const suffix = n > 1 ? String(n) : '';

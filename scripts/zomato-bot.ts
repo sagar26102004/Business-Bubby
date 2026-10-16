@@ -62,6 +62,7 @@ import {
   normName,
   sectionFor,
   sleep,
+  FOOD_ROOT,
 } from './listing-lib';
 import { download, googleHours, type CollectOptions, type CollectResult } from './maps-bot';
 import { ensureMenu } from './menu-from-photos';
@@ -535,7 +536,7 @@ export async function collect(opts: CollectOptions & { city?: string; listOnly?:
 
 async function main() {
   const type = arg('type', 'cafe')!;
-  const root = arg('root', 'E:/listing')!;
+  const root = arg('root', FOOD_ROOT)!;
   const result = await collect({
     query: arg('query', 'restaurants/cafes')!,
     type,

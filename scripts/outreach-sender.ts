@@ -22,9 +22,10 @@
 import ExcelJS from 'exceljs';
 import { createServer } from 'node:http';
 import { existsSync } from 'node:fs';
-import { OUTREACH_LOG, readOutreachLog, writeOutreachLog, type OutreachMark } from './listing-lib';
+import { join } from 'node:path';
+import { FOOD_ROOT, OUTREACH_LOG, readOutreachLog, writeOutreachLog, type OutreachMark } from './listing-lib';
 
-const SHEET = 'E:/listing/food-contacts.xlsx';
+const SHEET = join(FOOD_ROOT, 'food-contacts.xlsx');
 const SKIP_SHEETS = new Set(['Summary', 'No WhatsApp']);
 
 interface Contact {
